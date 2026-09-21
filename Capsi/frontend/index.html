@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Capsi</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <span class="brand-dot"></span>
+          <span class="brand-name">Capsi</span>
+        </div>
+        <button class="btn-icon" id="btn-settings" title="Settings">
+          <svg viewBox="0 0 24 24" width="18" height="18">
+            <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97 0-.33-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-.2-1.12c-.1-.6-.32-1.15-.62-1.62l-1.39-.94c-.37-.25-.87-.29-1.26-.1-.39.2-.65.6-.68.98l-.08.66c-.02.17-.11.32-.26.38l-.71.32c-.56.26-1.16.39-1.77.34-.62-.04-1.22-.25-1.72-.54l-.91-.54c-.2-.12-.43-.16-.66-.12-.24.04-.46.16-.61.34l-.37.47c-.23.3-.41.63-.54 1l-.37 1.13c-.04.11-.05.22-.04.33l.11.78c.1.7.34 1.36.69 1.94l1.13 1.85c.21.35.54.61.93.74l1.17.4c.22.07.45.09.68.06.24-.03.48-.09.71-.19l.89-.37c.35-.15.66-.38.92-.66.27-.29.48-.61.6-.96l.21-1.14c.04-.19.19-.34.36-.38l.87-.21c.35-.09.7-.14 1.05-.14h.14c.35 0 .69.05 1.03.14l.87.21c.17.04.32.19.36.38l.21 1.14c.12.35.33.67.6.96.26.28.57.51.92.66l.89.37c.23.1.47.16.71.19.23.03.46-.01.68-.06l1.17-.4c.39-.13.72-.39.93-.74l1.13-1.85c.35-.58.58-1.24.69-1.94l.11-.78c.01-.12 0-.22-.04-.33l-.37-1.13c-.13-.37-.31-.7-.54-1l-.37-.47c-.15-.18-.37-.3-.61-.34-.23-.05-.46-.01-.66.12l-.91.54c-.5.29-1.09.5-1.72.54-.6.05-1.21-.08-1.77-.34l-.71-.32c-.15-.06-.24-.21-.26-.38l-.08-.66c-.03-.38-.29-.78-.68-.98-.39-.19-.89-.15-1.26.1l-1.39.94c-.3.47-.52 1.02-.62 1.62l-.2 1.12c-.12.22-.07.49.12.64l2.11 1.63c-.04.34-.07.67-.07 1l-.03.89zM12 19.5a2 2 0 1 1 0 4 2 2 0 0 1 0-4z" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+      <nav class="nav-tabs">
+        <button class="nav-tab active" data-panel="conversations">Conversations</button>
+        <button class="nav-tab" data-panel="peers">Nearby</button>
+        <button class="nav-tab" data-panel="transfers">Files</button>
+      </nav>
+      <div class="panel-list" id="panel-conversations">
+        <div class="empty-state">
+          <svg class="empty-icon" viewBox="0 0 24 24" width="40" height="40">
+            <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z" fill="currentColor"/>
+          </svg>
+          <p>No conversations yet.</p>
+          <p class="muted">Open the app on another device on the same network to start chatting.</p>
+        </div>
+      </div>
+      <div class="panel-list hidden" id="panel-peers"></div>
+      <div class="panel-list hidden" id="panel-transfers"></div>
+    </aside>
+    <section class="chat-area">
+      <div class="chat-header" id="chat-header">
+        <div class="chat-status" id="chat-status">Select a conversation</div>
+      </div>
+      <div class="messages" id="messages"></div>
+      <form class="composer" id="composer">
+        <textarea id="message-input" placeholder="Type a message&#10;Press Enter to send" rows="1" disabled></textarea>
+        <button class="btn-send" id="btn-send" disabled>
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"/>
+          </svg>
+        </button>
+      </form>
+    </section>
+    <aside class="detail-panel hidden" id="detail-panel">
+      <div class="detail-header">
+        <h2 id="detail-title">Details</h2>
+        <button class="btn-close" id="btn-close-detail">
+          <svg viewBox="0 0 24 24" width="18" height="18">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+      <div class="detail-body" id="detail-body"></div>
+    </aside>
+  </main>
+  <div class="toast" id="toast"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

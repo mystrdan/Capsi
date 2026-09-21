@@ -1,0 +1,60 @@
+[package]
+name = "capsi"
+version = "1.0.0"
+description = "Capsi by CAPSICOM - Download. Run. Connect."
+authors = ["CAPSICOM"]
+edition = "2021"
+license = "MIT"
+default-run = "capsi"
+
+[lib]
+name = "capsi_lib"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "capsi"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# --- desktop shell -----------------------------------------------------
+tauri = { version = "2", features = ["tray-icon", "image-png", "image-ico"] }
+tauri-plugin-notification = "2"
+
+# --- serialization ----------------------------------------------------
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# --- async runtime / networking ---------------------------------------
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "net",
+    "sync",
+    "time",
+    "io-util",
+    "fs",
+    "macros",
+] }
+
+# --- CLI --------------------------------------------------------------
+clap = { version = "4", features = ["derive"] }
+
+# --- cryptography (pure Rust, no C toolchain required) ----------------
+ed25519-dalek = "2.2"
+x25519-dalek = { version = "2.0", features = ["static_secrets"] }
+chacha20poly1305 = "0.10"
+blake2 = "0.10"
+getrandom = "0.2"
+zeroize = "1"
+
+# --- misc -------------------------------------------------------------
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+hex = "0.4"
+log = "0.4"
+thiserror = "2"
+
+# Capsi's platform-independent core (identity, crypto, discovery, storage).
+capsi-core = { path = "../crates/capsi-core" }

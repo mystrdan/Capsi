@@ -1,0 +1,15 @@
+cargo:rerun-if-env-changed=TAURI_CONFIG
+cargo:rustc-check-cfg=cfg(desktop)
+cargo:rustc-cfg=desktop
+cargo:rustc-check-cfg=cfg(mobile)
+cargo:rerun-if-changed=D:\Capsi\Capsi\src-tauri\tauri.conf.json
+cargo:rustc-env=TAURI_ANDROID_PACKAGE_NAME_APP_NAME=com
+cargo:rustc-env=TAURI_ANDROID_PACKAGE_NAME_PREFIX=com_capsi
+cargo:rustc-check-cfg=cfg(dev)
+cargo:rustc-cfg=dev
+cargo:PERMISSION_FILES_PATH=D:\Capsi\Capsi\target\debug\build\capsi-eed36c1f18697dcf\out\app-manifest\__app__-permission-files
+cargo:rerun-if-changed=capabilities
+cargo:rerun-if-env-changed=REMOVE_UNUSED_COMMANDS
+cargo:rustc-env=TAURI_ENV_TARGET_TRIPLE=x86_64-pc-windows-gnu
+package.metadata does not exist
+cargo:warning=Capsi: no Windows resource compiler found (expected `windres` on a GNU target or `rc.exe` on an MSVC target), so the icon, manifest and version metadata were not embedded. Install the C++ build tools or mingw-w64 and rebuild for a fully badged executable.

@@ -1,0 +1,201 @@
+// Capsi - Tauri command: file transfer operations.
+//
+// Offer a file, accept/decline incoming offers, and track transfer progress.
+
+use super::{conversation_name, setup_app_data};
+use capsi_core::identity::{trust::TrustStore, DeviceId};
+use capsi_core::storage::conversation::{
+    DeliveryState, MessageKind, MessageStore, StoredFile, StoredMessage, TransferState,
+};
+use capsi_core::util::{digest_hex, human_size, new_id, safe_file_name};
+use capsi_core::TRANSFER_CHUNK_SIZE;
+
+/// Largest file Capsi will offer, until the chunked sender lands.
+const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
+
+/// Offer a file to a trusted peer.
+#[tauri::command]
+pub async fn offer_file(
+    app: tauri::AppHandle,
+    device_id: String,
+    path: String,
+) -> Result<String, String> {
+    let data_dir = setup_app_data(&app)?;
+    let id = DeviceId::from_hex(&device_id).map_err(|e| e.to_string())?;
+
+    let trust = TrustStore::load(&data_dir).map_err(|e| e.to_string())?;
+    if !trust.is_trusted(&id) {
+        return Err(format!(
+            "peer {} is not trusted",
+            id.as_str().chars().take(8).collect::<String>()
+        ));
+    }
+
+    let raw_path = std::path::Path::new(&path);
+    if !raw_path.exists() {
+        return Err(format!("no such file: {path}"));
+    }
+    if !raw_path.is_file() {
+        return Err(format!("not a file: {path}"));
+    }
+
+    let metadata = std::fs::metadata(raw_path).map_err(|e| e.to_string())?;
+    let file_size = metadata.len();
+    if file_size == 0 {
+        return Err("cannot send an empty file".into());
+    }
+    if file_size > MAX_FILE_BYTES {
+        return Err("files larger than 100 MB are not supported yet".into());
+    }
+
+    let bytes = std::fs::read(raw_path).map_err(|e| e.to_string())?;
+    let digest = digest_hex(&bytes);
+
+    let file_name = safe_file_name(
+        raw_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("capsi-file"),
+    );
+
+    let transfer_id = new_id("f");
+    let chunk_size = TRANSFER_CHUNK_SIZE as u64;
+    let chunks = ((file_size + chunk_size - 1) / chunk_size).max(1);
+
+    let offer = capsi_core::protocol::FileOffer {
+        transfer_id: transfer_id.clone(),
+        file_name: file_name.clone(),
+        size: file_size,
+        digest: digest.clone(),
+        chunks,
+    };
+
+    // `Envelope::new` is infallible: it stamps the version, id and timestamp.
+    let envelope =
+        capsi_core::protocol::Envelope::new(capsi_core::protocol::Message::FileOffer(offer));
+
+    let stored = StoredMessage {
+        id: envelope.id.clone(),
+        outgoing: true,
+        sent_at: capsi_core::identity::device::now_secs(),
+        kind: MessageKind::File,
+        body: format!("{} ({})", file_name, human_size(file_size)),
+        file: Some(StoredFile {
+            transfer_id: transfer_id.clone(),
+            file_name,
+            size: file_size,
+            digest,
+            local_path: Some(raw_path.to_string_lossy().to_string()),
+            state: TransferState::Offered,
+        }),
+        state: DeliveryState::Queued,
+    };
+
+    let peer_name = conversation_name(&data_dir, &id);
+    let mut store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
+    store
+        .append(&id, &peer_name, stored)
+        .map_err(|e| e.to_string())?;
+
+    Ok(transfer_id)
+}
+
+/// Accept an incoming file offer from a peer.
+///
+/// Returns the transfer id so the frontend can keep tracking it.
+#[tauri::command]
+pub async fn accept_file(
+    app: tauri::AppHandle,
+    device_id: String,
+    transfer_id: String,
+    save_to: Option<String>,
+) -> Result<String, String> {
+    let data_dir = setup_app_data(&app)?;
+    let id = DeviceId::from_hex(&device_id).map_err(|e| e.to_string())?;
+
+    let dest = match save_to {
+        Some(dir) => dir,
+        None => std::env::temp_dir()
+            .join("Capsi")
+            .join("received")
+            .to_string_lossy()
+            .to_string(),
+    };
+    std::fs::create_dir_all(&dest).map_err(|e| format!("cannot create {dest}: {e}"))?;
+
+    let mut store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
+    store
+        .update_transfer(&id, &transfer_id, TransferState::Transferring, Some(dest))
+        .map_err(|e| e.to_string())?;
+
+    Ok(transfer_id)
+}
+
+/// Decline an incoming file offer from a peer.
+#[tauri::command]
+pub async fn decline_file(
+    app: tauri::AppHandle,
+    device_id: String,
+    transfer_id: String,
+) -> Result<(), String> {
+    let data_dir = setup_app_data(&app)?;
+    let id = DeviceId::from_hex(&device_id).map_err(|e| e.to_string())?;
+
+    let mut store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
+    store
+        .update_transfer(&id, &transfer_id, TransferState::Declined, None)
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// List all pending or in-progress transfers across all conversations.
+#[tauri::command]
+pub async fn list_transfers(app: tauri::AppHandle) -> Result<Vec<TransferRow>, String> {
+    let data_dir = setup_app_data(&app)?;
+    let store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
+
+    let mut out = Vec::new();
+    for conv in store.list() {
+        for msg in &conv.messages {
+            let Some(file) = msg.file.as_ref() else {
+                continue;
+            };
+            // Finished and refused transfers are history, not work in progress.
+            if file.state != TransferState::Offered && file.state != TransferState::Transferring {
+                continue;
+            }
+            out.push(TransferRow {
+                transfer_id: file.transfer_id.clone(),
+                device_id: conv.device_id.as_str().into(),
+                peer_name: conv.name.clone(),
+                file_name: file.file_name.clone(),
+                size: file.size,
+                digest: file.digest.clone(),
+                state: match file.state {
+                    TransferState::Offered => "offered",
+                    TransferState::Transferring => "transferring",
+                    _ => "other",
+                }
+                .into(),
+                local_path: file.local_path.clone(),
+            });
+        }
+    }
+    out.sort_by(|a, b| b.size.cmp(&a.size));
+    Ok(out)
+}
+
+#[derive(serde::Serialize)]
+pub struct TransferRow {
+    pub transfer_id: String,
+    pub device_id: String,
+    pub peer_name: String,
+    pub file_name: String,
+    pub size: u64,
+    pub digest: String,
+    pub state: String,
+    pub local_path: Option<String>,
+}
+
+

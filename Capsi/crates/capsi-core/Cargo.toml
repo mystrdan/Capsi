@@ -1,0 +1,34 @@
+[package]
+name = "capsi-core"
+version = "1.0.0"
+description = "Capsi by CAPSICOM - platform-independent core (identity, crypto, discovery, storage)"
+authors = ["CAPSICOM"]
+edition = "2021"
+license = "MIT"
+
+# The core is deliberately free of any GUI or Tauri dependency so it can be
+# built and tested on its own (`cargo test -p capsi-core`), and so the whole
+# trust model stays reviewable in one place.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["net", "sync", "time", "io-util", "fs", "macros", "rt"] }
+# SO_REUSEADDR/SO_REUSEPORT so several Capsi instances can share the discovery
+# port (and so a quick restart does not hit "address already in use").
+socket2 = { version = "0.5", features = ["all"] }
+
+# Cryptography - all pure Rust, so no C toolchain is required to build Capsi.
+ed25519-dalek = "2.2"
+x25519-dalek = { version = "2.0", features = ["static_secrets"] }
+chacha20poly1305 = "0.10"
+blake2 = "0.10"
+getrandom = "0.2"
+zeroize = { version = "1", features = ["zeroize_derive"] }
+
+base64 = "0.22"
+hex = "0.4"
+log = "0.4"
+thiserror = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }

@@ -1,0 +1,1 @@
+{"rustc":6001218111239039427,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[16226529040278277557,"build_script_build",false,1873284721561163483]],"local":[{"RerunIfChanged":{"output":"debug\\build\\zmij-12b1861941fff2c9\\output","paths":["build.rs"]}}],"rustflags":["-C","dlltool=d:\\Capsi\\.toolchain\\zig-dlltool.bat"],"config":0,"compile_kind":0}
