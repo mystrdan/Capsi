@@ -357,6 +357,13 @@ async function openDevicePanel() {
       <div class="detail-actions">
         <button class="btn btn-primary" id="btn-save-device">Save</button>
         <button class="btn" id="btn-copy-id">Copy device id</button>
+      </div>
+      <div class="about-block">
+        <h3>About</h3>
+        <div class="about-app">Capsi</div>
+        <div class="about-by">by CAPSICOM</div>
+        <div class="about-version">Version 1.0.0</div>
+        <button class="about-link" id="btn-about-website">Website &#8599;</button>
       </div>`
     );
     $('btn-save-device').addEventListener('click', saveDevicePanel);
@@ -520,6 +527,15 @@ function switchPanel(name) {
 }
 
 function wireEvents() {
+  // About link: opened through the backend so the URL is allow-listed in one
+  // place instead of trusting arbitrary strings from the webview.
+  document.addEventListener('click', (e) => {
+    const link = e.target && e.target.closest ? e.target.closest('#btn-about-website') : null;
+    if (link) {
+      invoke('open_website').catch((err) => showToast(`Could not open website: ${err}`, true));
+    }
+  });
+
   document
     .querySelectorAll('.nav-tab')
     .forEach((tab) =>

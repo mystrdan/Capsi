@@ -1,2 +1,0 @@
-cargo:rustc-link-search=native=D:\Capsi\Capsi\target\debug\build\webview2-com-sys-f99d5e03e6f41736\out\x64
-cargo:rustc-link-lib=advapi32

@@ -1,23 +1,20 @@
-/* Capsi - application stylesheet */
-/* Theme follows the shipped palette: deep navy background, warm paper surfaces,
-   cool turquoise primary, bold orange accent. */
+﻿/* Capsi - application stylesheet */
 
 :root {
-  --bg: #0f1520;
-  --bg-elev: #18202d;
-  --surface: #1e2738;
-  --surface-2: #253044;
-  --border: #2d3a50;
-  --text: #e8edf5;
-  --text-muted: #8b9bb4;
-  --text-faint: #5a6b85;
-  --primary: #1cc7d0;
-  --primary-dim: #138f96;
-  --accent: #ff6037;
-  --accent-dim: #c94a2a;
-  --ok: #52c985;
-  --warn: #f0a830;
-  --bad: #e25050;
+  --bg: #0B101A;
+  --bg-elev: #111827;
+  --surface: #111827;
+  --surface-2: #172033;
+  --border: #253047;
+  --text: #F3F4F6;
+  --text-muted: #9CA3AF;
+  --text-faint: #667085;
+  --primary: #7ED957;
+  --primary-hover: #6FC747;
+  --accent: #7ED957;
+  --ok: #7ED957;
+  --warn: #F59E0B;
+  --bad: #EF4444;
   --shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
   --radius: 8px;
   --radius-sm: 5px;
@@ -262,7 +259,7 @@ main {
 }
 .msg-bubble.outgoing {
   align-self: flex-end;
-  background: var(--primary-dim);
+  background: var(--primary);
   color: #0a1418;
   border-bottom-right-radius: 4px;
 }
@@ -278,7 +275,7 @@ main {
   margin-top: 3px;
   opacity: 0.8;
 }
-.msg-bubble.outgoing .msg-meta { text-align: right; color: rgba(10,20,24,0.6); }
+.msg-bubble.outgoing .msg-meta { text-align: right; color: rgba(11,16,26,0.6); }
 
 .msg-file {
   display: flex;
@@ -426,7 +423,7 @@ main {
 }
 .btn:hover { background: var(--surface); border-color: var(--text-faint); }
 .btn-primary { background: var(--primary); color: var(--bg); border-color: var(--primary); }
-.btn-primary:hover { background: var(--primary); }
+.btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
 .btn-danger { background: var(--bad); color: #fff; border-color: var(--bad); }
 .btn-danger:hover { opacity: 0.9; }
 .btn-sm { padding: 4px 10px; font-size: 11px; }
@@ -472,9 +469,9 @@ main {
   font-weight: 600;
   flex-shrink: 0;
 }
-.peer-state.pending { background: rgba(240,168,48,0.15); color: var(--warn); }
-.peer-state.trusted { background: rgba(82,201,133,0.15); color: var(--ok); }
-.peer-state.blocked { background: rgba(226,80,80,0.15); color: var(--bad); }
+.peer-state.pending { background: rgba(245,158,11,0.15); color: var(--warn); }
+.peer-state.trusted { background: rgba(126,217,87,0.15); color: var(--ok); }
+.peer-state.blocked { background: rgba(239,68,68,0.15); color: var(--bad); }
 .peer-state.lost { background: rgba(90,107,133,0.15); color: var(--text-faint); }
 
 /* ---------- Transfer list ---------- */
@@ -698,7 +695,16 @@ main {
 }
 .btn:hover { background: var(--surface); border-color: var(--text-faint); }
 .btn-primary { background: var(--primary); color: var(--bg); border-color: var(--primary); }
-.btn-primary:hover { background: var(--primary); }
+.btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
 .btn-danger { background: var(--bad); color: #fff; border-color: var(--bad); }
 .btn-danger:hover { opacity: 0.9; }
 .btn-sm { padding: 4px 10px; font-size: 11px; }
+
+/* ---------- About (bottom of This Device) ---------- */
+.about-block { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
+.about-block h3 { margin-top: 0; }
+.about-block .about-app { font-size: 13px; font-weight: 600; color: var(--text); }
+.about-block .about-by { font-size: 12px; color: var(--text-muted); }
+.about-block .about-version { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+.about-link { font-size: 12px; color: var(--primary); text-decoration: none; cursor: pointer; background: none; border: none; padding: 0; font: inherit; }
+.about-link:hover { color: var(--primary-hover); text-decoration: underline; }

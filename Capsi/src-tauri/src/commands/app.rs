@@ -1,13 +1,54 @@
-// Capsi - Tauri command: application bootstrap.
+// Capsi - Tauri commands: application bootstrap and website link.
 //
-// Brings the data directory, the device identity and the LAN discovery loop to
-// life, and reports the identity back to the frontend.
+// The bootstrap brings the data directory, the device identity and the LAN
+// discovery loop to life, and reports the identity back to the frontend.
 //
 // This lives in its own module rather than in the crate root on purpose: for a
 // `pub` function, `#[tauri::command]` emits `#[macro_export]` copies of the
 // `__cmd__<name>` / `__tauri_command_name_<name>` helper macros. `macro_export`
 // hoists them to the crate root, so a command defined *at* the crate root would
 // collide with its own hoisted copy and fail with E0255.
+
+// Capsi - Tauri command: open the Capsi website.
+//
+// The URL is fixed in the backend (not passed from the webview) so the
+// frontend cannot be tricked into opening an arbitrary link. Uses the OS
+// default browser on each platform.
+
+/// Open https://capsi.win in the user's default browser.
+#[tauri::command]
+pub async fn open_website() -> Result<(), String> {
+    open_url("https://capsi.win")
+}
+
+/// Open `url` in the default browser, but only for Capsi-owned addresses.
+fn open_url(url: &str) -> Result<(), String> {
+    if url != "https://capsi.win" && url != "https://www.capsi.win/" {
+        return Err("refused to open non-Capsi URL".to_string());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", url])
+            .spawn()
+            .map_err(|e| format!("cannot open browser: {e}"))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(url)
+            .spawn()
+            .map_err(|e| format!("cannot open browser: {e}"))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(url)
+            .spawn()
+            .map_err(|e| format!("cannot open browser: {e}"))?;
+    }
+    Ok(())
+}
 
 use std::sync::Arc;
 

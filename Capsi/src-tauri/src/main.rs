@@ -39,6 +39,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             capsi_lib::commands::app::bootstrap,
+            capsi_lib::commands::app::open_website,
             capsi_lib::commands::device::get_device_info,
             capsi_lib::commands::device::set_device_name,
             capsi_lib::commands::device::export_device_id,
