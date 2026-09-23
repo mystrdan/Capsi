@@ -31,8 +31,10 @@ python -m http.server 8080
 The download buttons point at the latest Windows release asset:
 
 ```text
-https://github.com/mystrdan/Capsi/releases/latest/download/capsi.exe
+https://github.com/mystrdan/Capsi/releases/latest/download/Capsi_1.0.0_x64-setup.exe
 ```
 
 The URL lives in exactly one place: `Website/config.js`
-(`CAPSI_CONFIG.DOWNLOAD_URL`).
+(`CAPSI_CONFIG.DOWNLOAD_URL`), and `Website/app.js` auto-resolves the newest
+Windows asset from the GitHub Releases API at runtime
+(`CAPSI_CONFIG.GITHUB_REPO`).

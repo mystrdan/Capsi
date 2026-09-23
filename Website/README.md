@@ -34,8 +34,21 @@ const CAPSI_CONFIG = {
 };
 ```
 
-Flow: `capsi.win` → **Download Capsi** → `capsi.exe` downloads directly.
+Flow: `capsi.win` → **Download Capsi** → installer downloads directly.
 No repository/release page in between.
+
+## Auto latest-release resolution
+
+`app.js` keeps the buttons fresh without manual edits:
+
+1. On load it applies `CAPSI_CONFIG.DOWNLOAD_URL` immediately (works offline).
+2. It then calls `GET https://api.github.com/repos/{GITHUB_REPO}/releases/latest`,
+   picks the Windows asset (NSIS `*-setup.exe` → any `.exe` → `.msi`;
+   source archives are never picked), and rewrites every `.js-download` href
+   to that asset's `browser_download_url`.
+
+To retarget (new owner/repo), edit `GITHUB_REPO` in `config.js` only.
+If the API is unreachable or rate-limited, buttons silently keep the fallback.
 
 ## Run locally
 

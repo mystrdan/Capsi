@@ -1,0 +1,56 @@
+name: Capsi Windows release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: Capsi
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (MSVC x64)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install Node (for Tauri CLI via npx if needed)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Build NSIS + MSI installers
+        run: cargo tauri build --target x86_64-pc-windows-msvc
+
+      - name: List bundles
+        run: Get-ChildItem target/release/bundle -Recurse | Select-Object FullName, Length
+        shell: pwsh
+
+      - name: Upload NSIS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Capsi-Windows-NSIS
+          path: target/release/bundle/nsis/*-setup.exe
+
+      - name: Upload MSI installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Capsi-Windows-MSI
+          path: target/release/bundle/msi/*.msi
+
+      - name: Publish GitHub Release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/release/bundle/nsis/*-setup.exe
+            target/release/bundle/msi/*.msi
