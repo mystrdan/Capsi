@@ -29,7 +29,7 @@ direct GitHub release asset. `app.js` overwrites them at runtime from
 ```js
 // config.js
 const CAPSI_CONFIG = {
-  DOWNLOAD_URL: "https://github.com/mystrdan/Capsi/releases/latest/download/capsi.exe",
+  DOWNLOAD_URL: "https://github.com/mystrdan/Capsi/releases/latest/download/Capsi_1.0.0_x64-setup.exe",
   ...
 };
 ```

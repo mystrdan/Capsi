@@ -34,7 +34,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": ["nsis"],
     "publisher": "CAPSICOM",
     "homepage": "https://capsi.win",
     "shortDescription": "Capsi by CAPSICOM",
