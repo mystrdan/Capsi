@@ -44,6 +44,26 @@
 
   applyDownloadUrl(FALLBACK_URL);
   resolveLatestRelease();
+  // Unhide the live-app band the moment app-live.png exists (HEAD check, no
+  // download). Until you save image 2 as Website/app-live.png the section
+  // stays hidden so there is never a broken image icon.
+  (function revealLiveShot() {
+    var band = document.querySelector('.shot-band[hidden]');
+    if (!band) return;
+    var img = band.querySelector('img');
+    if (!img) return;
+    var url = img.getAttribute('src');
+    if (!url) return;
+    function show() { band.removeAttribute('hidden'); band.classList.remove('shot-hidden'); }
+    try {
+      fetch(url, { method: 'HEAD' }).then(function (res) {
+        if (res && res.ok) show();
+        else { img.addEventListener('error', function () {}, { once: true }); }
+      }).catch(function () { /* stays hidden until the file is uploaded */ });
+    } catch (e) { /* stays hidden */ }
+    // Fallback: if the file loads despite HEAD being blocked, reveal it.
+    img.addEventListener('load', show, { once: true });
+  })();
   var toggle = document.getElementById("menu-toggle");
   var menu = document.getElementById("mobile-menu");
   if (toggle && menu) {

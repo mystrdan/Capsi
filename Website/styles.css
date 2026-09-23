@@ -1,3 +1,28 @@
+/* Screenshots — hero uses app-screenshot.png (image 1: full dark-UI collage).
+   A second band (app-live.png, image 2: real Windows app photo) is staged in
+   index.html as .shot-band[hidden] and appears automatically once you save
+   that file next to index.html. */
+.shot-frame { margin: 0; }
+.shot-frame img { border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 20px 40px rgba(0,0,0,0.4); width: 100%; height: auto; display: block; }
+.hero-shot img { max-width: 640px; }
+.shot-band .shot-frame img { max-width: 900px; margin: 0 auto; }
+.shot-band figcaption { color: var(--muted); font-size: 0.9rem; text-align: center; margin-top: 12px; }
+/* Icons — inline SVG badges for features + steps, and alignment for button icons */
+.feature-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--border); color: var(--primary); margin-bottom: 12px; }
+.step-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--border); color: var(--primary); margin-bottom: 6px; }
+.btn svg { vertical-align: -3px; margin-right: 6px; }
+@media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; gap: 32px; } }
+
+/* FAQ accordion */
+.faq-item { border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px; background: var(--surface); }
+.faq-question { width: 100%; padding: 16px 20px; background: transparent; border: none; color: var(--text); font-size: 0.95rem; font-weight: 600; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+.faq-question:hover { color: var(--primary); }
+.faq-question:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; color: var(--muted); font-size: 0.9rem; }
+.faq-answer p { margin: 0; padding: 16px 20px; border-top: 1px solid var(--border); }
+.faq-answer.open { max-height: 500px; }
+.faq-toggle { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--muted); font-size: 1.2rem; line-height: 1; transition: transform 0.2s ease; }
+.faq-item.open .faq-toggle { transform: rotate(45deg); }
 :root {
   --bg: #0B101A;
   --bg-elev: #111827;
@@ -52,6 +77,8 @@ p { margin: 0 0 0.9em; }
 .supporting { color: var(--muted); }
 .no-list { list-style: none; padding: 0; margin: 0 0 0.9em; color: var(--muted); }
 .no-list li { padding: 2px 0; }
+.key-points li { display: flex; align-items: flex-start; gap: 8px; }
+.key-points svg { flex: none; margin-top: 5px; color: var(--primary); }
 .micro { color: var(--faint); font-size: 0.86rem; margin-top: 14px; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -138,6 +165,22 @@ p { margin: 0 0 0.9em; }
 .footer-base { margin-top: 22px; color: var(--faint); font-size: 0.85rem; }
 .footer-base a { color: var(--muted); text-decoration: none; }
 .footer-base a:hover { color: var(--text); }
+
+/* Contact form */
+.contact-form p { margin: 0 0 16px 0; }
+.contact-form label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; }
+.contact-form input[type="text"],
+.contact-form input[type="email"],
+.contact-form textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-size: 0.9rem;
+}
+.contact-form input[type="text"]:focus,
+.contact-form input[type="email"]:focus,
+.contact-form textarea:focus { outline: 2px solid var(--primary); outline-offset: -2px; }
+.contact-form textarea { resize: vertical; }
+.form-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 @media (max-width: 900px) {
   .hero-grid { grid-template-columns: 1fr; gap: 32px; }

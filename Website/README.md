@@ -16,7 +16,8 @@ This folder contains the official static website for **CAPSI** by **CAPSICOM**
 | `styles.css` | All website styles (dark Capsi theme, responsive) |
 | `app.js` | Mobile menu + applies the centralized download URL |
 | `config.js` | **Single place to change the download link** (`CAPSI_CONFIG.DOWNLOAD_URL`) |
-| `logo.png` | Capsi logo (from `../Source/`) |
+| `app-screenshot.png` | **Hero screenshot (image 1)** — full dark-UI collage: main chat window + splash/welcome + broadcast, file transfer, groups, settings, tray menu. Replace this file with the first image you posted. Displayed large in the hero (max 640px) and used as og:image / twitter:image. |
+| `app-live.png` | **Live-app band (image 2)** — real Windows photo of Capsi running (Conversations / Nearby / Files, type-a-message bar). Save the second image you posted under this name; the staged `<section class="shot-band" hidden>` in `index.html` unhides automatically once the file exists. |
 | `logo-solid.png` | Capsi logo variant |
 | `favicon.png` | Favicon |
 
