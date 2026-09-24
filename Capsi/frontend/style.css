@@ -825,3 +825,20 @@ main {
   font-size: 11px;
   line-height: 1.6;
 }
+
+.workplace-members { display:flex; flex-direction:column; gap:4px; }
+.workplace-member { display:flex; align-items:center; gap:8px; padding:7px 0; }
+.workplace-member .conv-avatar { width:30px; height:30px; font-size:11px; }
+.workplace-member-info { flex:1; min-width:0; }
+.workplace-member-name { color:var(--text); font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.workplace-member-meta { color:var(--text-faint); font-size:10px; margin-top:2px; }
+.workplace-add { margin-top:14px; padding-top:12px; border-top:1px solid var(--border); }
+.workplace-candidate { width:100%; display:flex; align-items:center; gap:8px; padding:7px 0; background:none; border:0; color:var(--text); text-align:left; cursor:pointer; }
+.workplace-candidate:hover { background:var(--surface); border-radius:var(--radius-sm); }
+.workplace-candidate .conv-avatar { width:30px; height:30px; font-size:11px; flex-shrink:0; }
+.workplace-candidate span:nth-child(2) { flex:1; min-width:0; }
+.workplace-candidate strong, .workplace-candidate small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.workplace-candidate strong { font-size:12px; font-weight:500; }
+.workplace-candidate small { color:var(--text-faint); font-size:10px; margin-top:2px; }
+.workplace-candidate b { color:var(--primary); font-size:18px; font-weight:400; }
+.workplace-hint { font-size:11px; line-height:1.5; }
