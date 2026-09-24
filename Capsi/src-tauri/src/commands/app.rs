@@ -57,7 +57,7 @@ pub async fn bootstrap(app: AppHandle) -> Result<IdentityInfo, String> {
     let data_dir = setup_app_data(&app)?;
     let identity = capsi_core::identity::DeviceIdentity::load_or_create(&data_dir)
         .map_err(|e| e.to_string())?;
-    let trust = capsi_core::identity::trust::TrustStore::load(&data_dir)
+    let mut trust = capsi_core::identity::trust::TrustStore::load(&data_dir)
         .map_err(|e| e.to_string())?;
 
     // Start a discovery loop on a tokio background thread so the UI can show
@@ -214,7 +214,12 @@ async fn run_discovery(app: &AppHandle) -> Result<(), String> {
 
     // Listen for discovery events and forward them to the frontend.
     while let Some(event) = rx.recv().await {
-        let entry = trust_entry(&trust, event);
+        let entry = trust_entry(&mut trust, event);
+        // Persist the latest address so queued workplace messages can retry
+        // against a peer's current LAN address after it moves.
+        if let Err(e) = trust.save_if_dirty(&data_dir) {
+            log::debug!("capsi: could not persist peer observation: {e}");
+        }
         // A closed window is not a failure: the tray keeps Capsi running.
         let _ = discovery_handle.emit("discovery-event", entry);
     }
@@ -224,13 +229,18 @@ async fn run_discovery(app: &AppHandle) -> Result<(), String> {
 
 /// Translate a discovery event into the row shape the frontend renders.
 fn trust_entry(
-    trust: &capsi_core::identity::trust::TrustStore,
+    trust: &mut capsi_core::identity::trust::TrustStore,
     event: capsi_core::discovery::DiscoveryEvent,
 ) -> TrustListEntry {
     use capsi_core::discovery::DiscoveryEvent;
 
     match event {
         DiscoveryEvent::PeerFound(peer) => {
+            trust.observe(
+                &peer.device_id,
+                &peer.name,
+                &peer.address.to_string(),
+            );
             let state = if trust.is_trusted(&peer.device_id) {
                 "trusted"
             } else if trust.is_blocked(&peer.device_id) {
