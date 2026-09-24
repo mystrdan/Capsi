@@ -82,6 +82,15 @@ pub struct WorkplaceTextMessage {
     pub body: String,
 }
 
+/// A workplace broadcast sent directly to eligible workplace members.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkplaceBroadcastMessage {
+    pub broadcast_id: String,
+    pub title: String,
+    pub body: String,
+    pub department_id: Option<String>,
+}
+
 /// Application-level acknowledgement for a previously received message.
 ///
 /// Transport success only proves that the encrypted frame reached the peer's
@@ -117,6 +126,8 @@ pub enum Message {
     FileOffer(FileOffer),
     /// A text message addressed to a workplace group.
     WorkplaceText(WorkplaceTextMessage),
+    /// A workplace broadcast delivered to eligible members.
+    WorkplaceBroadcast(WorkplaceBroadcastMessage),
     /// Application-level delivery acknowledgement for a text/workplace message.
     DeliveryReceipt(DeliveryReceipt),
     /// A response to [`Message::FileOffer`].
@@ -150,6 +161,7 @@ impl Message {
             Self::Text(_) => "text",
             Self::FileOffer(_) => "file_offer",
             Self::WorkplaceText(_) => "workplace_text",
+            Self::WorkplaceBroadcast(_) => "workplace_broadcast",
             Self::DeliveryReceipt(_) => "delivery_receipt",
             Self::FileReceipt { .. } => "file_receipt",
             Self::FileChunk { .. } => "file_chunk",
@@ -302,6 +314,19 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn a_workplace_broadcast_round_trips() {
+        let b = WorkplaceBroadcastMessage {
+            broadcast_id: "b-1".into(),
+            title: "Notice".into(),
+            body: "Hello team".into(),
+            department_id: None,
+        };
+        let envelope = Envelope::new(Message::WorkplaceBroadcast(b.clone()));
+        let parsed = Envelope::from_json(&envelope.to_json().unwrap()).unwrap();
+        assert_eq!(parsed.message, Message::WorkplaceBroadcast(b));
+    }
+
     #[test]
     fn a_delivery_receipt_round_trips() {
         let receipt = DeliveryReceipt { message_id: "m-123".into() };
