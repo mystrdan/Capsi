@@ -14,6 +14,7 @@ const state = {
   activeConv: null,
   activePanel: 'conversations',
   identity: null,
+  workplace: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -96,6 +97,67 @@ async function loadTransfers() {
   } catch (e) {
     showToast(`Failed to load transfers: ${e}`, true);
   }
+}
+
+async function loadWorkplace() {
+  try {
+    const snapshot = await invoke('get_workplace');
+    state.workplace = snapshot.workspace;
+    renderWorkplace(snapshot);
+  } catch (e) {
+    showToast(`Failed to load workplace: ${e}`, true);
+  }
+}
+
+function renderWorkplace(snapshot) {
+  const panel = $('panel-workplace');
+  const workspace = snapshot && snapshot.workspace;
+  if (!workspace) {
+    panel.innerHTML = `
+      <div class="workplace-empty">
+        <div class="workplace-mark">W</div>
+        <h2>Create a workplace</h2>
+        <p class="muted">Set up a local workspace for this device. People, groups and departments can be added as Capsi grows.</p>
+        <form id="workplace-create-form" class="workplace-form">
+          <input class="detail-input" id="workplace-name" maxlength="64" placeholder="Workplace name" autocomplete="off" required>
+          <button class="btn btn-primary" type="submit">Create workplace</button>
+        </form>
+      </div>`;
+    $('workplace-create-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = $('workplace-name').value.trim();
+      if (!name) return;
+      try {
+        await invoke('create_workplace', { name });
+        showToast('Workplace created');
+        await loadWorkplace();
+      } catch (err) {
+        showToast(`Could not create workplace: ${err}`, true);
+      }
+    });
+    return;
+  }
+
+  const owner = workspace.members.find((m) => m.device_id === workspace.owner_device_id);
+  panel.innerHTML = `
+    <div class="workplace-summary">
+      <div class="workplace-mark">${escapeHtml(initials(workspace.name))}</div>
+      <div class="workplace-title">${escapeHtml(workspace.name)}</div>
+      <div class="workplace-id mono">${escapeHtml(shortId(workspace.id))}</div>
+    </div>
+    <div class="workplace-section">
+      <div class="workplace-section-title">Workspace</div>
+      <div class="workplace-stat"><span>Owner</span><strong>${escapeHtml(owner ? owner.display_name || shortId(owner.device_id) : shortId(workspace.owner_device_id))}</strong></div>
+      <div class="workplace-stat"><span>People</span><strong>${workspace.members.length}</strong></div>
+      <div class="workplace-stat"><span>Groups</span><strong>${workspace.groups.length}</strong></div>
+      <div class="workplace-stat"><span>Departments</span><strong>${workspace.departments.length}</strong></div>
+      <div class="workplace-stat"><span>Broadcasts</span><strong>${workspace.broadcasts.length}</strong></div>
+    </div>
+    <div class="workplace-section">
+      <div class="workplace-section-title">Your access</div>
+      <div class="workplace-permissions">${(snapshot.permissions || []).map((p) => `<span>${escapeHtml(p.replaceAll('_', ' '))}</span>`).join('')}</div>
+    </div>
+    <div class="workplace-note">This workspace is stored locally on this device. Network membership and synchronization come next.</div>`;
 }
 
 async function openConversation(deviceId, fallbackName) {
@@ -531,6 +593,7 @@ function switchPanel(name) {
   if (name === 'conversations') loadConversations();
   else if (name === 'peers') loadPeers();
   else if (name === 'transfers') loadTransfers();
+  else if (name === 'workplace') loadWorkplace();
 }
 
 function wireEvents() {
