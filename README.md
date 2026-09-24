@@ -103,12 +103,18 @@ working code paths/tests where applicable:
   message history, sender names, timestamps, and a message composer.
 - **Live incoming messages** — incoming workplace messages update the active
   conversation through a Tauri event.
-- **Offline delivery queue** — messages are persisted locally before delivery,
-  so an unavailable recipient does not lose the message.
-- **Automatic retry** — queued workplace deliveries retry in the background
-  when recipients become reachable again.
-- **Idempotent delivery** — received envelope IDs are tracked locally so a
-  retry cannot create duplicate workplace history entries.
+- **Offline delivery queue** — workplace and regular 1-to-1 messages are
+  persisted locally before delivery, so an unavailable recipient does not lose
+  the message.
+- **Automatic retry** — queued deliveries retry in the background when
+  recipients become reachable again.
+- **Application delivery acknowledgements** — a message is marked delivered
+  only after the receiving device has accepted and persisted it.
+- **Idempotent delivery** — received envelope IDs/message IDs are tracked so a
+  retry cannot create duplicate history entries.
+- **Workplace broadcasts** — broadcasts can now fan out directly to all
+  workplace members or a selected department, using the same encrypted delivery
+  queue and acknowledgement path.
 - **Local-first storage** — workplace state and pending deliveries are persisted
   on-device; no cloud account or central workplace server is required.
 
@@ -120,14 +126,12 @@ validate Windows-to-Windows and Windows-to-Android behavior with real installati
 
 The following areas specifically need review or further implementation:
 
-- **Delivery acknowledgements** — ordinary text and workplace delivery currently
-  treat a successful encrypted connection as transport success; there is not yet
-  a dedicated application-level message acknowledgement.
-- **File resume/recovery** — the current chunk sender starts from the beginning
-  after a new accepted transfer; interrupted transfers do not yet negotiate the
-  missing chunk set.
-- **Concurrent file transfers** — needs stress testing and progress/cancellation
-  behavior review.
+- **File resume/recovery** — interrupted transfers can now resume from the
+  receiver's contiguous chunk prefix. A full arbitrary missing-chunk bitmap is
+  not implemented yet.
+- **Concurrent file transfers** — cancellation is now wired through the
+  protocol, but concurrent-transfer stress testing and frontend progress polish
+  still need review.
 - **Network edge cases** — peer address changes, firewall rules, hotspot
   isolation, sleeping devices, and reconnect behavior need real-device testing.
 
@@ -140,11 +144,10 @@ fully working end-to-end yet:
   changes are still local to each device.
 - **Central workplace administration** — there is no server or centralized admin
   authority.
-- **Workplace broadcast delivery** — the broadcast data model and permission
-  checks exist, but network fan-out has not been implemented yet.
-- **Offline delivery for regular 1-to-1 messages** — direct text delivery works
-  when the trusted peer is reachable; durable offline retry is not implemented
-  for ordinary conversations yet.
+- **Network-synchronized workplace membership** — membership/group/department
+  changes are still local to each device.
+- **Central workplace administration** — there is no server or centralized admin
+  authority.
 - **File byte transfer** — encrypted file offers, acceptance receipts, chunk
   delivery, per-chunk digest checks, final whole-file digest verification, and
   completion receipts are now wired into the transport. This still needs
