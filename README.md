@@ -86,11 +86,13 @@ Current workplace foundation:
 - **Departments** — departments can be created and workplace members can be assigned to them.
 - **Broadcasts** — the workplace model supports authored broadcasts, including
   optional department targeting, with permission checks.
+- **Workplace messaging protocol** — the shared core now defines a versioned
+  workplace-group text message type for future direct device-to-device fan-out.
 - **Permission enforcement** — workplace management commands enforce the role
   permissions defined by the local workspace.
 - **Local-first storage** — workplace state is persisted locally; cloud accounts,
   external servers, and Internet connectivity are not required for this layer.
 
-The workplace layer is being built incrementally. Network synchronization and
-richer workplace communication are still separate next steps; the current
+The workplace layer is being built incrementally. Network synchronization,
+group fan-out, and richer workplace communication are still separate next steps; the current
 foundation does not introduce a cloud server or organization account system.
