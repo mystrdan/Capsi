@@ -333,4 +333,26 @@ mod tests {
         let department = workspace.create_department("General");
         assert!(workspace.create_broadcast("Hello", "Welcome", "owner", Some(department)).is_some());
     }
+
+    #[test]
+    fn pending_deliveries_are_persistent_and_deduplicated() {
+        let mut workspace = Workspace::new("Test", "owner");
+        let envelope = crate::protocol::Envelope::new(
+            crate::protocol::Message::WorkplaceText(
+                crate::protocol::WorkplaceTextMessage::new("group-1", "hello").unwrap(),
+            ),
+        );
+        workspace.queue_delivery(envelope.clone(), "alice", 100);
+        workspace.queue_delivery(envelope.clone(), "alice", 100);
+        assert_eq!(workspace.pending_deliveries.len(), 1);
+
+        workspace.remove_pending_delivery(&envelope.id, "alice");
+        assert!(workspace.pending_deliveries.is_empty());
+
+        assert!(!workspace.has_received_message(&envelope.id));
+        workspace.mark_received_message(&envelope.id);
+        workspace.mark_received_message(&envelope.id);
+        assert_eq!(workspace.received_message_ids.len(), 1);
+        assert!(workspace.has_received_message(&envelope.id));
+    }
 }
