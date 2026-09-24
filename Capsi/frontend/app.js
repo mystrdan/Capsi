@@ -216,7 +216,7 @@ async function openWorkplaceGroup(groupId) {
   if (!group) return;
   state.activeWorkplaceGroup = groupId;
   switchPanel('workplace');
-  renderWorkplace({ workspace, permissions: [] });
+  await loadWorkplace();
   const identity = state.identity || await invoke('get_device_info').catch(() => null);
   state.identity = identity;
   renderWorkplaceMessages(group);
