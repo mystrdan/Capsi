@@ -1,7 +1,7 @@
 use serde::Serialize;
 use tauri::State;
 
-use capsi_core::workplace::{Permission, Role, Workspace, WorkspaceStore};
+use capsi_core::{identity::DeviceIdentity, workplace::{Permission, Role, Workspace, WorkspaceStore}};
 
 use super::setup_app_data;
 
@@ -39,10 +39,20 @@ pub fn get_workplace<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<Work
 pub fn create_workplace<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     name: String,
-    owner_device_id: String,
 ) -> Result<Workspace, String> {
     let store = store(&app)?;
-    let workspace = Workspace::new(name, owner_device_id);
+    if store.load()?.is_some() {
+        return Err("a workspace already exists on this device".into());
+    }
+    let data_dir = setup_app_data(&app)?;
+    let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+    let device_name = super::load_device_name(&data_dir)
+        .map_err(|e| e.to_string())?
+        .unwrap_or_else(|| identity.id().short());
+    let mut workspace = Workspace::new(name.trim(), identity.id().as_str());
+    if let Some(owner) = workspace.members.first_mut() {
+        owner.display_name = device_name;
+    }
     store.save(&workspace)?;
     Ok(workspace)
 }
