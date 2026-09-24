@@ -172,6 +172,93 @@ pub fn create_workplace_broadcast<R: tauri::Runtime>(
     Ok(workspace)
 }
 
+
+/// Send a text message to every current member of a workplace group.
+///
+/// Each recipient receives the same signed group message over its existing
+/// trusted-device transport. No server or central relay is introduced.
+#[tauri::command]
+pub async fn send_workplace_group_message<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    group_id: String,
+    body: String,
+) -> Result<String, String> {
+    let store = store(&app)?;
+    let mut workspace = store.load()?.ok_or_else(|| "no workplace exists".to_string())?;
+    let data_dir = setup_app_data(&app)?;
+    let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+    let sender_id = identity.id().as_str().to_string();
+
+    if !workspace.permissions_for(&sender_id).contains(&Permission::SendMessages) {
+        return Err("you do not have permission to send workplace messages".into());
+    }
+
+    let body = body.trim_end().to_string();
+    let group = workspace
+        .groups
+        .iter()
+        .find(|g| g.id == group_id)
+        .ok_or_else(|| "group not found".to_string())?
+        .clone();
+    if !group.member_ids.iter().any(|id| id == &sender_id) {
+        return Err("you are not a member of this group".into());
+    }
+    let message = capsi_core::protocol::WorkplaceTextMessage::new(&group_id, &body)
+        .map_err(|e| e.to_string())?;
+    let envelope = capsi_core::protocol::Envelope::new(
+        capsi_core::protocol::Message::WorkplaceText(message),
+    );
+
+    let trust = capsi_core::identity::trust::TrustStore::load(&data_dir)
+        .map_err(|e| e.to_string())?;
+    let mut failures = Vec::new();
+
+    for member_id in group.member_ids.iter().filter(|id| *id != &sender_id) {
+        let peer_id = capsi_core::identity::DeviceId::from_hex(member_id)
+            .map_err(|e| e.to_string())?;
+        let peer = trust
+            .get(&peer_id)
+            .ok_or_else(|| format!("group member {} is not known to Capsi", peer_id.short()))?;
+        if !peer.is_trusted() {
+            failures.push(format!("{} is not trusted", peer_id.short()));
+            continue;
+        }
+        let address = peer
+            .last_address
+            .as_deref()
+            .ok_or_else(|| format!("no address known for {}", peer_id.short()))?;
+        let mut socket = address
+            .parse::<std::net::SocketAddr>()
+            .map_err(|e| format!("invalid address for {}: {e}", peer_id.short()))?;
+        socket.set_port(45892);
+
+        if let Err(e) = capsi_core::transport::connect_and_send(
+            &socket.to_string(),
+            &identity,
+            &peer_id,
+            &envelope,
+        )
+        .await
+        {
+            failures.push(format!("{}: {e}", peer_id.short()));
+        }
+    }
+
+    let message_id = workspace
+        .append_message(&group_id, &sender_id, body)
+        .ok_or_else(|| "could not store workplace message".to_string())?;
+    store.save(&workspace)?;
+
+    if failures.is_empty() {
+        Ok(message_id)
+    } else {
+        Err(format!(
+            "message stored locally, but delivery failed: {}",
+            failures.join("; ")
+        ))
+    }
+}
+
 pub fn _permission_marker(_: Permission) {}
 
 
