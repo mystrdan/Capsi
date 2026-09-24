@@ -82,6 +82,15 @@ pub struct WorkplaceTextMessage {
     pub body: String,
 }
 
+/// A synchronized workplace state sent directly between trusted devices.
+/// No server is involved; the actor is checked against the receiver's current
+/// local workplace permissions before the state is applied.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkplaceSyncMessage {
+    pub actor_device_id: String,
+    pub state: crate::workplace::WorkspaceState,
+}
+
 /// A workplace broadcast sent directly to eligible workplace members.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkplaceBroadcastMessage {
@@ -126,6 +135,8 @@ pub enum Message {
     FileOffer(FileOffer),
     /// A text message addressed to a workplace group.
     WorkplaceText(WorkplaceTextMessage),
+    /// A synchronized workplace state.
+    WorkplaceSync(WorkplaceSyncMessage),
     /// A workplace broadcast delivered to eligible members.
     WorkplaceBroadcast(WorkplaceBroadcastMessage),
     /// Application-level delivery acknowledgement for a text/workplace message.
@@ -161,6 +172,7 @@ impl Message {
             Self::Text(_) => "text",
             Self::FileOffer(_) => "file_offer",
             Self::WorkplaceText(_) => "workplace_text",
+            Self::WorkplaceSync(_) => "workplace_sync",
             Self::WorkplaceBroadcast(_) => "workplace_broadcast",
             Self::DeliveryReceipt(_) => "delivery_receipt",
             Self::FileReceipt { .. } => "file_receipt",
