@@ -150,7 +150,7 @@ pub fn create_workplace_group<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-pub fn create_workplace_broadcast<R: tauri::Runtime>(
+pub async fn create_workplace_broadcast<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     title: String,
     body: String,
@@ -161,16 +161,40 @@ pub fn create_workplace_broadcast<R: tauri::Runtime>(
     let mut workspace = store.load()?.ok_or_else(|| "no workplace exists".to_string())?;
     let data_dir = setup_app_data(&app)?;
     let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
-    if !workspace.permissions_for(identity.id().as_str()).contains(&Permission::SendBroadcasts) {
+    let sender_id = identity.id().as_str().to_string();
+    if !workspace.permissions_for(&sender_id).contains(&Permission::SendBroadcasts) {
         return Err("you do not have permission to send workplace broadcasts".into());
     }
-    let author_device_id = identity.id().as_str().to_string();
-    workspace
-        .create_broadcast(title.trim(), body.trim(), author_device_id, department_id)
+    let broadcast_id = workspace
+        .create_broadcast(title.trim(), body.trim(), sender_id.clone(), department_id.clone())
         .ok_or_else(|| "invalid broadcast author or department".to_string())?;
+    let broadcast = workspace.broadcasts.iter().find(|b| b.id == broadcast_id)
+        .cloned().ok_or_else(|| "broadcast was not stored".to_string())?;
+    let envelope = capsi_core::protocol::Envelope::new(
+        capsi_core::protocol::Message::WorkplaceBroadcast(
+            capsi_core::protocol::WorkplaceBroadcastMessage {
+                broadcast_id: broadcast.id,
+                title: broadcast.title,
+                body: broadcast.body,
+                department_id: broadcast.department_id,
+            }
+        )
+    );
+    let recipients: Vec<String> = if let Some(dept_id) = &broadcast.department_id {
+        workspace.departments.iter().find(|d| &d.id == dept_id)
+            .map(|d| d.member_ids.iter().filter(|id| *id != &sender_id).cloned().collect())
+            .unwrap_or_default()
+    } else {
+        workspace.members.iter().map(|m| m.device_id.clone()).filter(|id| id != &sender_id).collect()
+    };
+    for member_id in recipients {
+        workspace.queue_delivery(envelope.clone(), member_id, unix_now());
+    }
     store.save(&workspace)?;
-    Ok(workspace)
+    retry_workplace_deliveries(app.clone()).await?;
+    Ok(store.load()?.ok_or_else(|| "no workplace exists".to_string())?)
 }
+
 
 
 /// Send a text message to every current member of a workplace group.
