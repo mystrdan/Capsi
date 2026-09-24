@@ -214,6 +214,62 @@ pub async fn decline_file(
         .update_transfer(&id, &transfer_id, TransferState::Declined, None)
         .map_err(|e| e.to_string())?;
 
+    let trust = TrustStore::load(&data_dir).map_err(|e| e.to_string())?;
+    if let Some(peer) = trust.get(&id) {
+        if let Some(address) = peer.last_address.as_deref() {
+            let mut socket = address.parse::<std::net::SocketAddr>()
+                .map_err(|e| format!("invalid peer address: {e}"))?;
+            socket.set_port(45892);
+            let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+            let receipt = capsi_core::protocol::Envelope::new(
+                capsi_core::protocol::Message::FileReceipt {
+                    transfer_id,
+                    state: capsi_core::protocol::FileReceipt::Declined,
+                },
+            );
+            let _ = capsi_core::transport::connect_and_send(
+                &socket.to_string(), &identity, &id, &receipt
+            ).await;
+        }
+    }
+
+    Ok(())
+}
+
+/// Cancel a file transfer and notify the peer when its current address is known.
+#[tauri::command]
+pub async fn cancel_file(
+    app: tauri::AppHandle,
+    device_id: String,
+    transfer_id: String,
+) -> Result<(), String> {
+    let data_dir = setup_app_data(&app)?;
+    let id = DeviceId::from_hex(&device_id).map_err(|e| e.to_string())?;
+    let mut store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
+    let updated = store.update_transfer(
+        &id, &transfer_id, TransferState::Cancelled, None
+    ).map_err(|e| e.to_string())?;
+    if !updated {
+        return Err("file transfer was not found".into());
+    }
+    let trust = TrustStore::load(&data_dir).map_err(|e| e.to_string())?;
+    if let Some(peer) = trust.get(&id) {
+        if let Some(address) = peer.last_address.as_deref() {
+            let mut socket = address.parse::<std::net::SocketAddr>()
+                .map_err(|e| format!("invalid peer address: {e}"))?;
+            socket.set_port(45892);
+            let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+            let receipt = capsi_core::protocol::Envelope::new(
+                capsi_core::protocol::Message::FileReceipt {
+                    transfer_id,
+                    state: capsi_core::protocol::FileReceipt::Cancelled,
+                },
+            );
+            let _ = capsi_core::transport::connect_and_send(
+                &socket.to_string(), &identity, &id, &receipt
+            ).await;
+        }
+    }
     Ok(())
 }
 
