@@ -93,6 +93,8 @@ pub struct Workspace {
     pub id: String,
     pub name: String,
     pub created_at: i64,
+    #[serde(default)]
+    pub updated_at: i64,
     pub owner_device_id: String,
     pub members: Vec<Member>,
     pub groups: Vec<Group>,
@@ -109,12 +111,91 @@ pub struct Workspace {
 }
 
 impl Workspace {
+    pub fn touch(&mut self) {
+        self.updated_at = now();
+    }
+
+    pub fn network_state(&self) -> WorkspaceState {
+        WorkspaceState {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+            owner_device_id: self.owner_device_id.clone(),
+            members: self.members.clone(),
+            groups: self.groups.clone(),
+            departments: self.departments.clone(),
+            broadcasts: self.broadcasts.clone(),
+            messages: self.messages.clone(),
+        }
+    }
+
+    pub fn apply_network_state(
+        &mut self,
+        state: WorkspaceState,
+        actor_device_id: &str,
+    ) -> Result<(), String> {
+        if state.id != self.id {
+            return Err("workspace id does not match".into());
+        }
+        if state.owner_device_id != self.owner_device_id {
+            return Err("workspace owner cannot be changed by synchronization".into());
+        }
+        if state.updated_at < self.updated_at {
+            return Ok(());
+        }
+
+        let actor = self.members.iter()
+            .find(|m| m.device_id == actor_device_id)
+            .ok_or_else(|| "sync sender is not a workplace member".to_string())?;
+        if !matches!(actor.role, Role::Owner | Role::Admin) {
+            return Err("sync sender is not allowed to administer the workplace".into());
+        }
+
+        let incoming_owner = state.members.iter()
+            .find(|m| m.device_id == state.owner_device_id)
+            .ok_or_else(|| "synchronized workspace has no owner member".to_string())?;
+        if incoming_owner.role != Role::Owner {
+            return Err("synchronized workspace owner role is invalid".into());
+        }
+
+        if !matches!(actor.role, Role::Owner) {
+            let privileged = |members: &[Member]| {
+                members.iter()
+                    .filter(|m| matches!(m.role, Role::Owner | Role::Admin))
+                    .map(|m| (m.device_id.clone(), m.role.clone()))
+                    .collect::<BTreeSet<_>>()
+            };
+            let local_privileged = privileged(&self.members);
+            let incoming_privileged = privileged(&state.members);
+            if !incoming_privileged.is_subset(&local_privileged) {
+                return Err("an administrator cannot create or promote an owner/admin".into());
+            }
+            if actor.role != state.members.iter()
+                .find(|m| m.device_id == actor_device_id)
+                .map(|m| m.role.clone())
+                .unwrap_or(Role::Member) {
+                return Err("synchronization cannot change the sender's role".into());
+            }
+        }
+
+        self.name = state.name;
+        self.updated_at = state.updated_at;
+        self.members = state.members;
+        self.groups = state.groups;
+        self.departments = state.departments;
+        self.broadcasts = state.broadcasts;
+        self.messages = state.messages;
+        Ok(())
+    }
+
     pub fn new(name: impl Into<String>, owner_device_id: impl Into<String>) -> Self {
         let owner = owner_device_id.into();
         Self {
             id: format!("workspace-{}", now()),
             name: name.into(),
             created_at: now(),
+            updated_at: now(),
             owner_device_id: owner.clone(),
             members: vec![Member {
                 device_id: owner,
@@ -317,6 +398,20 @@ impl Workspace {
             None => BTreeSet::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceState {
+    pub id: String,
+    pub name: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub owner_device_id: String,
+    pub members: Vec<Member>,
+    pub groups: Vec<Group>,
+    pub departments: Vec<Department>,
+    pub broadcasts: Vec<Broadcast>,
+    pub messages: Vec<WorkplaceMessage>,
 }
 
 #[derive(Debug, Clone)]
