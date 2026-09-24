@@ -80,6 +80,15 @@ pub struct WorkplaceMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingWorkplaceDelivery {
+    pub envelope: crate::protocol::Envelope,
+    pub recipient_device_id: String,
+    pub attempts: u32,
+    pub next_attempt_at: i64,
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workspace {
     pub id: String,
     pub name: String,
@@ -91,6 +100,12 @@ pub struct Workspace {
     pub broadcasts: Vec<Broadcast>,
     #[serde(default)]
     pub messages: Vec<WorkplaceMessage>,
+    /// Messages waiting for a recipient that is offline or temporarily unreachable.
+    #[serde(default)]
+    pub pending_deliveries: Vec<PendingWorkplaceDelivery>,
+    /// Envelope ids already accepted from the network, used for idempotent retries.
+    #[serde(default)]
+    pub received_message_ids: Vec<String>,
 }
 
 impl Workspace {
@@ -111,6 +126,8 @@ impl Workspace {
             departments: Vec::new(),
             broadcasts: Vec::new(),
             messages: Vec::new(),
+            pending_deliveries: Vec::new(),
+            received_message_ids: Vec::new(),
         }
     }
 
@@ -197,6 +214,49 @@ impl Workspace {
             sent_at: now(),
         });
         Some(message_id)
+    }
+
+    pub fn queue_delivery(
+        &mut self,
+        envelope: crate::protocol::Envelope,
+        recipient_device_id: impl Into<String>,
+        next_attempt_at: i64,
+    ) {
+        let recipient_device_id = recipient_device_id.into();
+        if self.pending_deliveries.iter().any(|p| {
+            p.envelope.id == envelope.id && p.recipient_device_id == recipient_device_id
+        }) {
+            return;
+        }
+        self.pending_deliveries.push(PendingWorkplaceDelivery {
+            envelope,
+            recipient_device_id,
+            attempts: 0,
+            next_attempt_at,
+            last_error: None,
+        });
+    }
+
+    pub fn remove_pending_delivery(&mut self, envelope_id: &str, recipient_device_id: &str) {
+        self.pending_deliveries.retain(|p| {
+            !(p.envelope.id == envelope_id && p.recipient_device_id == recipient_device_id)
+        });
+    }
+
+    pub fn has_received_message(&self, envelope_id: &str) -> bool {
+        self.received_message_ids.iter().any(|id| id == envelope_id)
+    }
+
+    pub fn mark_received_message(&mut self, envelope_id: &str) {
+        if !self.has_received_message(envelope_id) {
+            self.received_message_ids.push(envelope_id.to_string());
+        }
+        // Keep the deduplication journal bounded.
+        const MAX_RECEIVED_IDS: usize = 4096;
+        if self.received_message_ids.len() > MAX_RECEIVED_IDS {
+            let excess = self.received_message_ids.len() - MAX_RECEIVED_IDS;
+            self.received_message_ids.drain(0..excess);
+        }
     }
 
     pub fn create_broadcast(&mut self, title: impl Into<String>, body: impl Into<String>, author_device_id: impl Into<String>, department_id: Option<String>) -> Option<String> {
