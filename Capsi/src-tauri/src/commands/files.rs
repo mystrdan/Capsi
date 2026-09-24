@@ -10,7 +10,7 @@ use capsi_core::storage::conversation::{
 use capsi_core::util::{digest_hex, human_size, new_id, safe_file_name};
 use capsi_core::TRANSFER_CHUNK_SIZE;
 
-/// Largest file Capsi will offer, until the chunked sender lands.
+/// Largest file Capsi will offer in the current release path.
 const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
 
 /// Offer a file to a trusted peer.
