@@ -188,6 +188,11 @@ function renderWorkplace(snapshot) {
         </form>` : ''}
     </div>
     <div class="workplace-section">
+      <div class="workplace-section-title">Departments · ${workspace.departments.length}</div>
+      ${workspace.departments.length ? workspace.departments.map((d) => '<div class="workplace-group"><div><strong>'+escapeHtml(d.name)+'</strong><small>'+d.member_ids.length+' people</small></div></div>').join('') : '<p class="muted workplace-hint">No departments yet.</p>'}
+      ${canManage ? '<form id="workplace-department-form" class="workplace-form"><input class="detail-input" id="workplace-department-name" maxlength="64" placeholder="Department name" required><button class="btn btn-sm btn-primary" type="submit">Create department</button></form>' : ''}
+    </div>
+    <div class="workplace-section">
       <div class="workplace-section-title">Workspace</div>
       <div class="workplace-stat"><span>Groups</span><strong>${workspace.groups.length}</strong></div>
       <div class="workplace-stat"><span>Departments</span><strong>${workspace.departments.length}</strong></div>
@@ -221,6 +226,13 @@ function renderWorkplace(snapshot) {
       await loadWorkplace();
     } catch (e) { showToast('Could not delete group: ' + e, true); }
   }));
+  const departmentForm = $('workplace-department-form');
+  if (departmentForm) departmentForm.addEventListener('submit', async (e) => {
+    e.preventDefault(); const name = $('workplace-department-name').value.trim(); if (!name) return;
+    try { await invoke('create_workplace_department', { name }); showToast('Department created'); await loadWorkplace(); }
+    catch (e) { showToast('Could not create department: ' + e, true); }
+  });
+
   panel.querySelectorAll('[data-add-member]').forEach((el) => el.addEventListener('click', async () => {
     try {
       await invoke('add_workplace_member', { deviceId: el.dataset.addMember, displayName: '', role: 'Member' });
