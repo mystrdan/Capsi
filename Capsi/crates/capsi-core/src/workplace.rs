@@ -41,7 +41,7 @@ pub enum Permission {
     TransferFiles,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Member {
     pub device_id: String,
     pub display_name: String,
@@ -404,7 +404,7 @@ impl Workspace {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkspaceState {
     pub id: String,
     pub name: String,
