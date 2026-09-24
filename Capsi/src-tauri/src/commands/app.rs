@@ -35,7 +35,8 @@ fn open_url(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
     Ok(())
 }
 
-use std::sync::Arc;
+use std::{io::{Seek, SeekFrom, Write}, sync::Arc};
+use base64::Engine as _;
 use tokio::net::TcpListener;
 
 use tauri::{AppHandle, Emitter};
@@ -205,8 +206,206 @@ async fn handle_incoming_message(
             let _ = app.emit("file-offer-received", &offer);
             Ok(())
         }
+        capsi_core::protocol::Message::FileReceipt { transfer_id, state } => {
+            match state {
+                capsi_core::protocol::FileReceipt::Accepted => {
+                    let peer = peer_id.clone();
+                    let app_handle = app.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = send_file_chunks(&app_handle, &peer, &transfer_id).await {
+                            log::error!("capsi: file transfer {transfer_id} failed: {e}");
+                        }
+                    });
+                }
+                capsi_core::protocol::FileReceipt::Completed => {
+                    let mut store = capsi_core::storage::conversation::MessageStore::load(&data_dir)
+                        .map_err(|e| e.to_string())?;
+                    store
+                        .update_transfer(
+                            &peer_id,
+                            &transfer_id,
+                            capsi_core::storage::conversation::TransferState::Complete,
+                            None,
+                        )
+                        .map_err(|e| e.to_string())?;
+                    let _ = app.emit("file-transfer-complete", &transfer_id);
+                }
+                capsi_core::protocol::FileReceipt::Declined
+                | capsi_core::protocol::FileReceipt::Failed
+                | capsi_core::protocol::FileReceipt::Cancelled => {
+                    let mut store = capsi_core::storage::conversation::MessageStore::load(&data_dir)
+                        .map_err(|e| e.to_string())?;
+                    let state = match state {
+                        capsi_core::protocol::FileReceipt::Declined => capsi_core::storage::conversation::TransferState::Declined,
+                        capsi_core::protocol::FileReceipt::Cancelled => capsi_core::storage::conversation::TransferState::Cancelled,
+                        _ => capsi_core::storage::conversation::TransferState::Failed,
+                    };
+                    store
+                        .update_transfer(&peer_id, &transfer_id, state, None)
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+            Ok(())
+        }
+        capsi_core::protocol::Message::FileChunk { transfer_id, index, digest, data } => {
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .map_err(|e| format!("invalid file chunk encoding: {e}"))?;
+            if capsi_core::util::digest_hex(&bytes) != digest {
+                return Err("file chunk digest mismatch".into());
+            }
+
+            let mut store = capsi_core::storage::conversation::MessageStore::load(&data_dir)
+                .map_err(|e| e.to_string())?;
+            let conversation = store
+                .get(&peer_id)
+                .ok_or_else(|| "file transfer is unknown".to_string())?;
+            let file = conversation
+                .find_transfer(&transfer_id)
+                .ok_or_else(|| "file transfer is unknown".to_string())?;
+            let target = file
+                .local_path
+                .clone()
+                .ok_or_else(|| "file transfer has no destination".to_string())?;
+            let expected_size = file.size;
+            let expected_digest = file.digest.clone();
+
+            let chunk_size = capsi_core::TRANSFER_CHUNK_SIZE as u64;
+            if index >= file_chunks(expected_size, chunk_size) {
+                return Err("file chunk index is out of range".into());
+            }
+
+            let mut output = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(&target)
+                .map_err(|e| format!("cannot open received file: {e}"))?;
+            output
+                .seek(SeekFrom::Start(index * chunk_size))
+                .map_err(|e| format!("cannot seek received file: {e}"))?;
+            output
+                .write_all(&bytes)
+                .map_err(|e| format!("cannot write received file: {e}"))?;
+            output
+                .flush()
+                .map_err(|e| format!("cannot flush received file: {e}"))?;
+
+            let complete = std::fs::metadata(&target)
+                .map(|m| m.len() == expected_size)
+                .unwrap_or(false);
+            if complete {
+                let raw = std::fs::read(&target).map_err(|e| format!("cannot verify received file: {e}"))?;
+                if capsi_core::util::digest_hex(&raw) != expected_digest {
+                    store
+                        .update_transfer(
+                            &peer_id,
+                            &transfer_id,
+                            capsi_core::storage::conversation::TransferState::Failed,
+                            Some(target.clone()),
+                        )
+                        .map_err(|e| e.to_string())?;
+                    return Err("received file digest does not match offer".into());
+                }
+                store
+                    .update_transfer(
+                        &peer_id,
+                        &transfer_id,
+                        capsi_core::storage::conversation::TransferState::Complete,
+                        Some(target.clone()),
+                    )
+                    .map_err(|e| e.to_string())?;
+
+                let trust = capsi_core::identity::trust::TrustStore::load(&data_dir)
+                    .map_err(|e| e.to_string())?;
+                let peer = trust.get(&peer_id).ok_or_else(|| "peer is not known".to_string())?;
+                let address = peer.last_address.as_deref().ok_or_else(|| "peer address is not currently known".to_string())?;
+                let mut socket = address.parse::<std::net::SocketAddr>().map_err(|e| format!("invalid peer address: {e}"))?;
+                socket.set_port(TCP_PORT);
+                let identity = capsi_core::identity::DeviceIdentity::load_or_create(&data_dir)
+                    .map_err(|e| e.to_string())?;
+                let receipt = capsi_core::protocol::Envelope::new(
+                    capsi_core::protocol::Message::FileReceipt {
+                        transfer_id: transfer_id.clone(),
+                        state: capsi_core::protocol::FileReceipt::Completed,
+                    },
+                );
+                capsi_core::transport::connect_and_send(
+                    &socket.to_string(),
+                    &identity,
+                    &peer_id,
+                    &receipt,
+                )
+                .await
+                .map_err(|e| format!("could not send completion receipt: {e}"))?;
+                let _ = app.emit("file-transfer-complete", &transfer_id);
+            }
+            Ok(())
+        }
         _ => Err("received message type is not handled by the transport listener yet".into()),
     }
+}
+
+async fn send_file_chunks(app: &AppHandle, peer_id: &capsi_core::identity::DeviceId, transfer_id: &str) -> Result<(), String> {
+    let data_dir = setup_app_data(app)?;
+    let store = capsi_core::storage::conversation::MessageStore::load(&data_dir)
+        .map_err(|e| e.to_string())?;
+    let conversation = store
+        .get(peer_id)
+        .ok_or_else(|| "file transfer conversation is missing".to_string())?;
+    let file = conversation
+        .find_transfer(transfer_id)
+        .ok_or_else(|| "file transfer is missing".to_string())?;
+    let source = file.local_path.clone().ok_or_else(|| "source file path is missing".to_string())?;
+    let total = file.size;
+    let chunk_size = capsi_core::TRANSFER_CHUNK_SIZE as u64;
+    let chunks = file_chunks(total, chunk_size);
+
+    let trust = capsi_core::identity::trust::TrustStore::load(&data_dir)
+        .map_err(|e| e.to_string())?;
+    let known = trust.get(peer_id).ok_or_else(|| "peer is not known".to_string())?;
+    let address = known.last_address.as_deref().ok_or_else(|| "peer address is not currently known".to_string())?;
+    let mut socket = address.parse::<std::net::SocketAddr>().map_err(|e| format!("invalid peer address: {e}"))?;
+    socket.set_port(TCP_PORT);
+    let identity = capsi_core::identity::DeviceIdentity::load_or_create(&data_dir)
+        .map_err(|e| e.to_string())?;
+
+    let mut input = std::fs::File::open(&source).map_err(|e| format!("cannot open source file: {e}"))?;
+    for index in 0..chunks {
+        let offset = index * chunk_size;
+        input.seek(SeekFrom::Start(offset)).map_err(|e| format!("cannot seek source file: {e}"))?;
+        let length = std::cmp::min(chunk_size, total.saturating_sub(offset)) as usize;
+        let mut bytes = vec![0u8; length];
+        std::io::Read::read_exact(&mut input, &mut bytes)
+            .map_err(|e| format!("cannot read source file: {e}"))?;
+        let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        let envelope = capsi_core::protocol::Envelope::new(
+            capsi_core::protocol::Message::FileChunk {
+                transfer_id: transfer_id.to_string(),
+                index,
+                digest: capsi_core::util::digest_hex(&bytes),
+                data,
+            },
+        );
+        capsi_core::transport::connect_and_send(
+            &socket.to_string(),
+            &identity,
+            peer_id,
+            &envelope,
+        )
+        .await
+        .map_err(|e| format!("chunk {index} delivery failed: {e}"))?;
+        let _ = app.emit("file-transfer-progress", serde_json::json!({
+            "transfer_id": transfer_id,
+            "index": index + 1,
+            "chunks": chunks
+        }));
+    }
+    Ok(())
+}
+
+fn file_chunks(size: u64, chunk_size: u64) -> u64 {
+    ((size + chunk_size - 1) / chunk_size).max(1)
 }
 
 /// Run the LAN discovery loop. Spawned on a background thread so it survives
