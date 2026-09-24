@@ -348,6 +348,16 @@ impl MessageStore {
         self.conversations.get(device_id)
     }
 
+    /// Internal mutable access used by the Tauri retry worker.
+    pub fn conversations_mut_for_internal(&mut self, device_id: &DeviceId) -> Option<&mut Conversation> {
+        self.conversations.get_mut(device_id)
+    }
+
+    /// Persist one conversation after an internal queue mutation.
+    pub fn persist_for_internal(&self, device_id: &DeviceId) -> Result<()> {
+        self.persist(device_id)
+    }
+
     /// Add a message and write the conversation back to disk.
     pub fn append(
         &mut self,
