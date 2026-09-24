@@ -857,3 +857,36 @@ main {
 .workplace-group-add { display:flex; gap:6px; margin-top:8px; }
 .workplace-group-add .detail-input { flex:1; min-width:0; }
 .workplace-delete-group { margin-top:10px; }
+
+
+/* ---------- Workplace group conversations ---------- */
+.workplace-group-row {
+  width:100%;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:9px 8px;
+  margin:2px 0;
+  border:0;
+  border-radius:var(--radius-sm);
+  background:transparent;
+  color:var(--text);
+  text-align:left;
+  cursor:pointer;
+}
+.workplace-group-row:hover,
+.workplace-group-row.active { background:var(--surface); }
+.workplace-group-icon {
+  width:28px;
+  height:28px;
+  display:grid;
+  place-items:center;
+  border:1px solid var(--border);
+  border-radius:7px;
+  color:var(--text-muted);
+  font-size:14px;
+}
+.workplace-group-row-info { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.workplace-group-row-info strong { font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.workplace-group-row-info small { color:var(--text-muted); font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.workplace-message-sender { font-size:10px; font-weight:600; color:var(--text-muted); margin-bottom:3px; }
