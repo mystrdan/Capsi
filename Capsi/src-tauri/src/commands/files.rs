@@ -41,15 +41,11 @@ pub async fn offer_file(
 
     let metadata = std::fs::metadata(raw_path).map_err(|e| e.to_string())?;
     let file_size = metadata.len();
-    if file_size == 0 {
-        return Err("cannot send an empty file".into());
-    }
     if file_size > MAX_FILE_BYTES {
         return Err("files larger than 100 MB are not supported yet".into());
     }
 
-    let bytes = std::fs::read(raw_path).map_err(|e| e.to_string())?;
-    let digest = digest_hex(&bytes);
+    let digest = capsi_core::util::digest_file(raw_path).map_err(|e| e.to_string())?;
 
     let file_name = safe_file_name(
         raw_path
@@ -150,7 +146,23 @@ pub async fn accept_file(
     let file = conversation
         .find_transfer(&transfer_id)
         .ok_or_else(|| "file offer was not found".to_string())?;
-    let target = dest_dir.join(&file.file_name);
+    let safe_name = safe_file_name(&file.file_name);
+    let mut target = dest_dir.join(&safe_name);
+    // Never overwrite an existing local file. Generate a deterministic,
+    // collision-safe name while keeping the original extension.
+    if target.exists() {
+        let stem = std::path::Path::new(&safe_name)
+            .file_stem().and_then(|s| s.to_str()).unwrap_or("capsi-file");
+        let ext = std::path::Path::new(&safe_name)
+            .extension().and_then(|s| s.to_str()).map(|s| format!(".{s}")).unwrap_or_default();
+        for n in 1..10_000u32 {
+            let candidate = dest_dir.join(format!("{stem} ({n}){ext}"));
+            if !candidate.exists() {
+                target = candidate;
+                break;
+            }
+        }
+    }
     let target_string = target.to_string_lossy().to_string();
     let expected_peer = id.clone();
 
