@@ -4,10 +4,10 @@
 
 > Run it. Find the computers. Send.
 
-Capsi by **CAPSICOM** is a lightweight on-premises / local-network
-communication and file-transfer utility. Computers on the same local network
-discover each other and exchange messages and files directly — no cloud, no
-accounts, no unnecessary infrastructure.
+Capsi by **CAPSICOM** is a lightweight on-premises communication and file-transfer utility. Devices discover
+each other over an available local communication network and exchange messages
+and files directly — including LAN, Wi-Fi, mobile hotspot, and other supported
+network interfaces. No cloud, no accounts, no unnecessary infrastructure.
 
 - **Website:** https://capsi.win
 - **Repository:** https://github.com/mystrdan/Capsi
@@ -83,7 +83,7 @@ working code paths/tests where applicable:
 
 - **Device identity** — each installation has its own persistent device identity
   and fingerprint.
-- **LAN discovery** — Capsi advertises and discovers nearby devices over UDP.
+- **Network discovery** — Capsi advertises and discovers nearby devices over UDP on a supported local/network interface.
 - **Trusted devices** — peers can be accepted, blocked, renamed, or forgotten.
   Workplace membership requires a trusted device.
 - **Encrypted peer transport** — Capsi uses a signed handshake and encrypted
@@ -133,7 +133,8 @@ fully working end-to-end yet:
   validation is still required.
 
 The workplace layer remains local-first: no cloud service, external server,
-organization account system, or Internet connection is introduced.
+organization account system, or Internet connection is introduced. Devices only
+need a supported communication path to reach one another.
 
 ## Implementation status
 
