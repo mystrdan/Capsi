@@ -56,8 +56,8 @@ pub fn get_workplace<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<Work
     Ok(WorkplaceSnapshot { workspace, permissions })
 }
 
-/// Creates the local workspace model only. Network synchronization is intentionally
-/// not part of this skeleton yet.
+/// Creates the local workspace model. Subsequent workplace administration changes
+/// are propagated directly to trusted workplace devices.
 #[tauri::command]
 pub fn create_workplace<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
