@@ -134,28 +134,19 @@ The following areas specifically need review or further implementation:
   still need review.
 - **Network edge cases** — peer address changes, firewall rules, hotspot
   isolation, sleeping devices, and reconnect behavior need real-device testing.
-
-### Not yet end-to-end
-
-These areas have foundations in the codebase but should **not** be described as
-fully working end-to-end yet:
-
-- **Network-synchronized workplace membership** — membership/group/department
-  changes are still local to each device.
-- **Central workplace administration** — there is no server or centralized admin
-  authority.
-- **Network-synchronized workplace membership** — membership/group/department
-  changes are still local to each device.
-- **Central workplace administration** — there is no server or centralized admin
-  authority.
-- **File byte transfer** — encrypted file offers, acceptance receipts, chunk
-  delivery, per-chunk digest checks, final whole-file digest verification, and
-  completion receipts are now wired into the transport. This still needs
-  cross-device stress testing, resume-after-interruption work, and UI polish
-  before release-ready status.
+- **Network-synchronized workplace membership** — membership, group and
+  department changes are still local to each device. This remains the major
+  workplace implementation gap.
 - **Android runtime validation** — the shared Rust core is designed for Windows
   and Android and the Tauri shell is mobile-aware, but live Android device
   validation is still required.
+
+### Deliberately not part of Capsi
+
+- **Central workplace administration** — Capsi's current philosophy is local-first
+  and does not introduce a cloud service, organization server, or central
+  account system. A centralized workplace administration service should not be
+  added merely to make synchronization easier.
 
 The workplace layer remains local-first: no cloud service, external server,
 organization account system, or Internet connection is introduced. Devices only
