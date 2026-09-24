@@ -53,6 +53,7 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
             crate::commands::files::offer_file,
             crate::commands::files::accept_file,
             crate::commands::files::decline_file,
+            crate::commands::files::cancel_file,
             crate::commands::files::list_transfers,
             crate::commands::settings::get_settings,
             crate::commands::settings::save_settings,
