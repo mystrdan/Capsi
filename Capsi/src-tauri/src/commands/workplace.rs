@@ -235,21 +235,22 @@ pub fn delete_workplace_group<R: tauri::Runtime>(
     Ok(workspace)
 }
 
+
 #[tauri::command]
-pub fn remove_workplace_group_member<R: tauri::Runtime>(
+pub fn assign_workplace_department<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
-    group_id: String,
+    department_id: String,
     device_id: String,
 ) -> Result<Workspace, String> {
     let store = store(&app)?;
     let mut workspace = store.load()?.ok_or_else(|| "no workplace exists".to_string())?;
     let data_dir = setup_app_data(&app)?;
     let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
-    if !workspace.permissions_for(identity.id().as_str()).contains(&Permission::ManageGroups) {
-        return Err("you do not have permission to manage workplace groups".into());
+    if !workspace.permissions_for(identity.id().as_str()).contains(&Permission::ManageDepartments) {
+        return Err("you do not have permission to manage workplace departments".into());
     }
-    if !workspace.remove_from_group(&group_id, &device_id) {
-        return Err("group or member not found".into());
+    if !workspace.assign_department(&department_id, &device_id) {
+        return Err("department or workplace member not found".into());
     }
     store.save(&workspace)?;
     Ok(workspace)
