@@ -155,3 +155,45 @@ pub fn create_workplace_broadcast<R: tauri::Runtime>(
 }
 
 pub fn _permission_marker(_: Permission) {}
+
+
+#[tauri::command]
+pub fn add_workplace_group_member<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    group_id: String,
+    device_id: String,
+) -> Result<Workspace, String> {
+    let store = store(&app)?;
+    let mut workspace = store.load()?.ok_or_else(|| "no workplace exists".to_string())?;
+    let data_dir = setup_app_data(&app)?;
+    let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+    if !workspace.permissions_for(identity.id().as_str()).contains(&Permission::ManageGroups) {
+        return Err("you do not have permission to manage workplace groups".into());
+    }
+    if !workspace.add_to_group(&group_id, &device_id) {
+        return Err("group or workplace member not found".into());
+    }
+    store.save(&workspace)?;
+    Ok(workspace)
+}
+
+#[tauri::command]
+pub fn remove_workplace_group_member<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    group_id: String,
+    device_id: String,
+) -> Result<Workspace, String> {
+    let store = store(&app)?;
+    let mut workspace = store.load()?.ok_or_else(|| "no workplace exists".to_string())?;
+    let data_dir = setup_app_data(&app)?;
+    let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+    if !workspace.permissions_for(identity.id().as_str()).contains(&Permission::ManageGroups) {
+        return Err("you do not have permission to manage workplace groups".into());
+    }
+    let Some(group) = workspace.groups.iter_mut().find(|g| g.id == group_id) else {
+        return Err("group not found".into());
+    };
+    group.member_ids.retain(|id| id != &device_id);
+    store.save(&workspace)?;
+    Ok(workspace)
+}
