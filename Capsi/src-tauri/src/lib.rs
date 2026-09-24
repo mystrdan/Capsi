@@ -61,6 +61,7 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
             crate::commands::workplace::add_workplace_member,
             crate::commands::workplace::remove_workplace_member,
             crate::commands::workplace::create_workplace_department,
+            crate::commands::workplace::assign_workplace_department,
             crate::commands::workplace::create_workplace_group,
             crate::commands::workplace::add_workplace_group_member,
             crate::commands::workplace::remove_workplace_group_member,
