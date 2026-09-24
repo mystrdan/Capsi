@@ -167,6 +167,10 @@ pub async fn accept_file(
             }
         }
     }
+    let resume_chunk = std::fs::metadata(&target)
+        .ok()
+        .map(|m| std::cmp::min(m.len() / capsi_core::TRANSFER_CHUNK_SIZE as u64, file.size / capsi_core::TRANSFER_CHUNK_SIZE as u64 + 1))
+        .unwrap_or(0);
     let target_string = target.to_string_lossy().to_string();
     let expected_peer = id.clone();
 
@@ -188,7 +192,7 @@ pub async fn accept_file(
     let receipt = capsi_core::protocol::Envelope::new(
         capsi_core::protocol::Message::FileReceipt {
             transfer_id,
-            state: capsi_core::protocol::FileReceipt::Accepted,
+            state: capsi_core::protocol::FileReceipt::Accepted { next_chunk: resume_chunk },
         },
     );
     capsi_core::transport::connect_and_send(
