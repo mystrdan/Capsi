@@ -156,6 +156,13 @@ pub async fn retry_message_deliveries(
             Ok(()) => {
                 // Do not mark delivered here: only the receiver's receipt proves
                 // that the message was accepted and persisted.
+                if let Some(conv) = store.conversations_mut_for_internal(&device_id) {
+                    if let Some(p) = conv.pending_deliveries.iter_mut().find(|p| p.envelope.id == item.envelope.id) {
+                        p.attempts = p.attempts.saturating_add(1);
+                        p.next_attempt_at = now + 60;
+                        p.last_error = Some("awaiting delivery receipt".into());
+                    }
+                }
                 delivered += 1;
             }
             Err(error) => {
