@@ -93,6 +93,11 @@ pub async fn bootstrap(app: AppHandle) -> Result<IdentityInfo, String> {
                     {
                         log::debug!("capsi: workplace retry failed: {e}");
                     }
+                    if let Err(e) =
+                        super::chat::retry_all_message_deliveries(retry_handle.clone()).await
+                    {
+                        log::debug!("capsi: regular message retry failed: {e}");
+                    }
                 }
             });
 
@@ -138,6 +143,30 @@ async fn run_transport_listener(app: &AppHandle) -> Result<(), String> {
     }
 }
 
+async fn send_delivery_receipt(
+    app: &AppHandle,
+    peer_id: &capsi_core::identity::DeviceId,
+    message_id: &str,
+) -> Result<(), String> {
+    let data_dir = setup_app_data(app)?;
+    let trust = capsi_core::identity::trust::TrustStore::load(&data_dir)
+        .map_err(|e| e.to_string())?;
+    let peer = trust.get(peer_id).ok_or_else(|| "peer is not known to Capsi".to_string())?;
+    let address = peer.last_address.as_deref().ok_or_else(|| "peer address is not currently known".to_string())?;
+    let mut socket = address.parse::<std::net::SocketAddr>()
+        .map_err(|e| format!("invalid peer address: {e}"))?;
+    socket.set_port(TCP_PORT);
+    let identity = capsi_core::identity::DeviceIdentity::load_or_create(&data_dir)
+        .map_err(|e| e.to_string())?;
+    let receipt = capsi_core::protocol::Envelope::new(
+        capsi_core::protocol::Message::DeliveryReceipt(
+            capsi_core::protocol::DeliveryReceipt { message_id: message_id.to_string() }
+        )
+    );
+    capsi_core::transport::connect_and_send(&socket.to_string(), &identity, peer_id, &receipt)
+        .await.map_err(|e| format!("delivery receipt failed: {e}"))
+}
+
 async fn handle_incoming_message(
     app: &AppHandle,
     stream: tokio::net::TcpStream,
@@ -157,19 +186,22 @@ async fn handle_incoming_message(
 
     match envelope.message {
         capsi_core::protocol::Message::Text(message) => {
-            let store = capsi_core::storage::conversation::MessageStore::load(&data_dir)
+            let mut store = capsi_core::storage::conversation::MessageStore::load(&data_dir)
                 .map_err(|e| e.to_string())?;
-            let mut store = store;
             let peer_name = super::conversation_name(&data_dir, &peer_id);
-            let stored = capsi_core::storage::conversation::StoredMessage::text(
-                &message.body,
-                false,
-            )
-            .map_err(|e| e.to_string())?;
-            store
-                .append(&peer_id, &peer_name, stored)
-                .map_err(|e| e.to_string())?;
-            let _ = app.emit("message-received", &peer_id.as_str());
+            let duplicate = store.get(&peer_id)
+                .map(|c| c.messages.iter().any(|m| m.id == envelope.id))
+                .unwrap_or(false);
+            if !duplicate {
+                let mut stored = capsi_core::storage::conversation::StoredMessage::text(
+                    &message.body, false
+                ).map_err(|e| e.to_string())?;
+                stored.id = envelope.id.clone();
+                stored.sent_at = envelope.sent_at;
+                store.append(&peer_id, &peer_name, stored).map_err(|e| e.to_string())?;
+                let _ = app.emit("message-received", &peer_id.as_str());
+            }
+            send_delivery_receipt(app, &peer_id, &envelope.id).await?;
             Ok(())
         }
         capsi_core::protocol::Message::WorkplaceText(message) => {
@@ -193,7 +225,11 @@ async fn handle_incoming_message(
             workspace.mark_received_message(&envelope.id);
             store.save(&workspace)?;
             let _ = app.emit("workplace-message", &message);
+            send_delivery_receipt(app, &peer_id, &envelope.id).await?;
             Ok(())
+        }
+        capsi_core::protocol::Message::DeliveryReceipt(receipt) => {
+            super::chat::mark_message_delivered(app, &peer_id, &receipt.message_id).await
         }
         capsi_core::protocol::Message::FileOffer(offer) => {
             let mut store = capsi_core::storage::conversation::MessageStore::load(&data_dir)
