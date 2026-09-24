@@ -254,10 +254,9 @@ pub async fn send_workplace_group_message<R: tauri::Runtime>(
     // available for the background retry loop if any recipient is unavailable.
     retry_workplace_deliveries(app.clone()).await?;
 
-    let workspace = store.load()?.ok_or_else(|| "no workplace exists".to_string())?;
-    if workspace.pending_deliveries.iter().any(|p| p.envelope.id == envelope_id) {
-        return Err(format!("message stored locally and queued for offline delivery: {message_id}"));
-    }
+    // The message id is returned once it is durably stored locally. Delivery
+    // may still be pending while a recipient is offline or while its receipt is
+    // in flight.
     Ok(message_id)
 }
 
