@@ -175,8 +175,10 @@ pub fn create_workplace_broadcast<R: tauri::Runtime>(
 
 /// Send a text message to every current member of a workplace group.
 ///
-/// Each recipient receives the same signed group message over its existing
-/// trusted-device transport. No server or central relay is introduced.
+/// Delivery is store-first: the local message is persisted immediately and each
+/// remote recipient gets a durable pending-delivery record. A background retry
+/// loop can therefore finish delivery after a peer comes back online without
+/// creating duplicate messages.
 #[tauri::command]
 pub async fn send_workplace_group_message<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -193,7 +195,6 @@ pub async fn send_workplace_group_message<R: tauri::Runtime>(
         return Err("you do not have permission to send workplace messages".into());
     }
 
-    let body = body.trim_end().to_string();
     let group = workspace
         .groups
         .iter()
@@ -203,61 +204,145 @@ pub async fn send_workplace_group_message<R: tauri::Runtime>(
     if !group.member_ids.iter().any(|id| id == &sender_id) {
         return Err("you are not a member of this group".into());
     }
+
     let message = capsi_core::protocol::WorkplaceTextMessage::new(&group_id, &body)
         .map_err(|e| e.to_string())?;
     let envelope = capsi_core::protocol::Envelope::new(
         capsi_core::protocol::Message::WorkplaceText(message),
     );
+    let envelope_id = envelope.id.clone();
 
-    let trust = capsi_core::identity::trust::TrustStore::load(&data_dir)
-        .map_err(|e| e.to_string())?;
-    let mut failures = Vec::new();
-
-    for member_id in group.member_ids.iter().filter(|id| *id != &sender_id) {
-        let peer_id = capsi_core::identity::DeviceId::from_hex(member_id)
-            .map_err(|e| e.to_string())?;
-        let peer = trust
-            .get(&peer_id)
-            .ok_or_else(|| format!("group member {} is not known to Capsi", peer_id.short()))?;
-        if !peer.is_trusted() {
-            failures.push(format!("{} is not trusted", peer_id.short()));
-            continue;
-        }
-        let address = peer
-            .last_address
-            .as_deref()
-            .ok_or_else(|| format!("no address known for {}", peer_id.short()))?;
-        let mut socket = address
-            .parse::<std::net::SocketAddr>()
-            .map_err(|e| format!("invalid address for {}: {e}", peer_id.short()))?;
-        socket.set_port(45892);
-
-        if let Err(e) = capsi_core::transport::connect_and_send(
-            &socket.to_string(),
-            &identity,
-            &peer_id,
-            &envelope,
-        )
-        .await
-        {
-            failures.push(format!("{}: {e}", peer_id.short()));
-        }
-    }
-
+    let clean_body = match &envelope.message {
+        capsi_core::protocol::Message::WorkplaceText(message) => message.body.clone(),
+        _ => unreachable!(),
+    };
     let message_id = workspace
-        .append_message(&group_id, &sender_id, body)
+        .append_message(&group_id, &sender_id, clean_body)
         .ok_or_else(|| "could not store workplace message".to_string())?;
+
+    let next_attempt_at = unix_now();
+    for member_id in group.member_ids.iter().filter(|id| *id != &sender_id) {
+        workspace.queue_delivery(envelope.clone(), member_id.clone(), next_attempt_at);
+    }
     store.save(&workspace)?;
 
-    if failures.is_empty() {
-        Ok(message_id)
-    } else {
-        Err(format!(
-            "message stored locally, but delivery failed: {}",
-            failures.join("; ")
-        ))
+    // Make the first delivery attempt immediately; the durable queue remains
+    // available for the background retry loop if any recipient is unavailable.
+    retry_workplace_deliveries(app.clone()).await?;
+
+    let workspace = store.load()?.ok_or_else(|| "no workplace exists".to_string())?;
+    if workspace.pending_deliveries.iter().any(|p| p.envelope.id == envelope_id) {
+        return Err(format!("message stored locally and queued for offline delivery: {message_id}"));
+    }
+    Ok(message_id)
+}
+
+/// Retry due workplace deliveries. This is intentionally platform-neutral at
+/// the protocol level: the Tauri shell only supplies the local identity, trust
+/// store and app-data path.
+pub async fn retry_workplace_deliveries<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<usize, String> {
+    let store = store(&app)?;
+    let mut workspace = match store.load()? {
+        Some(workspace) => workspace,
+        None => return Ok(0),
+    };
+    let data_dir = setup_app_data(&app)?;
+    let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+    let trust = capsi_core::identity::trust::TrustStore::load(&data_dir)
+        .map_err(|e| e.to_string())?;
+    let now = unix_now();
+    let due: Vec<_> = workspace
+        .pending_deliveries
+        .iter()
+        .filter(|p| p.next_attempt_at <= now)
+        .cloned()
+        .collect();
+
+    let mut delivered = 0usize;
+    for pending in due {
+        let peer_id = match capsi_core::identity::DeviceId::from_hex(&pending.recipient_device_id) {
+            Ok(id) => id,
+            Err(e) => {
+                mark_delivery_failure(&mut workspace, &pending.envelope.id, &pending.recipient_device_id, e.to_string(), now);
+                continue;
+            }
+        };
+
+        let result = async {
+            let peer = trust
+                .get(&peer_id)
+                .ok_or_else(|| "device is not known to Capsi".to_string())?;
+            if !peer.is_trusted() {
+                return Err("device is not trusted".to_string());
+            }
+            let address = peer
+                .last_address
+                .as_deref()
+                .ok_or_else(|| "no current network address".to_string())?;
+            let mut socket = address
+                .parse::<std::net::SocketAddr>()
+                .map_err(|e| format!("invalid network address: {e}"))?;
+            socket.set_port(45892);
+            capsi_core::transport::connect_and_send(
+                &socket.to_string(),
+                &identity,
+                &peer_id,
+                &pending.envelope,
+            )
+            .await
+            .map_err(|e| e.to_string())
+        }
+        .await;
+
+        match result {
+            Ok(()) => {
+                workspace.remove_pending_delivery(&pending.envelope.id, &pending.recipient_device_id);
+                delivered += 1;
+            }
+            Err(error) => {
+                mark_delivery_failure(
+                    &mut workspace,
+                    &pending.envelope.id,
+                    &pending.recipient_device_id,
+                    error,
+                    now,
+                );
+            }
+        }
+    }
+
+    if !due.is_empty() {
+        store.save(&workspace)?;
+    }
+    Ok(delivered)
+}
+
+fn mark_delivery_failure(
+    workspace: &mut Workspace,
+    envelope_id: &str,
+    recipient_device_id: &str,
+    error: String,
+    now: i64,
+) {
+    if let Some(pending) = workspace.pending_deliveries.iter_mut().find(|p| {
+        p.envelope.id == envelope_id && p.recipient_device_id == recipient_device_id
+    }) {
+        pending.attempts = pending.attempts.saturating_add(1);
+        let delay = 2_i64.saturating_pow(pending.attempts.min(5)).min(60);
+        pending.next_attempt_at = now + delay;
+        pending.last_error = Some(error);
     }
 }
+
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or_default()
+}
+
 
 pub fn _permission_marker(_: Permission) {}
 
