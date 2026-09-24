@@ -327,6 +327,18 @@ mod tests {
 
     #[test]
     #[test]
+    fn a_workplace_sync_round_trips() {
+        let workspace = crate::workplace::Workspace::new("Office", "owner");
+        let message = WorkplaceSyncMessage {
+            actor_device_id: "owner".into(),
+            state: workspace.network_state(),
+        };
+        let envelope = Envelope::new(Message::WorkplaceSync(message.clone()));
+        let parsed = Envelope::from_json(&envelope.to_json().unwrap()).unwrap();
+        assert_eq!(parsed.message, Message::WorkplaceSync(message));
+    }
+
+    #[test]
     fn a_workplace_broadcast_round_trips() {
         let b = WorkplaceBroadcastMessage {
             broadcast_id: "b-1".into(),
