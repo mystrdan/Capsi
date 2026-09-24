@@ -173,6 +173,20 @@ function renderWorkplace(snapshot) {
         </div>` : ''}
     </div>
     <div class="workplace-section">
+      <div class="workplace-section-title">Groups · ${workspace.groups.length}</div>
+      ${workspace.groups.length ? workspace.groups.map((g) => `
+        <div class="workplace-group">
+          <div><strong>${escapeHtml(g.name)}</strong><small>${escapeHtml(g.description || 'No description')} · ${g.member_ids.length} people</small></div>
+          <span class="mono">${escapeHtml(shortId(g.id))}</span>
+        </div>`).join('') : '<p class="muted workplace-hint">No groups yet.</p>'}
+      ${canManage ? `
+        <form id="workplace-group-form" class="workplace-form workplace-group-form">
+          <input class="detail-input" id="workplace-group-name" maxlength="64" placeholder="Group name" required>
+          <input class="detail-input" id="workplace-group-description" maxlength="160" placeholder="Description (optional)">
+          <button class="btn btn-sm btn-primary" type="submit">Create group</button>
+        </form>` : ''}
+    </div>
+    <div class="workplace-section">
       <div class="workplace-section-title">Workspace</div>
       <div class="workplace-stat"><span>Groups</span><strong>${workspace.groups.length}</strong></div>
       <div class="workplace-stat"><span>Departments</span><strong>${workspace.departments.length}</strong></div>
@@ -185,6 +199,19 @@ function renderWorkplace(snapshot) {
       await loadWorkplace();
     } catch (e) { showToast(`Could not add person: ${e}`, true); }
   }));
+  const groupForm = $('workplace-group-form');
+  if (groupForm) groupForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('workplace-group-name').value.trim();
+    const description = $('workplace-group-description').value.trim();
+    if (!name) return;
+    try {
+      await invoke('create_workplace_group', { name, description });
+      showToast('Group created');
+      await loadWorkplace();
+    } catch (err) { showToast(`Could not create group: ${err}`, true); }
+  });
+
   panel.querySelectorAll('[data-remove-member]').forEach((el) => el.addEventListener('click', async () => {
     try {
       await invoke('remove_workplace_member', { deviceId: el.dataset.removeMember });
