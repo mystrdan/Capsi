@@ -117,6 +117,10 @@ working code paths/tests where applicable:
   queue and acknowledgement path.
 - **Local-first storage** — workplace state and pending deliveries are persisted
   on-device; no cloud account or central workplace server is required.
+- **Direct workplace synchronization** — workplace membership, groups,
+  departments, broadcasts and workplace message history can synchronize directly
+  between trusted workplace devices over the existing encrypted transport. No
+  workplace server is introduced.
 
 ### Needs review / validation
 
@@ -134,12 +138,16 @@ The following areas specifically need review or further implementation:
   still need review.
 - **Network edge cases** — peer address changes, firewall rules, hotspot
   isolation, sleeping devices, and reconnect behavior need real-device testing.
-- **Network-synchronized workplace membership** — membership, group and
-  department changes are still local to each device. This remains the major
-  workplace implementation gap.
+- **Workplace synchronization validation** — the direct peer-to-peer sync path
+  is implemented, but it still needs Windows-to-Windows and Windows-to-Android
+  validation, including offline/reconnect and multiple-administrator changes.
 - **Android runtime validation** — the shared Rust core is designed for Windows
   and Android and the Tauri shell is mobile-aware, but live Android device
   validation is still required.
+- **File byte transfer validation** — encrypted offers, acceptance, chunk
+  delivery, integrity verification, completion receipts and contiguous-prefix
+  resume are implemented, but real cross-device stress testing is still
+  required.
 
 ### Deliberately not part of Capsi
 
