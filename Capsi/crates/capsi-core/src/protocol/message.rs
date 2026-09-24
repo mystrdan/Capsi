@@ -318,6 +318,7 @@ mod tests {
         .is_conversation_item());
         assert!(!Message::Typing(Typing { active: true }).is_conversation_item());
         assert!(!Message::Goodbye.is_conversation_item());
+        assert!(Message::WorkplaceText(WorkplaceTextMessage::new("g", "ok").unwrap()).is_conversation_item());
         assert!(!Message::FileChunk {
             transfer_id: "t".into(),
             index: 0,
@@ -327,7 +328,6 @@ mod tests {
         .is_conversation_item());
     }
 
-    #[test]
     #[test]
     fn a_workplace_text_round_trips_with_group_id() {
         let message = WorkplaceTextMessage::new("group-1", "hello team").unwrap();
