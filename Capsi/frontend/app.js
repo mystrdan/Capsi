@@ -178,6 +178,7 @@ function renderWorkplace(snapshot) {
         <div class="workplace-group">
           <div><strong>${escapeHtml(g.name)}</strong><small>${escapeHtml(g.description || 'No description')} · ${g.member_ids.length} people</small></div>
           <span class="mono">${escapeHtml(shortId(g.id))}</span>
+          ${canManage ? `<button class="btn btn-sm btn-danger" data-delete-group="${escapeHtml(g.id)}">Delete</button>` : ''}
         </div>`).join('') : '<p class="muted workplace-hint">No groups yet.</p>'}
       ${canManage ? `
         <form id="workplace-group-form" class="workplace-form workplace-group-form">
