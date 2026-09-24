@@ -117,7 +117,7 @@ function renderWorkplace(snapshot) {
       <div class="workplace-empty">
         <div class="workplace-mark">W</div>
         <h2>Create a workplace</h2>
-        <p class="muted">Set up a local workspace for this device. People, groups and departments can be added as Capsi grows.</p>
+        <p class="muted">Set up a local workplace for this device. Trusted Capsi devices can be added as people.</p>
         <form id="workplace-create-form" class="workplace-form">
           <input class="detail-input" id="workplace-name" maxlength="64" placeholder="Workplace name" autocomplete="off" required>
           <button class="btn btn-primary" type="submit">Create workplace</button>
@@ -139,6 +139,9 @@ function renderWorkplace(snapshot) {
   }
 
   const owner = workspace.members.find((m) => m.device_id === workspace.owner_device_id);
+  const memberIds = new Set(workspace.members.map((m) => m.device_id));
+  const candidates = state.peers.filter((p) => p.state === 'trusted' && !memberIds.has(p.device_id));
+  const canManage = (snapshot.permissions || []).includes('ManageMembers');
   panel.innerHTML = `
     <div class="workplace-summary">
       <div class="workplace-mark">${escapeHtml(initials(workspace.name))}</div>
@@ -146,20 +149,50 @@ function renderWorkplace(snapshot) {
       <div class="workplace-id mono">${escapeHtml(shortId(workspace.id))}</div>
     </div>
     <div class="workplace-section">
+      <div class="workplace-section-title">People · ${workspace.members.length}</div>
+      <div class="workplace-members">
+        ${workspace.members.map((m) => `
+          <div class="workplace-member">
+            <div class="conv-avatar">${escapeHtml(initials(m.display_name || shortId(m.device_id)))}</div>
+            <div class="workplace-member-info">
+              <div class="workplace-member-name">${escapeHtml(m.display_name || shortId(m.device_id))}</div>
+              <div class="workplace-member-meta">${escapeHtml(m.role)} · <span class="mono">${escapeHtml(shortId(m.device_id))}</span></div>
+            </div>
+            ${canManage && m.device_id !== workspace.owner_device_id ? `<button class="btn btn-sm btn-danger" data-remove-member="${escapeHtml(m.device_id)}">Remove</button>` : ''}
+          </div>`).join('')}
+      </div>
+      ${canManage ? `
+        <div class="workplace-add">
+          <div class="workplace-section-title">Add trusted device</div>
+          ${candidates.length ? candidates.map((p) => `
+            <button class="workplace-candidate" data-add-member="${escapeHtml(p.device_id)}">
+              <span class="conv-avatar">${escapeHtml(initials(p.alias || p.name || shortId(p.device_id)))}</span>
+              <span><strong>${escapeHtml(p.alias || p.name || shortId(p.device_id))}</strong><small>Trusted · ${escapeHtml(shortId(p.device_id))}</small></span>
+              <b>+</b>
+            </button>`).join('') : '<p class="muted workplace-hint">Trust a device in Nearby first. Trusted devices will appear here.</p>'}
+        </div>` : ''}
+    </div>
+    <div class="workplace-section">
       <div class="workplace-section-title">Workspace</div>
-      <div class="workplace-stat"><span>Owner</span><strong>${escapeHtml(owner ? owner.display_name || shortId(owner.device_id) : shortId(workspace.owner_device_id))}</strong></div>
-      <div class="workplace-stat"><span>People</span><strong>${workspace.members.length}</strong></div>
       <div class="workplace-stat"><span>Groups</span><strong>${workspace.groups.length}</strong></div>
       <div class="workplace-stat"><span>Departments</span><strong>${workspace.departments.length}</strong></div>
       <div class="workplace-stat"><span>Broadcasts</span><strong>${workspace.broadcasts.length}</strong></div>
-    </div>
-    <div class="workplace-section">
-      <div class="workplace-section-title">Your access</div>
-      <div class="workplace-permissions">${(snapshot.permissions || []).map((p) => `<span>${escapeHtml(p.replaceAll('_', ' '))}</span>`).join('')}</div>
-    </div>
-    <div class="workplace-note">This workspace is stored locally on this device. Network membership and synchronization come next.</div>`;
+    </div>`;
+  panel.querySelectorAll('[data-add-member]').forEach((el) => el.addEventListener('click', async () => {
+    try {
+      await invoke('add_workplace_member', { deviceId: el.dataset.addMember, displayName: '', role: 'Member' });
+      showToast('Person added to workplace');
+      await loadWorkplace();
+    } catch (e) { showToast(`Could not add person: ${e}`, true); }
+  }));
+  panel.querySelectorAll('[data-remove-member]').forEach((el) => el.addEventListener('click', async () => {
+    try {
+      await invoke('remove_workplace_member', { deviceId: el.dataset.removeMember });
+      showToast('Person removed from workplace');
+      await loadWorkplace();
+    } catch (e) { showToast(`Could not remove person: ${e}`, true); }
+  }));
 }
-
 async function openConversation(deviceId, fallbackName) {
   state.activeConv = deviceId;
   try {
