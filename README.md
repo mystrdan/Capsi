@@ -74,27 +74,70 @@ Pushing a `v*` tag runs the same build on GitHub Actions
 ## Workplace features
 
 Capsi is also being extended as a local workplace communication layer, built on
-top of its existing device discovery and trust model.
+top of its existing device discovery, trust and encrypted transport.
 
-Current workplace foundation:
+### Implemented and working
 
-- **Workspaces** — create a local workplace with the current device as Owner.
-- **People** — trusted Capsi devices can be added as workplace members.
-- **Roles & permissions** — Owner, Admin, Manager, and Member roles define access.
-- **Groups** — workplace groups can be created, members can be associated with
-  them, members can be removed, and groups can be deleted.
-- **Departments** — departments can be created and workplace members can be assigned to them.
-- **Broadcasts** — the workplace model supports authored broadcasts, including
-  optional department targeting, with permission checks.
-- **Workplace messaging** — group text messages now use the shared signed handshake,
-  encrypted TCP transport, local membership checks, direct device-to-device fan-out,
-  local history, and a frontend group conversation view with live incoming-message updates.
-- **Permission enforcement** — workplace management commands enforce the role
-  permissions defined by the local workspace.
-- **Local-first storage** — workplace state is persisted locally; cloud accounts,
-  external servers, and Internet connectivity are not required for this layer.
+The following features are implemented in the current feature branch and have
+working code paths/tests where applicable:
 
-The workplace layer is being built incrementally. Network synchronization,
-group fan-out, and richer workplace communication are still separate next steps.
-The current
-foundation does not introduce a cloud server or organization account system.
+- **Device identity** — each installation has its own persistent device identity
+  and fingerprint.
+- **LAN discovery** — Capsi advertises and discovers nearby devices over UDP.
+- **Trusted devices** — peers can be accepted, blocked, renamed, or forgotten.
+  Workplace membership requires a trusted device.
+- **Encrypted peer transport** — Capsi uses a signed handshake and encrypted
+  TCP frames for direct device-to-device transport.
+- **Workspaces** — a local workplace can be created with the current device as Owner.
+- **People** — trusted devices can be added to the workplace as members.
+- **Roles & permissions** — Owner, Admin, Manager, and Member permissions are
+  enforced by the workplace commands.
+- **Groups** — groups can be created, members can be added/removed, and groups
+  can be deleted.
+- **Departments** — departments can be created and members can be assigned.
+- **Broadcast model** — authored broadcasts with optional department targeting
+  are represented and permission-checked locally.
+- **Workplace group messaging** — messages are stored locally and sent directly
+  to trusted group members over the encrypted transport.
+- **Workplace conversation UI** — groups can be opened as conversations with
+  message history, sender names, timestamps, and a message composer.
+- **Live incoming messages** — incoming workplace messages update the active
+  conversation through a Tauri event.
+- **Offline delivery queue** — messages are persisted locally before delivery,
+  so an unavailable recipient does not lose the message.
+- **Automatic retry** — queued workplace deliveries retry in the background
+  when recipients become reachable again.
+- **Idempotent delivery** — received envelope IDs are tracked locally so a
+  retry cannot create duplicate workplace history entries.
+- **Local-first storage** — workplace state and pending deliveries are persisted
+  on-device; no cloud account or central workplace server is required.
+
+### Not yet end-to-end
+
+These areas have foundations in the codebase but should **not** be described as
+fully working end-to-end yet:
+
+- **Network-synchronized workplace membership** — membership/group/department
+  changes are still local to each device.
+- **Central workplace administration** — there is no server or centralized admin
+  authority.
+- **Workplace broadcast delivery** — the broadcast data model and permission
+  checks exist, but network fan-out has not been implemented yet.
+- **Regular 1-to-1 chat delivery** — conversation storage and the send command
+  exist, but the current transport listener is focused on workplace messages.
+- **File transfer delivery** — file offer/transfer models and UI/storage exist,
+  but the complete encrypted sender/receiver pipeline still needs to be wired
+  end-to-end.
+- **Android runtime validation** — the shared Rust core is designed for Windows
+  and Android and the Tauri shell is mobile-aware, but live Android device
+  validation is still required.
+
+The workplace layer remains local-first: no cloud service, external server,
+organization account system, or Internet connection is introduced.
+
+## Implementation status
+
+This branch is being developed incrementally. “Implemented” above means the
+feature has been added to the current source and, where a deterministic test
+exists, covered by tests. Cross-device behavior should still be validated with
+two real Capsi installations before being treated as release-ready.
