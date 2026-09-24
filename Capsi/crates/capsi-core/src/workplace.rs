@@ -19,6 +19,10 @@ fn now() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or_default()
 }
 
+fn now_millis() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or_default()
+}
+
 fn id(prefix: &str, counter: usize) -> String {
     format!("{prefix}-{}-{counter}", now())
 }
@@ -112,7 +116,7 @@ pub struct Workspace {
 
 impl Workspace {
     pub fn touch(&mut self) {
-        self.updated_at = now();
+        self.updated_at = now_millis();
     }
 
     pub fn network_state(&self) -> WorkspaceState {
@@ -195,7 +199,7 @@ impl Workspace {
             id: format!("workspace-{}", now()),
             name: name.into(),
             created_at: now(),
-            updated_at: now(),
+            updated_at: now_millis(),
             owner_device_id: owner.clone(),
             members: vec![Member {
                 device_id: owner,
