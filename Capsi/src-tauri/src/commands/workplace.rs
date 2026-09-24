@@ -221,6 +221,7 @@ pub async fn create_workplace_broadcast<R: tauri::Runtime>(
         workspace.queue_delivery(envelope.clone(), member_id, unix_now());
     }
     workspace.touch();
+    queue_workspace_sync(&mut workspace, sender_id.as_str(), &[])?;
     store.save(&workspace)?;
     retry_workplace_deliveries(app.clone()).await?;
     Ok(store.load()?.ok_or_else(|| "no workplace exists".to_string())?)
