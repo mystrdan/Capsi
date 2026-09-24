@@ -472,6 +472,40 @@ mod tests {
     }
 
     #[test]
+    fn authorized_workplace_state_sync_preserves_local_delivery_queue() {
+        let mut owner = Workspace::new("Office", "owner");
+        owner.add_member("alice", "Alice", Role::Member);
+        owner.touch();
+        let mut alice = Workspace::new("Office", "alice");
+        alice.id = owner.id.clone();
+        alice.created_at = owner.created_at;
+        alice.owner_device_id = owner.owner_device_id.clone();
+        alice.members = vec![
+            Member { device_id: "owner".into(), display_name: "Owner".into(), role: Role::Owner, department_id: None },
+            Member { device_id: "alice".into(), display_name: "Alice".into(), role: Role::Member, department_id: None },
+        ];
+        let state = owner.network_state();
+        let pending = crate::protocol::Envelope::new(
+            crate::protocol::Message::WorkplaceText(
+                crate::protocol::WorkplaceTextMessage::new("group-1", "hello").unwrap(),
+            ),
+        );
+        alice.queue_delivery(pending.clone(), "owner", 1);
+        alice.apply_network_state(state, "owner").unwrap();
+        assert_eq!(alice.members.len(), 2);
+        assert_eq!(alice.pending_deliveries.len(), 1);
+    }
+
+    #[test]
+    fn non_admin_cannot_apply_workplace_administration_sync() {
+        let mut workspace = Workspace::new("Office", "owner");
+        workspace.add_member("alice", "Alice", Role::Member);
+        let mut incoming = workspace.network_state();
+        incoming.name = "Changed".into();
+        assert!(workspace.apply_network_state(incoming, "alice").is_err());
+    }
+
+    #[test]
     fn pending_deliveries_are_persistent_and_deduplicated() {
         let mut workspace = Workspace::new("Test", "owner");
         let envelope = crate::protocol::Envelope::new(
