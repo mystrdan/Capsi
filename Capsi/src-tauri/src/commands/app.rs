@@ -231,6 +231,17 @@ async fn handle_incoming_message(
             send_delivery_receipt(app, &peer_id, &envelope.id).await?;
             Ok(())
         }
+        capsi_core::protocol::Message::WorkplaceSync(message) => {
+            let store = capsi_core::workplace::WorkspaceStore::new(&data_dir);
+            let mut workspace = store.load()?.ok_or_else(|| "no local workplace".to_string())?;
+            workspace
+                .apply_network_state(message.state, &message.actor_device_id)
+                .map_err(|e| format!("workplace synchronization rejected: {e}"))?;
+            store.save(&workspace)?;
+            let _ = app.emit("workplace-synced", &workspace);
+            send_delivery_receipt(app, &peer_id, &envelope.id).await?;
+            Ok(())
+        }
         capsi_core::protocol::Message::WorkplaceBroadcast(message) => {
             let store = capsi_core::workplace::WorkspaceStore::new(&data_dir);
             let mut workspace = store.load()?.ok_or_else(|| "no local workplace".to_string())?;
