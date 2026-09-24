@@ -5,7 +5,7 @@
 use super::{
     conversation_name, setup_app_data, ConversationDetail, ConversationSummary, MessageEntry,
 };
-use capsi_core::identity::{trust::TrustStore, DeviceId};
+use capsi_core::identity::{trust::TrustStore, DeviceId, DeviceIdentity};
 use capsi_core::storage::conversation::{
     DeliveryState, MessageKind, MessageStore, StoredMessage, TransferState,
 };
@@ -97,6 +97,28 @@ pub async fn send_message(
     let envelope = capsi_core::protocol::Envelope::new(capsi_core::protocol::Message::Text(message));
 
     let peer_name = conversation_name(&data_dir, &id);
+    let peer = trust
+        .get(&id)
+        .ok_or_else(|| "peer is not known to Capsi".to_string())?;
+    let address = peer
+        .last_address
+        .as_deref()
+        .ok_or_else(|| "peer address is not currently known".to_string())?;
+    let mut socket = address
+        .parse::<std::net::SocketAddr>()
+        .map_err(|e| format!("invalid peer address: {e}"))?;
+    socket.set_port(45892);
+
+    let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+    capsi_core::transport::connect_and_send(
+        &socket.to_string(),
+        &identity,
+        &id,
+        &envelope,
+    )
+    .await
+    .map_err(|e| format!("message delivery failed: {e}"))?;
+
     let mut store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
     let stored = StoredMessage {
         id: envelope.id.clone(),
@@ -105,7 +127,7 @@ pub async fn send_message(
         kind: MessageKind::Text,
         body: clean_body,
         file: None,
-        state: DeliveryState::Queued,
+        state: DeliveryState::Sent,
     };
     store
         .append(&id, &peer_name, stored)
