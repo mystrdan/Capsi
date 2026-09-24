@@ -83,8 +83,7 @@ Current workplace foundation:
 - **Roles & permissions** — Owner, Admin, Manager, and Member roles define access.
 - **Groups** — workplace groups can be created, members can be associated with
   them, members can be removed, and groups can be deleted.
-- **Departments** — department records and member assignment are part of the
-  workplace model.
+- **Departments** — departments can be created and workplace members can be assigned to them.
 - **Broadcasts** — the workplace model supports authored broadcasts, including
   optional department targeting, with permission checks.
 - **Permission enforcement** — workplace management commands enforce the role
