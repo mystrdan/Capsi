@@ -89,8 +89,6 @@ impl StoredFile {
     }
 }
 
-/// One entry in a conversation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 /// A text envelope waiting for an application-level delivery receipt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingDelivery {
