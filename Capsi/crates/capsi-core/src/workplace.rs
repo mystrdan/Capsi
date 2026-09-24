@@ -70,6 +70,15 @@ pub struct Broadcast {
     pub created_at: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkplaceMessage {
+    pub id: String,
+    pub group_id: String,
+    pub sender_device_id: String,
+    pub body: String,
+    pub sent_at: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workspace {
     pub id: String,
@@ -80,6 +89,8 @@ pub struct Workspace {
     pub groups: Vec<Group>,
     pub departments: Vec<Department>,
     pub broadcasts: Vec<Broadcast>,
+    #[serde(default)]
+    pub messages: Vec<WorkplaceMessage>,
 }
 
 impl Workspace {
@@ -99,6 +110,7 @@ impl Workspace {
             groups: Vec::new(),
             departments: Vec::new(),
             broadcasts: Vec::new(),
+            messages: Vec::new(),
         }
     }
 
@@ -161,6 +173,30 @@ impl Workspace {
             }
         }
         true
+    }
+
+    pub fn append_message(
+        &mut self,
+        group_id: &str,
+        sender_device_id: &str,
+        body: impl Into<String>,
+    ) -> Option<String> {
+        let group = self.groups.iter().find(|g| g.id == group_id)?;
+        if !group.member_ids.iter().any(|id| id == sender_device_id) {
+            return None;
+        }
+        if !self.members.iter().any(|m| m.device_id == sender_device_id) {
+            return None;
+        }
+        let message_id = id("workplace-message", self.messages.len());
+        self.messages.push(WorkplaceMessage {
+            id: message_id.clone(),
+            group_id: group_id.to_string(),
+            sender_device_id: sender_device_id.to_string(),
+            body: body.into(),
+            sent_at: now(),
+        });
+        Some(message_id)
     }
 
     pub fn create_broadcast(&mut self, title: impl Into<String>, body: impl Into<String>, author_device_id: impl Into<String>, department_id: Option<String>) -> Option<String> {
