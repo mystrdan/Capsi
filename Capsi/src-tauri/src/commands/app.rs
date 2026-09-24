@@ -229,7 +229,13 @@ async fn handle_incoming_message(
             Ok(())
         }
         capsi_core::protocol::Message::DeliveryReceipt(receipt) => {
-            super::chat::mark_message_delivered(app, &peer_id, &receipt.message_id).await
+            // A receipt can acknowledge either a normal text envelope or a
+            // workplace group envelope. Try both local stores; only the store
+            // containing the matching pending entry is changed.
+            super::chat::mark_message_delivered(app, &peer_id, &receipt.message_id).await?;
+            super::workplace::mark_workplace_delivery_delivered(
+                app, &peer_id, &receipt.message_id
+            ).await
         }
         capsi_core::protocol::Message::FileOffer(offer) => {
             let mut store = capsi_core::storage::conversation::MessageStore::load(&data_dir)
