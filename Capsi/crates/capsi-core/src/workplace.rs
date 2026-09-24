@@ -143,9 +143,22 @@ impl Workspace {
     pub fn assign_department(&mut self, department_id: &str, device_id: &str) -> bool {
         if !self.departments.iter().any(|d| d.id == department_id) { return false; }
         let Some(member) = self.members.iter_mut().find(|m| m.device_id == device_id) else { return false; };
+
+        // A member belongs to at most one department. Remove the old reference
+        // before adding the new one so the model cannot drift out of sync.
+        let old_department_id = member.department_id.clone();
         member.department_id = Some(department_id.to_string());
+        if let Some(old_id) = old_department_id {
+            if old_id != department_id {
+                if let Some(old_department) = self.departments.iter_mut().find(|d| d.id == old_id) {
+                    old_department.member_ids.retain(|id| id != device_id);
+                }
+            }
+        }
         if let Some(department) = self.departments.iter_mut().find(|d| d.id == department_id) {
-            if !department.member_ids.iter().any(|id| id == device_id) { department.member_ids.push(device_id.to_string()); }
+            if !department.member_ids.iter().any(|id| id == device_id) {
+                department.member_ids.push(device_id.to_string());
+            }
         }
         true
     }
