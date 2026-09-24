@@ -86,8 +86,8 @@ Current workplace foundation:
 - **Departments** — departments can be created and workplace members can be assigned to them.
 - **Broadcasts** — the workplace model supports authored broadcasts, including
   optional department targeting, with permission checks.
-- **Workplace messaging protocol** — the shared core now defines a versioned
-  workplace-group text message type for future direct device-to-device fan-out.
+- **Workplace messaging** — group text messages now use the shared signed handshake,
+  encrypted TCP transport, local membership checks, and direct device-to-device fan-out.
 - **Permission enforcement** — workplace management commands enforce the role
   permissions defined by the local workspace.
 - **Local-first storage** — workplace state is persisted locally; cloud accounts,
