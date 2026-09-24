@@ -344,7 +344,7 @@ function renderPeers() {
     panel.innerHTML = `
       <div class="empty-state">
         <p>No devices found.</p>
-        <p class="muted">Make sure the other device is running Capsi on the same network.</p>
+        <p class="muted">Make sure the other device is running Capsi and both devices have a supported communication path.</p>
       </div>`;
     return;
   }
