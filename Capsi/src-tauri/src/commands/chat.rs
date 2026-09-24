@@ -181,6 +181,34 @@ fn unix_now() -> i64 {
         .map(|d| d.as_secs() as i64).unwrap_or_default()
 }
 
+/// Mark a regular outgoing message delivered after the peer persists it.
+pub async fn mark_message_delivered(
+    app: &tauri::AppHandle,
+    device_id: &DeviceId,
+    message_id: &str,
+) -> Result<(), String> {
+    let data_dir = setup_app_data(app)?;
+    let mut store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
+    store.mark_delivery_delivered(device_id, message_id).map_err(|e| e.to_string())?;
+    let _ = app.emit("message-delivered", message_id);
+    Ok(())
+}
+
+/// Retry every pending regular text message using the peer's latest discovered address.
+pub async fn retry_all_message_deliveries(app: tauri::AppHandle) -> Result<usize, String> {
+    let data_dir = setup_app_data(&app)?;
+    let store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
+    let ids: Vec<DeviceId> = store.list().into_iter()
+        .filter(|c| !c.pending_deliveries.is_empty())
+        .map(|c| c.device_id)
+        .collect();
+    let mut sent = 0usize;
+    for id in ids {
+        sent += retry_message_deliveries(app.clone(), id).await?;
+    }
+    Ok(sent)
+}
+
 /// Delete a conversation and its stored history.
 #[tauri::command]
 pub async fn delete_conversation(
