@@ -87,7 +87,8 @@ Current workplace foundation:
 - **Broadcasts** — the workplace model supports authored broadcasts, including
   optional department targeting, with permission checks.
 - **Workplace messaging** — group text messages now use the shared signed handshake,
-  encrypted TCP transport, local membership checks, and direct device-to-device fan-out.
+  encrypted TCP transport, local membership checks, direct device-to-device fan-out,
+  local history, and a frontend group conversation view with live incoming-message updates.
 - **Permission enforcement** — workplace management commands enforce the role
   permissions defined by the local workspace.
 - **Local-first storage** — workplace state is persisted locally; cloud accounts,
