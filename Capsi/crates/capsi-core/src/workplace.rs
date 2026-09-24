@@ -3,9 +3,9 @@
 //! Skeleton for Capsi's next product layer:
 //! people -> groups -> departments -> broadcasts -> permissions.
 //!
-//! The model is local for now. It does not add accounts, cloud services, or an
-//! organization server. Network propagation can be layered onto the existing
-//! trusted-device protocol later.
+//! The model remains local-first. Synchronization uses the existing trusted-device
+//! protocol directly between Capsi installations; it does not add accounts,
+//! cloud services, or an organization server.
 
 use serde::{Deserialize, Serialize};
 use std::{
