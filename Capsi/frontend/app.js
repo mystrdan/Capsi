@@ -744,6 +744,19 @@ function wireEvents() {
     }
   });
 
+  listen('message-received', async (deviceId) => {
+    await loadConversations();
+    if (state.activeConv && state.activeConv === deviceId) {
+      await openConversation(deviceId);
+    }
+  });
+
+  listen('file-offer-received', async () => {
+    await loadConversations();
+    await loadTransfers();
+    showToast('Incoming file offer');
+  });
+
   listen('discovery-event', () => {
     if (state.activePanel === 'peers') loadPeers();
     if (state.activePanel === 'conversations') loadConversations();
