@@ -155,6 +155,22 @@ async fn handle_incoming_message(
     }
 
     match envelope.message {
+        capsi_core::protocol::Message::Text(message) => {
+            let store = capsi_core::storage::conversation::MessageStore::load(&data_dir)
+                .map_err(|e| e.to_string())?;
+            let mut store = store;
+            let peer_name = super::conversation_name(&data_dir, &peer_id);
+            let stored = capsi_core::storage::conversation::StoredMessage::text(
+                &message.body,
+                false,
+            )
+            .map_err(|e| e.to_string())?;
+            store
+                .append(&peer_id, &peer_name, stored)
+                .map_err(|e| e.to_string())?;
+            let _ = app.emit("message-received", &peer_id.as_str());
+            Ok(())
+        }
         capsi_core::protocol::Message::WorkplaceText(message) => {
             let store = capsi_core::workplace::WorkspaceStore::new(&data_dir);
             let mut workspace = store.load()?.ok_or_else(|| "no local workplace".to_string())?;
@@ -178,7 +194,18 @@ async fn handle_incoming_message(
             let _ = app.emit("workplace-message", &message);
             Ok(())
         }
-        _ => Err("received message type is not handled by the workplace listener yet".into()),
+        capsi_core::protocol::Message::FileOffer(offer) => {
+            let mut store = capsi_core::storage::conversation::MessageStore::load(&data_dir)
+                .map_err(|e| e.to_string())?;
+            let peer_name = super::conversation_name(&data_dir, &peer_id);
+            let stored = capsi_core::storage::conversation::StoredMessage::file(&offer, false);
+            store
+                .append(&peer_id, &peer_name, stored)
+                .map_err(|e| e.to_string())?;
+            let _ = app.emit("file-offer-received", &offer);
+            Ok(())
+        }
+        _ => Err("received message type is not handled by the transport listener yet".into()),
     }
 }
 
