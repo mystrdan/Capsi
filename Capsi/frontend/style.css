@@ -842,3 +842,11 @@ main {
 .workplace-candidate small { color:var(--text-faint); font-size:10px; margin-top:2px; }
 .workplace-candidate b { color:var(--primary); font-size:18px; font-weight:400; }
 .workplace-hint { font-size:11px; line-height:1.5; }
+
+.workplace-group { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+.workplace-group:last-of-type { border-bottom:0; }
+.workplace-group strong, .workplace-group small { display:block; }
+.workplace-group strong { font-size:12px; color:var(--text); font-weight:500; }
+.workplace-group small { margin-top:2px; color:var(--text-faint); font-size:10px; }
+.workplace-group > .mono { color:var(--text-faint); font-size:9px; }
+.workplace-group-form { margin-top:10px; gap:6px; }
