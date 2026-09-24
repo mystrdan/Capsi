@@ -452,7 +452,22 @@ async fn send_file_chunks(app: &AppHandle, peer_id: &capsi_core::identity::Devic
         .map_err(|e| e.to_string())?;
 
     let mut input = std::fs::File::open(&source).map_err(|e| format!("cannot open source file: {e}"))?;
-    for index in 0..chunks {
+
+    // Resume from the contiguous prefix already present at the receiver.
+    // Capsi sends chunks in order, so a partial destination is sufficient to
+    // determine the next safe chunk without maintaining a second bitmap file.
+    let start_index = {
+        let existing = capsi_core::storage::conversation::MessageStore::load(&data_dir)
+            .map_err(|e| e.to_string())?
+            .get(peer_id)
+            .and_then(|c| c.find_transfer(transfer_id))
+            .and_then(|f| f.local_path.clone())
+            .and_then(|p| std::fs::metadata(p).ok().map(|m| m.len()))
+            .unwrap_or(0);
+        std::cmp::min(existing / chunk_size, chunks)
+    };
+
+    for index in start_index..chunks {
         let offset = index * chunk_size;
         input.seek(SeekFrom::Start(offset)).map_err(|e| format!("cannot seek source file: {e}"))?;
         let length = std::cmp::min(chunk_size, total.saturating_sub(offset)) as usize;
