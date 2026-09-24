@@ -736,6 +736,14 @@ function wireEvents() {
   });
 
   // Push events from the Rust discovery loop.
+  listen('workplace-synced', async () => {
+    await loadWorkplace();
+    if (state.activeWorkplaceGroup && state.activePanel === 'workplace') {
+      const group = state.workplace && state.workplace.groups.find((g) => g.id === state.activeWorkplaceGroup);
+      if (group) renderWorkplaceMessages(group);
+    }
+  });
+
   listen('workplace-message', async () => {
     await loadWorkplace();
     if (state.activeWorkplaceGroup && state.activePanel === 'workplace') {
