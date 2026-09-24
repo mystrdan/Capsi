@@ -11,6 +11,29 @@ pub struct WorkplaceSnapshot {
     pub permissions: Vec<String>,
 }
 
+fn queue_workspace_sync(
+    workspace: &mut Workspace,
+    actor_device_id: &str,
+    extra_recipients: &[String],
+) -> Result<(), String> {
+    let envelope = capsi_core::protocol::Envelope::new(
+        capsi_core::protocol::Message::WorkplaceSync(
+            capsi_core::protocol::WorkplaceSyncMessage {
+                actor_device_id: actor_device_id.to_string(),
+                state: workspace.network_state(),
+            },
+        ),
+    );
+    let mut recipients = std::collections::BTreeSet::new();
+    recipients.extend(workspace.members.iter().map(|m| m.device_id.clone()));
+    recipients.extend(extra_recipients.iter().cloned());
+    recipients.remove(actor_device_id);
+    for recipient in recipients {
+        workspace.queue_delivery(envelope.clone(), recipient, unix_now());
+    }
+    Ok(())
+}
+
 fn store<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<WorkspaceStore, String> {
     Ok(WorkspaceStore::new(&setup_app_data(app)?))
 }
@@ -82,6 +105,7 @@ pub fn add_workplace_member<R: tauri::Runtime>(
         return Err("only the workplace owner can add an admin or owner".into());
     }
     workspace.add_member(device_id, if display_name.trim().is_empty() { peer.display_name() } else { display_name.trim() }, role);
+    queue_workspace_sync(&mut workspace, identity.id().as_str(), &[])?;
     store.save(&workspace)?;
     Ok(workspace)
 }
@@ -108,6 +132,8 @@ pub fn remove_workplace_member<R: tauri::Runtime>(
     for department in &mut workspace.departments {
         department.member_ids.retain(|id| id != &device_id);
     }
+    workspace.touch();
+    queue_workspace_sync(&mut workspace, identity.id().as_str(), &[device_id.clone()])?;
     store.save(&workspace)?;
     Ok(workspace)
 }
@@ -126,6 +152,8 @@ pub fn create_workplace_department<R: tauri::Runtime>(
     }
     if name.trim().is_empty() { return Err("department name cannot be empty".into()); }
     workspace.create_department(name.trim());
+    workspace.touch();
+    queue_workspace_sync(&mut workspace, identity.id().as_str(), &[])?;
     store.save(&workspace)?;
     Ok(workspace)
 }
@@ -145,6 +173,8 @@ pub fn create_workplace_group<R: tauri::Runtime>(
     }
     if name.trim().is_empty() { return Err("group name cannot be empty".into()); }
     workspace.create_group(name.trim(), description.trim());
+    workspace.touch();
+    queue_workspace_sync(&mut workspace, identity.id().as_str(), &[])?;
     store.save(&workspace)?;
     Ok(workspace)
 }
@@ -190,6 +220,7 @@ pub async fn create_workplace_broadcast<R: tauri::Runtime>(
     for member_id in recipients {
         workspace.queue_delivery(envelope.clone(), member_id, unix_now());
     }
+    workspace.touch();
     store.save(&workspace)?;
     retry_workplace_deliveries(app.clone()).await?;
     Ok(store.load()?.ok_or_else(|| "no workplace exists".to_string())?)
@@ -409,6 +440,8 @@ pub fn add_workplace_group_member<R: tauri::Runtime>(
     if !workspace.add_to_group(&group_id, &device_id) {
         return Err("group or workplace member not found".into());
     }
+    workspace.touch();
+    queue_workspace_sync(&mut workspace, identity.id().as_str(), &[])?;
     store.save(&workspace)?;
     Ok(workspace)
 }
@@ -430,6 +463,8 @@ pub fn remove_workplace_group_member<R: tauri::Runtime>(
         return Err("group not found".into());
     };
     group.member_ids.retain(|id| id != &device_id);
+    workspace.touch();
+    queue_workspace_sync(&mut workspace, identity.id().as_str(), &[])?;
     store.save(&workspace)?;
     Ok(workspace)
 }
@@ -449,6 +484,8 @@ pub fn delete_workplace_group<R: tauri::Runtime>(
     if !workspace.delete_group(&group_id) {
         return Err("group not found".into());
     }
+    workspace.touch();
+    queue_workspace_sync(&mut workspace, identity.id().as_str(), &[])?;
     store.save(&workspace)?;
     Ok(workspace)
 }
@@ -470,6 +507,8 @@ pub fn assign_workplace_department<R: tauri::Runtime>(
     if !workspace.assign_department(&department_id, &device_id) {
         return Err("department or workplace member not found".into());
     }
+    workspace.touch();
+    queue_workspace_sync(&mut workspace, identity.id().as_str(), &[])?;
     store.save(&workspace)?;
     Ok(workspace)
 }
