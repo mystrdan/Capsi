@@ -316,6 +316,13 @@ async fn handle_incoming_message(
             if index >= file_chunks(expected_size, chunk_size) {
                 return Err("file chunk index is out of range".into());
             }
+            let expected_chunk_len = std::cmp::min(
+                chunk_size,
+                expected_size.saturating_sub(index * chunk_size),
+            ) as usize;
+            if bytes.len() != expected_chunk_len {
+                return Err("file chunk has an invalid size".into());
+            }
 
             let mut output = std::fs::OpenOptions::new()
                 .read(true)
@@ -337,8 +344,9 @@ async fn handle_incoming_message(
                 .map(|m| m.len() == expected_size)
                 .unwrap_or(false);
             if complete {
-                let raw = std::fs::read(&target).map_err(|e| format!("cannot verify received file: {e}"))?;
-                if capsi_core::util::digest_hex(&raw) != expected_digest {
+                let digest = capsi_core::util::digest_file(std::path::Path::new(&target))
+                    .map_err(|e| format!("cannot verify received file: {e}"))?;
+                if digest != expected_digest {
                     store
                         .update_transfer(
                             &peer_id,
