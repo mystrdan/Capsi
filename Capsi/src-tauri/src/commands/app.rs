@@ -281,11 +281,11 @@ async fn handle_incoming_message(
         }
         capsi_core::protocol::Message::FileReceipt { transfer_id, state } => {
             match state {
-                capsi_core::protocol::FileReceipt::Accepted => {
+                capsi_core::protocol::FileReceipt::Accepted { next_chunk } => {
                     let peer = peer_id.clone();
                     let app_handle = app.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = send_file_chunks(&app_handle, &peer, &transfer_id).await {
+                        if let Err(e) = send_file_chunks(&app_handle, &peer, &transfer_id, next_chunk).await {
                             log::error!("capsi: file transfer {transfer_id} failed: {e}");
                         }
                     });
@@ -427,7 +427,12 @@ async fn handle_incoming_message(
     }
 }
 
-async fn send_file_chunks(app: &AppHandle, peer_id: &capsi_core::identity::DeviceId, transfer_id: &str) -> Result<(), String> {
+async fn send_file_chunks(
+    app: &AppHandle,
+    peer_id: &capsi_core::identity::DeviceId,
+    transfer_id: &str,
+    start_index: u64,
+) -> Result<(), String> {
     let data_dir = setup_app_data(app)?;
     let store = capsi_core::storage::conversation::MessageStore::load(&data_dir)
         .map_err(|e| e.to_string())?;
@@ -452,20 +457,6 @@ async fn send_file_chunks(app: &AppHandle, peer_id: &capsi_core::identity::Devic
         .map_err(|e| e.to_string())?;
 
     let mut input = std::fs::File::open(&source).map_err(|e| format!("cannot open source file: {e}"))?;
-
-    // Resume from the contiguous prefix already present at the receiver.
-    // Capsi sends chunks in order, so a partial destination is sufficient to
-    // determine the next safe chunk without maintaining a second bitmap file.
-    let start_index = {
-        let existing = capsi_core::storage::conversation::MessageStore::load(&data_dir)
-            .map_err(|e| e.to_string())?
-            .get(peer_id)
-            .and_then(|c| c.find_transfer(transfer_id))
-            .and_then(|f| f.local_path.clone())
-            .and_then(|p| std::fs::metadata(p).ok().map(|m| m.len()))
-            .unwrap_or(0);
-        std::cmp::min(existing / chunk_size, chunks)
-    };
 
     for index in start_index..chunks {
         let offset = index * chunk_size;
