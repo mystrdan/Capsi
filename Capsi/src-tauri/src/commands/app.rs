@@ -191,7 +191,7 @@ async fn run_discovery(app: &AppHandle) -> Result<(), String> {
     let data_dir = setup_app_data(app)?;
     let identity = capsi_core::identity::DeviceIdentity::load_or_create(&data_dir)
         .map_err(|e| e.to_string())?;
-    let trust = capsi_core::identity::trust::TrustStore::load(&data_dir)
+    let mut trust = capsi_core::identity::trust::TrustStore::load(&data_dir)
         .map_err(|e| e.to_string())?;
 
     // Use the saved device name if available, otherwise fall back to the short id.
