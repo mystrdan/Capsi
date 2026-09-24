@@ -49,7 +49,7 @@ pub struct Member {
     pub department_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Group {
     pub id: String,
     pub name: String,
@@ -57,14 +57,14 @@ pub struct Group {
     pub member_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Department {
     pub id: String,
     pub name: String,
     pub member_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Broadcast {
     pub id: String,
     pub title: String,
