@@ -171,6 +171,13 @@ pub async fn accept_file(
         .ok()
         .map(|m| std::cmp::min(m.len() / capsi_core::TRANSFER_CHUNK_SIZE as u64, file.size / capsi_core::TRANSFER_CHUNK_SIZE as u64 + 1))
         .unwrap_or(0);
+    let resume_len = std::cmp::min(
+        resume_chunk.saturating_mul(capsi_core::TRANSFER_CHUNK_SIZE as u64),
+        file.size,
+    );
+    if let Ok(handle) = std::fs::OpenOptions::new().write(true).create(true).open(&target) {
+        let _ = handle.set_len(resume_len);
+    }
     let target_string = target.to_string_lossy().to_string();
     let expected_peer = id.clone();
 
