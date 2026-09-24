@@ -265,6 +265,38 @@ impl Workspace {
         }
     }
 
+    pub fn receive_broadcast(
+        &mut self,
+        broadcast_id: String,
+        title: String,
+        body: String,
+        author_device_id: String,
+        department_id: Option<String>,
+        created_at: i64,
+    ) -> bool {
+        if self.broadcasts.iter().any(|b| b.id == broadcast_id) {
+            return true;
+        }
+        if !self.members.iter().any(|m| m.device_id == author_device_id) {
+            return false;
+        }
+        if let Some(ref department) = department_id {
+            let Some(dept) = self.departments.iter().find(|d| d.id == *department) else { return false; };
+            if !dept.member_ids.iter().any(|id| self.members.iter().any(|m| m.device_id == *id && m.device_id == author_device_id)) {
+                return false;
+            }
+        }
+        self.broadcasts.push(Broadcast {
+            id: broadcast_id,
+            title,
+            body,
+            author_device_id,
+            department_id,
+            created_at,
+        });
+        true
+    }
+
     pub fn create_broadcast(&mut self, title: impl Into<String>, body: impl Into<String>, author_device_id: impl Into<String>, department_id: Option<String>) -> Option<String> {
         let author = author_device_id.into();
         if !self.members.iter().any(|m| m.device_id == author) { return None; }
