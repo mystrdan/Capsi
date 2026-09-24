@@ -389,6 +389,29 @@ impl MessageStore {
         self.pending_deliveries.retain(|p| p.envelope.id != message_id);
     }
 
+    /// Mark an outgoing text message delivered and remove its retry entry.
+    pub fn mark_delivery_delivered(&mut self, device_id: &DeviceId, message_id: &str) -> Result<bool> {
+        let updated = match self.conversations.get_mut(device_id) {
+            Some(conversation) => {
+                let mut found = false;
+                for message in &mut conversation.messages {
+                    if message.id == message_id && message.outgoing && message.kind == MessageKind::Text {
+                        message.state = DeliveryState::Delivered;
+                        found = true;
+                        break;
+                    }
+                }
+                conversation.remove_delivery(message_id);
+                found
+            }
+            None => false,
+        };
+        if updated {
+            self.persist(device_id)?;
+        }
+        Ok(updated)
+    }
+
     /// Update a transfer's state and persist.
     pub fn update_transfer(
         &mut self,
