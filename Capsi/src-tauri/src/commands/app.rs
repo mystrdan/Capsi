@@ -36,6 +36,7 @@ fn open_url(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
 }
 
 use std::sync::Arc;
+use tokio::net::TcpListener;
 
 use tauri::{AppHandle, Emitter};
 
@@ -71,6 +72,12 @@ pub async fn bootstrap(app: AppHandle) -> Result<IdentityInfo, String> {
             }
         };
         rt.block_on(async {
+            let transport_handle = app_handle.clone();
+            tokio::spawn(async move {
+                if let Err(e) = run_transport_listener(&transport_handle).await {
+                    log::error!("capsi: transport listener failed: {e}");
+                }
+            });
             if let Err(e) = run_discovery(&app_handle).await {
                 log::error!("capsi: discovery loop failed: {e}");
             }
@@ -89,6 +96,64 @@ pub async fn bootstrap(app: AppHandle) -> Result<IdentityInfo, String> {
         trusted_count: trust.trusted().len(),
         data_dir: data_dir.to_string_lossy().to_string(),
     })
+}
+
+/// Accept encrypted device-to-device messages on the same TCP port advertised
+/// by LAN discovery. The listener is platform-neutral and therefore also works
+/// for mobile Tauri targets.
+async fn run_transport_listener(app: &AppHandle) -> Result<(), String> {
+    let listener = TcpListener::bind(("0.0.0.0", TCP_PORT))
+        .await
+        .map_err(|e| format!("cannot bind Capsi TCP port {TCP_PORT}: {e}"))?;
+
+    loop {
+        let (stream, _) = listener
+            .accept()
+            .await
+            .map_err(|e| format!("cannot accept Capsi connection: {e}"))?;
+        let handle = app.clone();
+        tokio::spawn(async move {
+            if let Err(e) = handle_incoming_message(&handle, stream).await {
+                log::debug!("capsi: incoming connection rejected: {e}");
+            }
+        });
+    }
+}
+
+async fn handle_incoming_message(
+    app: &AppHandle,
+    stream: tokio::net::TcpStream,
+) -> Result<(), String> {
+    let data_dir = setup_app_data(app)?;
+    let identity = capsi_core::identity::DeviceIdentity::load_or_create(&data_dir)
+        .map_err(|e| e.to_string())?;
+    let (peer_id, envelope) = capsi_core::transport::accept_and_read(stream, &identity)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let trust = capsi_core::identity::trust::TrustStore::load(&data_dir)
+        .map_err(|e| e.to_string())?;
+    if !trust.is_trusted(&peer_id) {
+        return Err("message received from an untrusted device".into());
+    }
+
+    match envelope.message {
+        capsi_core::protocol::Message::WorkplaceText(message) => {
+            let store = capsi_core::workplace::WorkspaceStore::new(&data_dir);
+            let mut workspace = store.load()?.ok_or_else(|| "no local workplace".to_string())?;
+            let sender = peer_id.as_str().to_string();
+            if !workspace.members.iter().any(|m| m.device_id == sender) {
+                return Err("sender is not a workplace member".into());
+            }
+            workspace
+                .append_message(&message.group_id, &sender, message.body)
+                .ok_or_else(|| "sender is not a member of the target group".to_string())?;
+            store.save(&workspace)?;
+            let _ = app.emit("workplace-message", &message);
+            Ok(())
+        }
+        _ => Err("received message type is not handled by the workplace listener yet".into()),
+    }
 }
 
 /// Run the LAN discovery loop. Spawned on a background thread so it survives
