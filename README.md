@@ -123,10 +123,11 @@ fully working end-to-end yet:
   authority.
 - **Workplace broadcast delivery** — the broadcast data model and permission
   checks exist, but network fan-out has not been implemented yet.
-- **Regular 1-to-1 chat delivery** — conversation storage and the send command
-  exist, but the current transport listener is focused on workplace messages.
-- **File transfer delivery** — file offer/transfer models and UI/storage exist,
-  but the complete encrypted sender/receiver pipeline still needs to be wired
+- **Offline delivery for regular 1-to-1 messages** — direct text delivery works
+  when the trusted peer is reachable; durable offline retry is not implemented
+  for ordinary conversations yet.
+- **File byte transfer** — file offers can be represented and received, but the
+  complete encrypted chunk sender/receiver pipeline still needs to be wired
   end-to-end.
 - **Android runtime validation** — the shared Rust core is designed for Windows
   and Android and the Tauri shell is mobile-aware, but live Android device
