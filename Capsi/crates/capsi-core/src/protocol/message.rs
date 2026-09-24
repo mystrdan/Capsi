@@ -54,7 +54,7 @@ pub struct FileOffer {
 #[serde(rename_all = "snake_case")]
 pub enum FileReceipt {
     /// The peer accepted and is ready for chunks.
-    Accepted,
+    Accepted { next_chunk: u64 },
     /// The peer said no (or has no room for it).
     Declined,
     /// Every chunk arrived and the digest matched.
@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn a_receipt_round_trips() {
         for state in [
-            FileReceipt::Accepted,
+            FileReceipt::Accepted { next_chunk: 0 },
             FileReceipt::Declined,
             FileReceipt::Completed,
             FileReceipt::Failed,
