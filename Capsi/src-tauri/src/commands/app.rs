@@ -57,7 +57,7 @@ pub async fn bootstrap(app: AppHandle) -> Result<IdentityInfo, String> {
     let data_dir = setup_app_data(&app)?;
     let identity = capsi_core::identity::DeviceIdentity::load_or_create(&data_dir)
         .map_err(|e| e.to_string())?;
-    let mut trust = capsi_core::identity::trust::TrustStore::load(&data_dir)
+    let trust = capsi_core::identity::trust::TrustStore::load(&data_dir)
         .map_err(|e| e.to_string())?;
 
     // Start a discovery loop on a tokio background thread so the UI can show
