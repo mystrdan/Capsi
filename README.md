@@ -94,5 +94,6 @@ Current workplace foundation:
   external servers, and Internet connectivity are not required for this layer.
 
 The workplace layer is being built incrementally. Network synchronization,
-group fan-out, and richer workplace communication are still separate next steps; the current
+group fan-out, and richer workplace communication are still separate next steps.
+The current
 foundation does not introduce a cloud server or organization account system.
