@@ -850,3 +850,10 @@ main {
 .workplace-group small { margin-top:2px; color:var(--text-faint); font-size:10px; }
 .workplace-group > .mono { color:var(--text-faint); font-size:9px; }
 .workplace-group-form { margin-top:10px; gap:6px; }
+
+/* Workplace group management */
+.workplace-group-body { padding: 4px 0 10px 20px; }
+.workplace-group-member { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:5px 0; font-size:11px; color:var(--text-muted); }
+.workplace-group-add { display:flex; gap:6px; margin-top:8px; }
+.workplace-group-add .detail-input { flex:1; min-width:0; }
+.workplace-delete-group { margin-top:10px; }
