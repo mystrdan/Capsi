@@ -228,6 +228,37 @@ async fn handle_incoming_message(
             send_delivery_receipt(app, &peer_id, &envelope.id).await?;
             Ok(())
         }
+        capsi_core::protocol::Message::WorkplaceBroadcast(message) => {
+            let store = capsi_core::workplace::WorkspaceStore::new(&data_dir);
+            let mut workspace = store.load()?.ok_or_else(|| "no local workplace".to_string())?;
+            let already = workspace.broadcasts.iter().any(|b| b.id == message.broadcast_id);
+            if !already {
+                if !workspace.members.iter().any(|m| m.device_id == peer_id.as_str()) {
+                    return Err("broadcast author is not a workplace member".into());
+                }
+                if let Some(dept_id) = &message.department_id {
+                    let dept = workspace.departments.iter().find(|d| &d.id == dept_id)
+                        .ok_or_else(|| "broadcast department does not exist locally".to_string())?;
+                    if !dept.member_ids.iter().any(|id| id == &identity.id().as_str()) {
+                        return Err("broadcast is not addressed to this device".into());
+                    }
+                }
+                if !workspace.receive_broadcast(
+                    message.broadcast_id.clone(),
+                    message.title,
+                    message.body,
+                    peer_id.as_str().to_string(),
+                    message.department_id,
+                    envelope.sent_at,
+                ) {
+                    return Err("invalid workplace broadcast".into());
+                }
+                store.save(&workspace)?;
+                let _ = app.emit("workplace-broadcast", &message);
+            }
+            send_delivery_receipt(app, &peer_id, &envelope.id).await?;
+            Ok(())
+        }
         capsi_core::protocol::Message::DeliveryReceipt(receipt) => {
             // A receipt can acknowledge either a normal text envelope or a
             // workplace group envelope. Try both local stores; only the store
