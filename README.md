@@ -81,12 +81,17 @@ Current workplace foundation:
 - **Workspaces** — create a local workplace with the current device as Owner.
 - **People** — trusted Capsi devices can be added as workplace members.
 - **Roles & permissions** — Owner, Admin, Manager, and Member roles define access.
-- **Groups** — workplace groups can be created and members can be associated with
-  them.
+- **Groups** — workplace groups can be created, members can be associated with
+  them, members can be removed, and groups can be deleted.
+- **Departments** — department records and member assignment are part of the
+  workplace model.
+- **Broadcasts** — the workplace model supports authored broadcasts, including
+  optional department targeting, with permission checks.
+- **Permission enforcement** — workplace management commands enforce the role
+  permissions defined by the local workspace.
 - **Local-first storage** — workplace state is persisted locally; cloud accounts,
   external servers, and Internet connectivity are not required for this layer.
 
-The workplace layer is being built incrementally. Network synchronization,
-department workflows, broadcasts, and richer workplace communication will be
-added on top of this foundation rather than introducing a separate cloud
-architecture.
+The workplace layer is being built incrementally. Network synchronization and
+richer workplace communication are still separate next steps; the current
+foundation does not introduce a cloud server or organization account system.
