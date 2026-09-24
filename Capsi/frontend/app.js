@@ -192,6 +192,34 @@ function renderWorkplace(snapshot) {
       <div class="workplace-stat"><span>Departments</span><strong>${workspace.departments.length}</strong></div>
       <div class="workplace-stat"><span>Broadcasts</span><strong>${workspace.broadcasts.length}</strong></div>
     </div>`;
+  panel.querySelectorAll('[data-add-group-member]').forEach((el) => el.addEventListener('click', async () => {
+    const groupId = el.dataset.addGroupMember;
+    const select = panel.querySelector('[data-group-select="' + groupId + '"]');
+    const deviceId = select && select.value;
+    if (!deviceId) return;
+    try {
+      await invoke('add_workplace_group_member', { groupId, deviceId });
+      showToast('Person added to group');
+      await loadWorkplace();
+    } catch (e) { showToast('Could not add group member: ' + e, true); }
+  }));
+
+  panel.querySelectorAll('[data-remove-group-member]').forEach((el) => el.addEventListener('click', async () => {
+    try {
+      await invoke('remove_workplace_group_member', { groupId: el.dataset.removeGroupMember, deviceId: el.dataset.deviceId });
+      showToast('Person removed from group');
+      await loadWorkplace();
+    } catch (e) { showToast('Could not remove group member: ' + e, true); }
+  }));
+
+  panel.querySelectorAll('[data-delete-group]').forEach((el) => el.addEventListener('click', async () => {
+    if (!confirm('Delete this group?')) return;
+    try {
+      await invoke('delete_workplace_group', { groupId: el.dataset.deleteGroup });
+      showToast('Group deleted');
+      await loadWorkplace();
+    } catch (e) { showToast('Could not delete group: ' + e, true); }
+  }));
   panel.querySelectorAll('[data-add-member]').forEach((el) => el.addEventListener('click', async () => {
     try {
       await invoke('add_workplace_member', { deviceId: el.dataset.addMember, displayName: '', role: 'Member' });
