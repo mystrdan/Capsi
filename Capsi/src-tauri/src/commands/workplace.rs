@@ -22,9 +22,9 @@ pub fn get_workplace<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<Work
     let permissions = workspace
         .as_ref()
         .and_then(|w| {
-            w.members
-                .first()
-                .map(|m| w.permissions_for(&m.device_id))
+            let data_dir = setup_app_data(&app).ok()?;
+            let identity = DeviceIdentity::load_or_create(&data_dir).ok()?;
+            Some(w.permissions_for(identity.id().as_str()))
         })
         .unwrap_or_default()
         .into_iter()
@@ -66,7 +66,48 @@ pub fn add_workplace_member<R: tauri::Runtime>(
 ) -> Result<Workspace, String> {
     let store = store(&app)?;
     let mut workspace = store.load()?.ok_or_else(|| "no workplace exists".to_string())?;
-    workspace.add_member(device_id, display_name, role.unwrap_or(Role::Member));
+    let data_dir = setup_app_data(&app)?;
+    let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+    if !workspace.permissions_for(identity.id().as_str()).contains(&Permission::ManageMembers) {
+        return Err("you do not have permission to manage workplace members".into());
+    }
+    let trust = capsi_core::identity::trust::TrustStore::load(&data_dir).map_err(|e| e.to_string())?;
+    let peer_id = capsi_core::identity::DeviceId::from_hex(&device_id).map_err(|e| e.to_string())?;
+    let peer = trust.get(&peer_id).ok_or_else(|| "device is not known to Capsi".to_string())?;
+    if !peer.is_trusted() {
+        return Err("device must be trusted before it can join the workplace".into());
+    }
+    let role = role.unwrap_or(Role::Member);
+    if matches!(role, Role::Owner | Role::Admin) && !matches!(workspace.members.iter().find(|m| m.device_id == identity.id().as_str()).map(|m| &m.role), Some(Role::Owner)) {
+        return Err("only the workplace owner can add an admin or owner".into());
+    }
+    workspace.add_member(device_id, if display_name.trim().is_empty() { peer.display_name() } else { display_name.trim() }, role);
+    store.save(&workspace)?;
+    Ok(workspace)
+}
+
+#[tauri::command]
+pub fn remove_workplace_member<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    device_id: String,
+) -> Result<Workspace, String> {
+    let store = store(&app)?;
+    let mut workspace = store.load()?.ok_or_else(|| "no workplace exists".to_string())?;
+    let data_dir = setup_app_data(&app)?;
+    let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+    if !workspace.permissions_for(identity.id().as_str()).contains(&Permission::ManageMembers) {
+        return Err("you do not have permission to manage workplace members".into());
+    }
+    if device_id == workspace.owner_device_id {
+        return Err("the workplace owner cannot be removed".into());
+    }
+    workspace.members.retain(|m| m.device_id != device_id);
+    for group in &mut workspace.groups {
+        group.member_ids.retain(|id| id != &device_id);
+    }
+    for department in &mut workspace.departments {
+        department.member_ids.retain(|id| id != &device_id);
+    }
     store.save(&workspace)?;
     Ok(workspace)
 }
