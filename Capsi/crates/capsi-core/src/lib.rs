@@ -9,6 +9,7 @@ pub mod error;
 pub mod identity;
 pub mod protocol;
 pub mod storage;
+pub mod transport;
 pub mod util;
 pub mod workplace;
 
