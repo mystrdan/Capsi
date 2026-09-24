@@ -112,6 +112,25 @@ working code paths/tests where applicable:
 - **Local-first storage** — workplace state and pending deliveries are persisted
   on-device; no cloud account or central workplace server is required.
 
+### Needs review / validation
+
+The current implementation has not yet been compile-validated in this environment.
+Before calling the branch release-ready, run the Rust/Tauri build and tests, then
+validate Windows-to-Windows and Windows-to-Android behavior with real installations.
+
+The following areas specifically need review or further implementation:
+
+- **Delivery acknowledgements** — ordinary text and workplace delivery currently
+  treat a successful encrypted connection as transport success; there is not yet
+  a dedicated application-level message acknowledgement.
+- **File resume/recovery** — the current chunk sender starts from the beginning
+  after a new accepted transfer; interrupted transfers do not yet negotiate the
+  missing chunk set.
+- **Concurrent file transfers** — needs stress testing and progress/cancellation
+  behavior review.
+- **Network edge cases** — peer address changes, firewall rules, hotspot
+  isolation, sleeping devices, and reconnect behavior need real-device testing.
+
 ### Not yet end-to-end
 
 These areas have foundations in the codebase but should **not** be described as
@@ -126,9 +145,11 @@ fully working end-to-end yet:
 - **Offline delivery for regular 1-to-1 messages** — direct text delivery works
   when the trusted peer is reachable; durable offline retry is not implemented
   for ordinary conversations yet.
-- **File byte transfer** — file offers can be represented and received, but the
-  complete encrypted chunk sender/receiver pipeline still needs to be wired
-  end-to-end.
+- **File byte transfer** — encrypted file offers, acceptance receipts, chunk
+  delivery, per-chunk digest checks, final whole-file digest verification, and
+  completion receipts are now wired into the transport. This still needs
+  cross-device stress testing, resume-after-interruption work, and UI polish
+  before release-ready status.
 - **Android runtime validation** — the shared Rust core is designed for Windows
   and Android and the Tauri shell is mobile-aware, but live Android device
   validation is still required.
