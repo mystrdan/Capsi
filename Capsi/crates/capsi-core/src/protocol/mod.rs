@@ -13,4 +13,4 @@ pub mod framing;
 pub mod message;
 
 pub use framing::{read_frame, write_frame, MAX_FRAME_BYTES};
-pub use message::{DeliveryReceipt, Envelope, FileOffer, FileReceipt, Message, TextMessage, Typing, WorkplaceTextMessage};
+pub use message::{DeliveryReceipt, Envelope, FileOffer, FileReceipt, Message, TextMessage, Typing, WorkplaceBroadcastMessage, WorkplaceTextMessage};
