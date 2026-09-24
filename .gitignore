@@ -1,2 +1,6 @@
 target/
 scripts/
+*.log
+*.apk
+*.bat
+.vs/

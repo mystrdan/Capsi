@@ -12,41 +12,26 @@
 // Capsi - Tauri command: open the Capsi website.
 //
 // The URL is fixed in the backend (not passed from the webview) so the
-// frontend cannot be tricked into opening an arbitrary link. Uses the OS
-// default browser on each platform.
+// frontend cannot be tricked into opening an arbitrary link. It goes through
+// the opener plugin, which uses the OS default browser on desktop and the
+// system browser intent on Android/iOS.
 
 /// Open https://capsi.win in the user's default browser.
 #[tauri::command]
-pub async fn open_website() -> Result<(), String> {
-    open_url("https://capsi.win")
+pub async fn open_website(app: tauri::AppHandle) -> Result<(), String> {
+    open_url(&app, "https://capsi.win")
 }
 
 /// Open `url` in the default browser, but only for Capsi-owned addresses.
-fn open_url(url: &str) -> Result<(), String> {
+fn open_url(app: &tauri::AppHandle, url: &str) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+
     if url != "https://capsi.win" && url != "https://www.capsi.win/" {
         return Err("refused to open non-Capsi URL".to_string());
     }
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", url])
-            .spawn()
-            .map_err(|e| format!("cannot open browser: {e}"))?;
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(url)
-            .spawn()
-            .map_err(|e| format!("cannot open browser: {e}"))?;
-    }
-    #[cfg(target_os = "linux")]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(url)
-            .spawn()
-            .map_err(|e| format!("cannot open browser: {e}"))?;
-    }
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| format!("cannot open browser: {e}"))?;
     Ok(())
 }
 

@@ -1,22 +1,81 @@
-// Capsi - Tauri shell entry point.
+// Capsi - Tauri shell entry point (desktop + mobile).
 //
-// This is the thinnest possible layer: it boots the Tauri runtime, wires the
-// Rust commands from `capsi_core` into JavaScript, and keeps a system tray
-// alive so Capsi keeps discovering peers while the window is minimised.
-
-use tauri::{
-    menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager,
-};
+// Thin layer over `capsi_core`: boots the runtime, wires commands into JS,
+// and - on desktop only - keeps a system tray alive while minimised.
+// Android/iOS have no tray; the same core + frontend run there unchanged.
 
 pub mod commands;
 
-/// Build the system tray icon and menu.
-///
-/// Called from `main` on the main thread, which is where Tauri expects menus and
-/// tray icons to be created.
-pub fn setup_tray(app: &AppHandle) -> Result<(), String> {
+use tauri::Manager;
+
+/// Shared builder: plugins, bootstrap thread, commands. Desktop adds a tray.
+fn build_app() -> tauri::Builder<tauri::Wry> {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            let handle = app.handle().clone();
+            #[cfg(desktop)]
+            {
+                setup_tray(&handle).map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+            }
+            std::thread::spawn(move || {
+                let rt = match tokio::runtime::Runtime::new() {
+                    Ok(r) => r,
+                    Err(e) => {
+                        log::error!("capsi: cannot start tokio: {e}");
+                        return;
+                    }
+                };
+                rt.block_on(async {
+                    if let Err(e) = crate::commands::app::bootstrap(handle).await {
+                        log::error!("capsi: bootstrap failed: {e}");
+                    }
+                });
+            });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            crate::commands::app::bootstrap,
+            crate::commands::app::open_website,
+            crate::commands::device::get_device_info,
+            crate::commands::device::set_device_name,
+            crate::commands::device::export_device_id,
+            crate::commands::device::reset_device,
+            crate::commands::trust::list_peers,
+            crate::commands::trust::accept_peer,
+            crate::commands::trust::ignore_peer,
+            crate::commands::trust::forget_peer,
+            crate::commands::trust::rename_peer,
+            crate::commands::chat::list_conversations,
+            crate::commands::chat::load_conversation,
+            crate::commands::chat::send_message,
+            crate::commands::chat::delete_conversation,
+            crate::commands::chat::mark_read,
+            crate::commands::files::offer_file,
+            crate::commands::files::accept_file,
+            crate::commands::files::decline_file,
+            crate::commands::files::list_transfers,
+            crate::commands::settings::get_settings,
+            crate::commands::settings::save_settings,
+        ])
+}
+
+/// Run Capsi on desktop and mobile from one entry point.
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    build_app()
+        .run(tauri::generate_context!())
+        .expect("capsi failed to start");
+}
+
+/// Tray icon + menu. Desktop only: phones have no tray.
+#[cfg(desktop)]
+pub fn setup_tray(app: &tauri::AppHandle) -> Result<(), String> {
+    use tauri::{
+        menu::{Menu, MenuItem},
+        tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    };
     // Load the tray icon PNG that was generated from the logo.
     let icon_bytes = include_bytes!("../icons/icon.png");
     let icon = tauri::image::Image::from_bytes(icon_bytes)

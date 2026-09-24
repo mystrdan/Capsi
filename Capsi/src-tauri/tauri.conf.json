@@ -38,6 +38,10 @@
     "publisher": "CAPSICOM",
     "homepage": "https://capsi.win",
     "shortDescription": "Capsi by CAPSICOM",
+    "category": "Utility",
+    "android": {
+      "minSdkVersion": 24
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

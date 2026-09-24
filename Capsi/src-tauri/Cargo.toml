@@ -9,7 +9,10 @@ default-run = "capsi"
 
 [lib]
 name = "capsi_lib"
-crate-type = ["rlib"]
+# cdylib = libcapsi_lib.so consumed by the Android packaging step (Tauri looks
+# for exactly this artifact); staticlib for mobile toolchains; rlib so the
+# desktop `capsi` bin can link against the shared code.
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
 name = "capsi"
@@ -19,9 +22,14 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-# --- desktop shell -----------------------------------------------------
+# --- shell (desktop + mobile) --------------------------------------------
+# `tray-icon` is only used behind `#[cfg(desktop)]` in `src/lib.rs`; it
+# compiles fine for the Android target, where no tray is built.
 tauri = { version = "2", features = ["tray-icon", "image-png", "image-ico"] }
 tauri-plugin-notification = "2"
+# `open_website` goes through the opener plugin so it works from the desktop
+# WebView AND from an Android WebView (where `cmd /C start` does not exist).
+tauri-plugin-opener = "2"
 
 # --- serialization ----------------------------------------------------
 serde = { version = "1", features = ["derive"] }

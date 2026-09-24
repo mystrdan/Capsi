@@ -264,11 +264,18 @@ async function handleTransferAction(btn) {
 
 function renderMessages(conv, fallbackName) {
   const name = (conv && conv.name) || fallbackName || peerName(state.activeConv);
+  // `chat-open` flips the phone layout (see style.css) to the chat screen.
+  document.body.classList.add('chat-open');
   $('chat-header').innerHTML = `
     <div class="chat-header-row">
+      <button class="btn btn-sm" id="btn-back-list" title="Back">&larr;</button>
       <div class="chat-status"><strong>${escapeHtml(name || 'Unknown')}</strong> &middot; <span class="mono">${escapeHtml(shortId(state.activeConv))}</span></div>
       <button class="btn btn-sm btn-danger" id="btn-delete-conv">Delete chat</button>
     </div>`;
+  $('btn-back-list').addEventListener('click', () => {
+    state.activeConv = null;
+    document.body.classList.remove('chat-open');
+  });
   $('btn-delete-conv').addEventListener('click', deleteActiveConversation);
 
   const messages = $('messages');

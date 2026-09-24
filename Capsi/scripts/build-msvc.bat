@@ -9,15 +9,27 @@
 :: `src-tauri/build.rs` still builds, but the exe ships unbadged.
 ::
 :: Usage:
-::   scripts\build-msvc.bat            debug build for local testing
-::   scripts\build-msvc.bat release    release exe (target\release\capsi.exe)
-::   scripts\build-msvc.bat bundle     release exe + NSIS installer
+::   scripts\build-msvc.bat            release exe + NSIS installer (DEFAULT - always bundles)
+::   scripts\build-msvc.bat release    same as default: release exe + NSIS installer
+::   scripts\build-msvc.bat bundle     same as default: release exe + NSIS installer
+::   scripts\build-msvc.bat debug      bare debug exe for local testing only (no installer)
 ::
-:: `bundle` needs the Tauri CLI. It does NOT need NSIS installed: the CLI
-:: downloads its own NSIS (currently 3.11) into %LOCALAPPDATA%\tauri\NSIS the
-:: first time it bundles. The installer lands in
+:: Every desktop build other than `debug` produces an installer. The file lands in
 :: target\release\bundle\nsis\Capsi_<version>_x64-setup.exe - that is the file
 :: to hand to another Windows user. A bare capsi.exe is portable, not installable.
+:: tauri.conf.json also pins bundle.targets=["nsis"], so `tauri build` can never
+:: silently fall back to a different bundler.
+::
+:: Publisher / SmartScreen: bundle.publisher="CAPSICOM" in tauri.conf.json becomes
+:: the "Publisher" entry in Settings > Apps (ARP uninstall registry). SmartScreen
+:: still flags UNSIGNED downloads ("unrecognized publisher"); no config value can
+:: bypass that. When an Authenticode code-signing certificate is available, add:
+::   "bundle": { "windows": {
+::     "certificateThumbprint": "<sha1-of-cert-in-Cert:\\CurrentUser\\My>",
+::     "digestAlgorithm": "sha256",
+::     "timestampUrl": "http://timestamp.digicert.com" } }
+:: (or "signCommand" for a file-based signer). Keep publisher identical to the
+:: certificate subject across releases so SmartScreen reputation accumulates.
 setlocal
 :: VsDevCmd.bat resolves `vswhere.exe` relative to the current directory. If
 :: NoDefaultCurrentDirectoryInExePath=1 is set (VS Code's shell sets it) that
@@ -58,18 +70,18 @@ set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
 if exist "%USERPROFILE%\.capsi-tools\bin\tauri.cmd" set "PATH=%USERPROFILE%\.capsi-tools\bin;%PATH%"
 cd /d "%~dp0.."
 
-if /i "%~1"=="bundle" (
-  rem `cargo tauri` comes from `cargo install tauri-cli`; `tauri` from the npm
-  rem package (@tauri-apps/cli). Accept whichever is present.
+if /i "%~1"=="debug" (
+  rem Explicit dev-only mode: bare debug exe, no installer.
+  cargo build -p capsi
+) else (
+  rem Default for every other argument (incl. none, release, bundle): release exe
+  rem + NSIS installer into target\release\bundle\nsis. `cargo tauri` comes from
+  rem `cargo install tauri-cli`; `tauri` from the npm package (@tauri-apps/cli).
   where tauri >NUL 2>&1
   if errorlevel 1 (
     cargo tauri build --bundles nsis
   ) else (
     tauri build --bundles nsis
   )
-) else if /i "%~1"=="release" (
-  cargo build --release -p capsi
-) else (
-  cargo build -p capsi
 )
 

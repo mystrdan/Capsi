@@ -91,7 +91,10 @@ pub fn conversation_name(dir: &Path, device_id: &capsi_core::identity::DeviceId)
 }
 
 /// Ensure the data directory exists and return its path.
-pub fn setup_app_data(app: &tauri::AppHandle<tauri::Wry>) -> Result<PathBuf, String> {
+///
+/// Generic over the Tauri runtime so this works on desktop (`Wry`) and on
+/// mobile, where the same call resolves to the app-private data directory.
+pub fn setup_app_data<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()
