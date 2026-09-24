@@ -3,7 +3,7 @@
 // Offer a file, accept/decline incoming offers, and track transfer progress.
 
 use super::{conversation_name, setup_app_data};
-use capsi_core::identity::{trust::TrustStore, DeviceId};
+use capsi_core::identity::{trust::TrustStore, DeviceId, DeviceIdentity};
 use capsi_core::storage::conversation::{
     DeliveryState, MessageKind, MessageStore, StoredFile, StoredMessage, TransferState,
 };
@@ -91,8 +91,31 @@ pub async fn offer_file(
         state: DeliveryState::Queued,
     };
 
+    let peer = trust
+        .get(&id)
+        .ok_or_else(|| "peer is not known to Capsi".to_string())?;
+    let address = peer
+        .last_address
+        .as_deref()
+        .ok_or_else(|| "peer address is not currently known".to_string())?;
+    let mut socket = address
+        .parse::<std::net::SocketAddr>()
+        .map_err(|e| format!("invalid peer address: {e}"))?;
+    socket.set_port(45892);
+
+    let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+    capsi_core::transport::connect_and_send(
+        &socket.to_string(),
+        &identity,
+        &id,
+        &envelope,
+    )
+    .await
+    .map_err(|e| format!("file offer delivery failed: {e}"))?;
+
     let peer_name = conversation_name(&data_dir, &id);
     let mut store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
+    stored.state = DeliveryState::Sent;
     store
         .append(&id, &peer_name, stored)
         .map_err(|e| e.to_string())?;
@@ -113,22 +136,55 @@ pub async fn accept_file(
     let data_dir = setup_app_data(&app)?;
     let id = DeviceId::from_hex(&device_id).map_err(|e| e.to_string())?;
 
-    let dest = match save_to {
-        Some(dir) => dir,
-        None => std::env::temp_dir()
-            .join("Capsi")
-            .join("received")
-            .to_string_lossy()
-            .to_string(),
+    let dest_dir = match save_to {
+        Some(dir) => std::path::PathBuf::from(dir),
+        None => std::env::temp_dir().join("Capsi").join("received"),
     };
-    std::fs::create_dir_all(&dest).map_err(|e| format!("cannot create {dest}: {e}"))?;
+    std::fs::create_dir_all(&dest_dir)
+        .map_err(|e| format!("cannot create {}: {e}", dest_dir.display()))?;
 
     let mut store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
+    let conversation = store
+        .get(&id)
+        .ok_or_else(|| "file offer was not found".to_string())?;
+    let file = conversation
+        .find_transfer(&transfer_id)
+        .ok_or_else(|| "file offer was not found".to_string())?;
+    let target = dest_dir.join(&file.file_name);
+    let target_string = target.to_string_lossy().to_string();
+    let expected_peer = id.clone();
+
     store
-        .update_transfer(&id, &transfer_id, TransferState::Transferring, Some(dest))
+        .update_transfer(
+            &id,
+            &transfer_id,
+            TransferState::Transferring,
+            Some(target_string),
+        )
         .map_err(|e| e.to_string())?;
 
-    Ok(transfer_id)
+    let trust = TrustStore::load(&data_dir).map_err(|e| e.to_string())?;
+    let peer = trust.get(&expected_peer).ok_or_else(|| "peer is not known".to_string())?;
+    let address = peer.last_address.as_deref().ok_or_else(|| "peer address is not currently known".to_string())?;
+    let mut socket = address.parse::<std::net::SocketAddr>().map_err(|e| format!("invalid peer address: {e}"))?;
+    socket.set_port(45892);
+    let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+    let receipt = capsi_core::protocol::Envelope::new(
+        capsi_core::protocol::Message::FileReceipt {
+            transfer_id,
+            state: capsi_core::protocol::FileReceipt::Accepted,
+        },
+    );
+    capsi_core::transport::connect_and_send(
+        &socket.to_string(),
+        &identity,
+        &expected_peer,
+        &receipt,
+    )
+    .await
+    .map_err(|e| format!("could not notify sender: {e}"))?;
+
+    Ok(receipt.id)
 }
 
 /// Decline an incoming file offer from a peer.
