@@ -69,3 +69,24 @@ machine does not have it (`webviewInstallMode: downloadBootstrapper`).
 Pushing a `v*` tag runs the same build on GitHub Actions
 (`.github/workflows/release.yml`) and attaches the installer to the release.
 
+
+
+## Workplace features
+
+Capsi is also being extended as a local workplace communication layer, built on
+top of its existing device discovery and trust model.
+
+Current workplace foundation:
+
+- **Workspaces** — create a local workplace with the current device as Owner.
+- **People** — trusted Capsi devices can be added as workplace members.
+- **Roles & permissions** — Owner, Admin, Manager, and Member roles define access.
+- **Groups** — workplace groups can be created and members can be associated with
+  them.
+- **Local-first storage** — workplace state is persisted locally; cloud accounts,
+  external servers, and Internet connectivity are not required for this layer.
+
+The workplace layer is being built incrementally. Network synchronization,
+department workflows, broadcasts, and richer workplace communication will be
+added on top of this foundation rather than introducing a separate cloud
+architecture.
