@@ -212,6 +212,9 @@ async fn handle_incoming_message(
             // envelope id is the idempotency key, so accepting it twice must
             // never create duplicate workplace history entries.
             if workspace.has_received_message(&envelope.id) {
+                // A duplicate retry may arrive after the first receipt was lost.
+                // Acknowledge it again so the sender can clear its queue.
+                send_delivery_receipt(app, &peer_id, &envelope.id).await?;
                 return Ok(());
             }
 
