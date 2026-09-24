@@ -23,7 +23,7 @@ fn id(prefix: &str, counter: usize) -> String {
     format!("{prefix}-{}-{counter}", now())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Role { Owner, Admin, Manager, Member }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
