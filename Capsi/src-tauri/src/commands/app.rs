@@ -78,6 +78,23 @@ pub async fn bootstrap(app: AppHandle) -> Result<IdentityInfo, String> {
                     log::error!("capsi: transport listener failed: {e}");
                 }
             });
+
+            // Keep queued workplace messages moving when trusted peers return
+            // to the LAN. The queue is persisted, so app restarts do not lose
+            // pending deliveries.
+            let retry_handle = app_handle.clone();
+            tokio::spawn(async move {
+                let mut ticker = tokio::time::interval(std::time::Duration::from_secs(5));
+                loop {
+                    ticker.tick().await;
+                    if let Err(e) =
+                        super::workplace::retry_workplace_deliveries(retry_handle.clone()).await
+                    {
+                        log::debug!("capsi: workplace retry failed: {e}");
+                    }
+                }
+            });
+
             if let Err(e) = run_discovery(&app_handle).await {
                 log::error!("capsi: discovery loop failed: {e}");
             }
@@ -141,6 +158,14 @@ async fn handle_incoming_message(
         capsi_core::protocol::Message::WorkplaceText(message) => {
             let store = capsi_core::workplace::WorkspaceStore::new(&data_dir);
             let mut workspace = store.load()?.ok_or_else(|| "no local workplace".to_string())?;
+
+            // Delivery retries can legitimately resend the same envelope. The
+            // envelope id is the idempotency key, so accepting it twice must
+            // never create duplicate workplace history entries.
+            if workspace.has_received_message(&envelope.id) {
+                return Ok(());
+            }
+
             let sender = peer_id.as_str().to_string();
             if !workspace.members.iter().any(|m| m.device_id == sender) {
                 return Err("sender is not a workplace member".into());
@@ -148,6 +173,7 @@ async fn handle_incoming_message(
             workspace
                 .append_message(&message.group_id, &sender, message.body)
                 .ok_or_else(|| "sender is not a member of the target group".to_string())?;
+            workspace.mark_received_message(&envelope.id);
             store.save(&workspace)?;
             let _ = app.emit("workplace-message", &message);
             Ok(())
