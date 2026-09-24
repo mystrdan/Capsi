@@ -74,6 +74,9 @@ pub async fn load_conversation(
 }
 
 /// Send a text message to a trusted peer.
+///
+/// The message is persisted before delivery. It remains in a durable queue until
+/// the recipient sends an application-level DeliveryReceipt.
 #[tauri::command]
 pub async fn send_message(
     app: tauri::AppHandle,
@@ -84,44 +87,18 @@ pub async fn send_message(
     let trust = TrustStore::load(&data_dir).map_err(|e| e.to_string())?;
     let id = DeviceId::from_hex(&device_id).map_err(|e| e.to_string())?;
     if !trust.is_trusted(&id) {
-        return Err(format!(
-            "peer {} is not trusted",
-            id.as_str().chars().take(8).collect::<String>()
-        ));
+        return Err(format!("peer {} is not trusted", id.as_str().chars().take(8).collect::<String>()));
     }
 
-    // `TextMessage::new` trims and validates the body and owns the cleaned copy,
-    // so take it before the envelope moves the message away.
     let message = capsi_core::protocol::TextMessage::new(&body).map_err(|e| e.to_string())?;
     let clean_body = message.body.clone();
     let envelope = capsi_core::protocol::Envelope::new(capsi_core::protocol::Message::Text(message));
-
+    let envelope_id = envelope.id.clone();
     let peer_name = conversation_name(&data_dir, &id);
-    let peer = trust
-        .get(&id)
-        .ok_or_else(|| "peer is not known to Capsi".to_string())?;
-    let address = peer
-        .last_address
-        .as_deref()
-        .ok_or_else(|| "peer address is not currently known".to_string())?;
-    let mut socket = address
-        .parse::<std::net::SocketAddr>()
-        .map_err(|e| format!("invalid peer address: {e}"))?;
-    socket.set_port(45892);
-
-    let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
-    capsi_core::transport::connect_and_send(
-        &socket.to_string(),
-        &identity,
-        &id,
-        &envelope,
-    )
-    .await
-    .map_err(|e| format!("message delivery failed: {e}"))?;
 
     let mut store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
     let stored = StoredMessage {
-        id: envelope.id.clone(),
+        id: envelope_id.clone(),
         outgoing: true,
         sent_at: capsi_core::identity::device::now_secs(),
         kind: MessageKind::Text,
@@ -129,10 +106,79 @@ pub async fn send_message(
         file: None,
         state: DeliveryState::Sent,
     };
-    store
-        .append(&id, &peer_name, stored)
-        .map_err(|e| e.to_string())?;
-    Ok(envelope.id)
+    store.append(&id, &peer_name, stored).map_err(|e| e.to_string())?;
+
+    if let Some(conv) = store.conversations_mut_for_internal(&id) {
+        conv.queue_delivery(envelope.clone(), unix_now());
+    } else {
+        return Err("could not queue message delivery".into());
+    }
+    store.persist_for_internal(&id).map_err(|e| e.to_string())?;
+
+    retry_message_deliveries(app.clone(), id.clone()).await?;
+
+    let store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
+    if store.get(&id).map(|c| c.pending_deliveries.iter().any(|p| p.envelope.id == envelope_id)).unwrap_or(false) {
+        Ok(envelope_id)
+    } else {
+        Ok(envelope_id)
+    }
+}
+
+/// Retry regular text deliveries until the peer acknowledges persistence.
+pub async fn retry_message_deliveries(
+    app: tauri::AppHandle,
+    device_id: DeviceId,
+) -> Result<usize, String> {
+    let data_dir = setup_app_data(&app)?;
+    let trust = TrustStore::load(&data_dir).map_err(|e| e.to_string())?;
+    let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+    let mut store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
+    let now = unix_now();
+
+    let pending = store.get(&device_id)
+        .map(|c| c.pending_deliveries.iter().filter(|p| p.next_attempt_at <= now).cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    let mut delivered = 0usize;
+    for item in pending {
+        let result = async {
+            let peer = trust.get(&device_id).ok_or_else(|| "device is not known to Capsi".to_string())?;
+            if !peer.is_trusted() { return Err("device is not trusted".to_string()); }
+            let address = peer.last_address.as_deref().ok_or_else(|| "no current network address".to_string())?;
+            let mut socket = address.parse::<std::net::SocketAddr>().map_err(|e| format!("invalid network address: {e}"))?;
+            socket.set_port(45892);
+            capsi_core::transport::connect_and_send(&socket.to_string(), &identity, &device_id, &item.envelope)
+                .await.map_err(|e| e.to_string())
+        }.await;
+
+        match result {
+            Ok(()) => {
+                // Do not mark delivered here: only the receiver's receipt proves
+                // that the message was accepted and persisted.
+                delivered += 1;
+            }
+            Err(error) => {
+                if let Some(conv) = store.conversations_mut_for_internal(&device_id) {
+                    if let Some(p) = conv.pending_deliveries.iter_mut().find(|p| p.envelope.id == item.envelope.id) {
+                        p.attempts = p.attempts.saturating_add(1);
+                        let delay = 2_i64.saturating_pow(p.attempts.min(5)).min(60);
+                        p.next_attempt_at = now + delay;
+                        p.last_error = Some(error);
+                    }
+                }
+            }
+        }
+    }
+    if !pending.is_empty() {
+        store.persist_for_internal(&device_id).map_err(|e| e.to_string())?;
+    }
+    Ok(delivered)
+}
+
+fn unix_now() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64).unwrap_or_default()
 }
 
 /// Delete a conversation and its stored history.
