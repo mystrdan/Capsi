@@ -127,6 +127,19 @@ impl Workspace {
         true
     }
 
+    pub fn remove_from_group(&mut self, group_id: &str, device_id: &str) -> bool {
+        let Some(group) = self.groups.iter_mut().find(|g| g.id == group_id) else { return false; };
+        let before = group.member_ids.len();
+        group.member_ids.retain(|id| id != device_id);
+        before != group.member_ids.len()
+    }
+
+    pub fn delete_group(&mut self, group_id: &str) -> bool {
+        let before = self.groups.len();
+        self.groups.retain(|g| g.id != group_id);
+        before != self.groups.len()
+    }
+
     pub fn assign_department(&mut self, department_id: &str, device_id: &str) -> bool {
         if !self.departments.iter().any(|d| d.id == department_id) { return false; }
         let Some(member) = self.members.iter_mut().find(|m| m.device_id == device_id) else { return false; };
@@ -200,6 +213,9 @@ mod tests {
         let group = workspace.create_group("Finance Team", "Finance staff");
         assert!(workspace.assign_department(&department, "alice"));
         assert!(workspace.add_to_group(&group, "alice"));
+        assert!(workspace.remove_from_group(&group, "alice"));
+        assert!(workspace.add_to_group(&group, "alice"));
+        assert!(workspace.delete_group(&group));
     }
 
     #[test]
