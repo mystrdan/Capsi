@@ -298,7 +298,16 @@ pub async fn retry_workplace_deliveries<R: tauri::Runtime>(
 
         match result {
             Ok(()) => {
-                workspace.remove_pending_delivery(&pending.envelope.id, &pending.recipient_device_id);
+                // Transport success is not delivery confirmation. Keep the
+                // durable entry until the recipient sends DeliveryReceipt.
+                if let Some(item) = workspace.pending_deliveries.iter_mut().find(|p| {
+                    p.envelope.id == pending.envelope.id &&
+                    p.recipient_device_id == pending.recipient_device_id
+                }) {
+                    item.attempts = item.attempts.saturating_add(1);
+                    item.next_attempt_at = now + 60;
+                    item.last_error = Some("awaiting delivery receipt".into());
+                }
                 delivered += 1;
             }
             Err(error) => {
@@ -334,6 +343,20 @@ fn mark_delivery_failure(
         pending.next_attempt_at = now + delay;
         pending.last_error = Some(error);
     }
+}
+
+pub async fn mark_workplace_delivery_delivered<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    peer_id: &capsi_core::identity::DeviceId,
+    envelope_id: &str,
+) -> Result<(), String> {
+    let store = store(&app)?;
+    let mut workspace = store.load()?.ok_or_else(|| "no workplace exists".to_string())?;
+    if workspace.mark_delivery_delivered(envelope_id, peer_id.as_str()) {
+        store.save(&workspace)?;
+        let _ = app.emit("workplace-message-delivered", envelope_id);
+    }
+    Ok(())
 }
 
 fn unix_now() -> i64 {
