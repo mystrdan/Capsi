@@ -147,10 +147,14 @@ pub async fn accept_file(
         .find_transfer(&transfer_id)
         .ok_or_else(|| "file offer was not found".to_string())?;
     let safe_name = safe_file_name(&file.file_name);
-    let mut target = dest_dir.join(&safe_name);
-    // Never overwrite an existing local file. Generate a deterministic,
-    // collision-safe name while keeping the original extension.
-    if target.exists() {
+    let mut target = file.local_path.as_ref()
+        .filter(|p| std::path::Path::new(p).exists())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| dest_dir.join(&safe_name));
+    // A fresh transfer must never overwrite an unrelated local file. A
+    // previously accepted transfer reuses its recorded destination so it can
+    // resume from the existing prefix after interruption.
+    if file.local_path.is_none() && target.exists() {
         let stem = std::path::Path::new(&safe_name)
             .file_stem().and_then(|s| s.to_str()).unwrap_or("capsi-file");
         let ext = std::path::Path::new(&safe_name)
