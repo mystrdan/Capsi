@@ -71,6 +71,28 @@ pub struct Typing {
     pub active: bool,
 }
 
+/// A text message addressed to a workplace group.
+///
+/// The group id is a routing/authorization identifier, not a server-side
+/// destination. The eventual transport sends this payload directly to each
+/// eligible trusted device using Capsi's existing encrypted peer sessions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkplaceTextMessage {
+    pub group_id: String,
+    pub body: String,
+}
+
+impl WorkplaceTextMessage {
+    pub fn new(group_id: &str, body: &str) -> Result<Self> {
+        let group_id = group_id.trim();
+        if group_id.is_empty() {
+            return Err(CapsiError::Invalid("workplace group id cannot be empty".into()));
+        }
+        let text = TextMessage::new(body)?;
+        Ok(Self { group_id: group_id.to_string(), body: text.body })
+    }
+}
+
 /// The message bodies.
 ///
 /// `#[serde(tag = "kind")]` keeps the JSON self-describing, which makes it
@@ -83,6 +105,8 @@ pub enum Message {
     Text(TextMessage),
     /// A file is on offer.
     FileOffer(FileOffer),
+    /// A text message addressed to a workplace group.
+    WorkplaceText(WorkplaceTextMessage),
     /// A response to [`Message::FileOffer`].
     FileReceipt {
         /// Which transfer this is about.
@@ -113,6 +137,7 @@ impl Message {
         match self {
             Self::Text(_) => "text",
             Self::FileOffer(_) => "file_offer",
+            Self::WorkplaceText(_) => "workplace_text",
             Self::FileReceipt { .. } => "file_receipt",
             Self::FileChunk { .. } => "file_chunk",
             Self::Typing(_) => "typing",
@@ -125,7 +150,7 @@ impl Message {
     /// Typing indicators and chunk traffic are transient: they drive the UI while
     /// they fly, but storing every chunk would bloat the message log.
     pub fn is_conversation_item(&self) -> bool {
-        matches!(self, Self::Text(_) | Self::FileOffer(_))
+        matches!(self, Self::Text(_) | Self::FileOffer(_) | Self::WorkplaceText(_))
     }
 }
 
@@ -300,6 +325,23 @@ mod tests {
             data: String::new(),
         }
         .is_conversation_item());
+    }
+
+    #[test]
+    #[test]
+    fn a_workplace_text_round_trips_with_group_id() {
+        let message = WorkplaceTextMessage::new("group-1", "hello team").unwrap();
+        let envelope = Envelope::new(Message::WorkplaceText(message.clone()));
+        let parsed = Envelope::from_json(&envelope.to_json().unwrap()).unwrap();
+        assert_eq!(parsed.message, Message::WorkplaceText(message));
+        assert_eq!(parsed.message.kind(), "workplace_text");
+    }
+
+    #[test]
+    fn workplace_text_reuses_normal_message_validation() {
+        assert!(WorkplaceTextMessage::new("", "hello").is_err());
+        assert!(WorkplaceTextMessage::new("group-1", "   ").is_err());
+        assert!(WorkplaceTextMessage::new("group-1", &"x".repeat(MAX_TEXT_MESSAGE_BYTES + 1)).is_err());
     }
 
     #[test]
