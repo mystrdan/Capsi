@@ -91,6 +91,16 @@ impl StoredFile {
 
 /// One entry in a conversation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// A text envelope waiting for an application-level delivery receipt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingDelivery {
+    pub envelope: crate::protocol::Envelope,
+    pub attempts: u32,
+    pub next_attempt_at: i64,
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredMessage {
     /// Message id (the same value as the envelope id, so receipts can refer to it).
     pub id: String,
@@ -175,6 +185,10 @@ pub struct Conversation {
     pub unread: u32,
     /// Unix seconds of the newest activity.
     pub updated_at: i64,
+    /// Durable outgoing deliveries. Entries are removed only after a
+    /// DeliveryReceipt is received from the peer.
+    #[serde(default)]
+    pub pending_deliveries: Vec<PendingDelivery>,
 }
 
 impl Conversation {
@@ -186,6 +200,7 @@ impl Conversation {
             messages: Vec::new(),
             unread: 0,
             updated_at: now_secs(),
+            pending_deliveries: Vec::new(),
         }
     }
 
@@ -345,6 +360,23 @@ impl MessageStore {
         conversation.push(message);
         conversation.trim(limit);
         self.persist(device_id)
+    }
+
+    /// Queue an outgoing envelope until the peer confirms persistence.
+    pub fn queue_delivery(&mut self, envelope: crate::protocol::Envelope, next_attempt_at: i64) {
+        if self.pending_deliveries.iter().any(|p| p.envelope.id == envelope.id) {
+            return;
+        }
+        self.pending_deliveries.push(PendingDelivery {
+            envelope,
+            attempts: 0,
+            next_attempt_at,
+            last_error: None,
+        });
+    }
+
+    pub fn remove_delivery(&mut self, message_id: &str) {
+        self.pending_deliveries.retain(|p| p.envelope.id != message_id);
     }
 
     /// Update a transfer's state and persist.
