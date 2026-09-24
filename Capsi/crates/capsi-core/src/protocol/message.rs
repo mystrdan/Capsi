@@ -82,6 +82,16 @@ pub struct WorkplaceTextMessage {
     pub body: String,
 }
 
+/// Application-level acknowledgement for a previously received message.
+///
+/// Transport success only proves that the encrypted frame reached the peer's
+/// socket. This receipt is emitted after the peer has accepted and persisted
+/// the message, allowing senders to distinguish "sent" from "delivered".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeliveryReceipt {
+    pub message_id: String,
+}
+
 impl WorkplaceTextMessage {
     pub fn new(group_id: &str, body: &str) -> Result<Self> {
         let group_id = group_id.trim();
@@ -107,6 +117,8 @@ pub enum Message {
     FileOffer(FileOffer),
     /// A text message addressed to a workplace group.
     WorkplaceText(WorkplaceTextMessage),
+    /// Application-level delivery acknowledgement for a text/workplace message.
+    DeliveryReceipt(DeliveryReceipt),
     /// A response to [`Message::FileOffer`].
     FileReceipt {
         /// Which transfer this is about.
@@ -138,6 +150,7 @@ impl Message {
             Self::Text(_) => "text",
             Self::FileOffer(_) => "file_offer",
             Self::WorkplaceText(_) => "workplace_text",
+            Self::DeliveryReceipt(_) => "delivery_receipt",
             Self::FileReceipt { .. } => "file_receipt",
             Self::FileChunk { .. } => "file_chunk",
             Self::Typing(_) => "typing",
@@ -289,6 +302,20 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn a_delivery_receipt_round_trips() {
+        let receipt = DeliveryReceipt { message_id: "m-123".into() };
+        let envelope = Envelope::new(Message::DeliveryReceipt(receipt.clone()));
+        let parsed = Envelope::from_json(&envelope.to_json().unwrap()).unwrap();
+        assert_eq!(parsed.message, Message::DeliveryReceipt(receipt));
+        assert_eq!(parsed.message.kind(), "delivery_receipt");
+    }
+
+    #[test]
+    fn delivery_receipts_are_not_conversation_items() {
+        assert!(!Message::DeliveryReceipt(DeliveryReceipt { message_id: "m".into() }).is_conversation_item());
+    }
+
     fn an_unknown_protocol_version_is_refused() {
         let mut envelope = Envelope::new(Message::Goodbye);
         envelope.version = "capsi/99".into();
