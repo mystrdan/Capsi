@@ -237,6 +237,12 @@ impl Workspace {
         });
     }
 
+    pub fn mark_delivery_delivered(&mut self, envelope_id: &str, recipient_device_id: &str) -> bool {
+        let before = self.pending_deliveries.len();
+        self.remove_pending_delivery(envelope_id, recipient_device_id);
+        before != self.pending_deliveries.len()
+    }
+
     pub fn remove_pending_delivery(&mut self, envelope_id: &str, recipient_device_id: &str) {
         self.pending_deliveries.retain(|p| {
             !(p.envelope.id == envelope_id && p.recipient_device_id == recipient_device_id)
