@@ -12,6 +12,7 @@ const state = {
   peers: [],
   transfers: [],
   activeConv: null,
+  activeWorkplaceGroup: null,
   activePanel: 'conversations',
   identity: null,
   workplace: null,
@@ -131,17 +132,16 @@ function renderWorkplace(snapshot) {
         await invoke('create_workplace', { name });
         showToast('Workplace created');
         await loadWorkplace();
-      } catch (err) {
-        showToast(`Could not create workplace: ${err}`, true);
-      }
+      } catch (err) { showToast(`Could not create workplace: ${err}`, true); }
     });
     return;
   }
 
-  const owner = workspace.members.find((m) => m.device_id === workspace.owner_device_id);
   const memberIds = new Set(workspace.members.map((m) => m.device_id));
   const candidates = state.peers.filter((p) => p.state === 'trusted' && !memberIds.has(p.device_id));
   const canManage = (snapshot.permissions || []).includes('ManageMembers');
+  const canGroups = (snapshot.permissions || []).includes('ManageGroups');
+
   panel.innerHTML = `
     <div class="workplace-summary">
       <div class="workplace-mark">${escapeHtml(initials(workspace.name))}</div>
@@ -149,38 +149,14 @@ function renderWorkplace(snapshot) {
       <div class="workplace-id mono">${escapeHtml(shortId(workspace.id))}</div>
     </div>
     <div class="workplace-section">
-      <div class="workplace-section-title">People · ${workspace.members.length}</div>
-      <div class="workplace-members">
-        ${workspace.members.map((m) => `
-          <div class="workplace-member">
-            <div class="conv-avatar">${escapeHtml(initials(m.display_name || shortId(m.device_id)))}</div>
-            <div class="workplace-member-info">
-              <div class="workplace-member-name">${escapeHtml(m.display_name || shortId(m.device_id))}</div>
-              <div class="workplace-member-meta">${escapeHtml(m.role)} · <span class="mono">${escapeHtml(shortId(m.device_id))}</span></div>
-            </div>
-            ${canManage && m.device_id !== workspace.owner_device_id ? `<button class="btn btn-sm btn-danger" data-remove-member="${escapeHtml(m.device_id)}">Remove</button>` : ''}
-          </div>`).join('')}
-      </div>
-      ${canManage ? `
-        <div class="workplace-add">
-          <div class="workplace-section-title">Add trusted device</div>
-          ${candidates.length ? candidates.map((p) => `
-            <button class="workplace-candidate" data-add-member="${escapeHtml(p.device_id)}">
-              <span class="conv-avatar">${escapeHtml(initials(p.alias || p.name || shortId(p.device_id)))}</span>
-              <span><strong>${escapeHtml(p.alias || p.name || shortId(p.device_id))}</strong><small>Trusted · ${escapeHtml(shortId(p.device_id))}</small></span>
-              <b>+</b>
-            </button>`).join('') : '<p class="muted workplace-hint">Trust a device in Nearby first. Trusted devices will appear here.</p>'}
-        </div>` : ''}
-    </div>
-    <div class="workplace-section">
       <div class="workplace-section-title">Groups · ${workspace.groups.length}</div>
       ${workspace.groups.length ? workspace.groups.map((g) => `
-        <div class="workplace-group">
-          <div><strong>${escapeHtml(g.name)}</strong><small>${escapeHtml(g.description || 'No description')} · ${g.member_ids.length} people</small></div>
-          <span class="mono">${escapeHtml(shortId(g.id))}</span>
-          ${canManage ? `<button class="btn btn-sm btn-danger" data-delete-group="${escapeHtml(g.id)}">Delete</button>` : ''}
-        </div>`).join('') : '<p class="muted workplace-hint">No groups yet.</p>'}
-      ${canManage ? `
+        <button class="workplace-group-row ${state.activeWorkplaceGroup === g.id ? 'active' : ''}" data-open-group="${escapeHtml(g.id)}">
+          <span class="workplace-group-icon">#</span>
+          <span class="workplace-group-row-info"><strong>${escapeHtml(g.name)}</strong><small>${g.member_ids.length} people · ${escapeHtml(g.description || 'Workplace group')}</small></span>
+          <span class="mono">${workspace.messages.filter(m => m.group_id === g.id).length || ''}</span>
+        </button>`).join('') : '<p class="muted workplace-hint">No groups yet.</p>'}
+      ${canGroups ? `
         <form id="workplace-group-form" class="workplace-form workplace-group-form">
           <input class="detail-input" id="workplace-group-name" maxlength="64" placeholder="Group name" required>
           <input class="detail-input" id="workplace-group-description" maxlength="160" placeholder="Description (optional)">
@@ -188,79 +164,98 @@ function renderWorkplace(snapshot) {
         </form>` : ''}
     </div>
     <div class="workplace-section">
-      <div class="workplace-section-title">Departments · ${workspace.departments.length}</div>
-      ${workspace.departments.length ? workspace.departments.map((d) => '<div class="workplace-group"><div><strong>'+escapeHtml(d.name)+'</strong><small>'+d.member_ids.length+' people</small></div></div>').join('') : '<p class="muted workplace-hint">No departments yet.</p>'}
-      ${canManage ? '<form id="workplace-department-form" class="workplace-form"><input class="detail-input" id="workplace-department-name" maxlength="64" placeholder="Department name" required><button class="btn btn-sm btn-primary" type="submit">Create department</button></form>' : ''}
+      <div class="workplace-section-title">People · ${workspace.members.length}</div>
+      <div class="workplace-members">
+        ${workspace.members.map((m) => `
+          <div class="workplace-member">
+            <div class="conv-avatar">${escapeHtml(initials(m.display_name || shortId(m.device_id)))}</div>
+            <div class="workplace-member-info"><div class="workplace-member-name">${escapeHtml(m.display_name || shortId(m.device_id))}</div><div class="workplace-member-meta">${escapeHtml(m.role)}</div></div>
+            ${canManage && m.device_id !== workspace.owner_device_id ? `<button class="btn btn-sm btn-danger" data-remove-member="${escapeHtml(m.device_id)}">Remove</button>` : ''}
+          </div>`).join('')}
+      </div>
+      ${canManage ? `<div class="workplace-add"><div class="workplace-section-title">Add trusted device</div>${candidates.length ? candidates.map((p) => `
+        <button class="workplace-candidate" data-add-member="${escapeHtml(p.device_id)}"><span class="conv-avatar">${escapeHtml(initials(p.alias || p.name || shortId(p.device_id)))}</span><span><strong>${escapeHtml(p.alias || p.name || shortId(p.device_id))}</strong><small>Trusted</small></span><b>+</b></button>`).join('') : '<p class="muted workplace-hint">Trust a device in Nearby first.</p>'}</div>` : ''}
     </div>
     <div class="workplace-section">
-      <div class="workplace-section-title">Workspace</div>
-      <div class="workplace-stat"><span>Groups</span><strong>${workspace.groups.length}</strong></div>
-      <div class="workplace-stat"><span>Departments</span><strong>${workspace.departments.length}</strong></div>
-      <div class="workplace-stat"><span>Broadcasts</span><strong>${workspace.broadcasts.length}</strong></div>
+      <div class="workplace-section-title">Departments · ${workspace.departments.length}</div>
+      ${workspace.departments.length ? workspace.departments.map((d) => `<div class="workplace-group"><div><strong>${escapeHtml(d.name)}</strong><small>${d.member_ids.length} people</small></div></div>`).join('') : '<p class="muted workplace-hint">No departments yet.</p>'}
+      ${canGroups ? '<form id="workplace-department-form" class="workplace-form"><input class="detail-input" id="workplace-department-name" maxlength="64" placeholder="Department name" required><button class="btn btn-sm btn-primary" type="submit">Create department</button></form>' : ''}
     </div>`;
-  panel.querySelectorAll('[data-add-group-member]').forEach((el) => el.addEventListener('click', async () => {
-    const groupId = el.dataset.addGroupMember;
-    const select = panel.querySelector('[data-group-select="' + groupId + '"]');
-    const deviceId = select && select.value;
-    if (!deviceId) return;
-    try {
-      await invoke('add_workplace_group_member', { groupId, deviceId });
-      showToast('Person added to group');
-      await loadWorkplace();
-    } catch (e) { showToast('Could not add group member: ' + e, true); }
-  }));
 
-  panel.querySelectorAll('[data-remove-group-member]').forEach((el) => el.addEventListener('click', async () => {
-    try {
-      await invoke('remove_workplace_group_member', { groupId: el.dataset.removeGroupMember, deviceId: el.dataset.deviceId });
-      showToast('Person removed from group');
-      await loadWorkplace();
-    } catch (e) { showToast('Could not remove group member: ' + e, true); }
-  }));
-
-  panel.querySelectorAll('[data-delete-group]').forEach((el) => el.addEventListener('click', async () => {
-    if (!confirm('Delete this group?')) return;
-    try {
-      await invoke('delete_workplace_group', { groupId: el.dataset.deleteGroup });
-      showToast('Group deleted');
-      await loadWorkplace();
-    } catch (e) { showToast('Could not delete group: ' + e, true); }
-  }));
-  const departmentForm = $('workplace-department-form');
-  if (departmentForm) departmentForm.addEventListener('submit', async (e) => {
-    e.preventDefault(); const name = $('workplace-department-name').value.trim(); if (!name) return;
-    try { await invoke('create_workplace_department', { name }); showToast('Department created'); await loadWorkplace(); }
-    catch (e) { showToast('Could not create department: ' + e, true); }
-  });
-
+  panel.querySelectorAll('[data-open-group]').forEach((el) => el.addEventListener('click', () => openWorkplaceGroup(el.dataset.openGroup)));
   panel.querySelectorAll('[data-add-member]').forEach((el) => el.addEventListener('click', async () => {
-    try {
-      await invoke('add_workplace_member', { deviceId: el.dataset.addMember, displayName: '', role: 'Member' });
-      showToast('Person added to workplace');
-      await loadWorkplace();
-    } catch (e) { showToast(`Could not add person: ${e}`, true); }
+    try { await invoke('add_workplace_member', { deviceId: el.dataset.addMember, displayName: '', role: 'Member' }); showToast('Person added'); await loadWorkplace(); }
+    catch (e) { showToast(`Could not add person: ${e}`, true); }
+  }));
+  panel.querySelectorAll('[data-remove-member]').forEach((el) => el.addEventListener('click', async () => {
+    try { await invoke('remove_workplace_member', { deviceId: el.dataset.removeMember }); showToast('Person removed'); await loadWorkplace(); }
+    catch (e) { showToast(`Could not remove person: ${e}`, true); }
   }));
   const groupForm = $('workplace-group-form');
   if (groupForm) groupForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const name = $('workplace-group-name').value.trim();
-    const description = $('workplace-group-description').value.trim();
+    const name = $('workplace-group-name').value.trim(), description = $('workplace-group-description').value.trim();
     if (!name) return;
-    try {
-      await invoke('create_workplace_group', { name, description });
-      showToast('Group created');
-      await loadWorkplace();
-    } catch (err) { showToast(`Could not create group: ${err}`, true); }
+    try { await invoke('create_workplace_group', { name, description }); showToast('Group created'); await loadWorkplace(); }
+    catch (e) { showToast(`Could not create group: ${e}`, true); }
   });
-
-  panel.querySelectorAll('[data-remove-member]').forEach((el) => el.addEventListener('click', async () => {
-    try {
-      await invoke('remove_workplace_member', { deviceId: el.dataset.removeMember });
-      showToast('Person removed from workplace');
-      await loadWorkplace();
-    } catch (e) { showToast(`Could not remove person: ${e}`, true); }
-  }));
+  const departmentForm = $('workplace-department-form');
+  if (departmentForm) departmentForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('workplace-department-name').value.trim();
+    if (!name) return;
+    try { await invoke('create_workplace_department', { name }); showToast('Department created'); await loadWorkplace(); }
+    catch (e) { showToast(`Could not create department: ${e}`, true); }
+  });
 }
+
+async function openWorkplaceGroup(groupId) {
+  const workspace = state.workplace;
+  if (!workspace) return;
+  const group = workspace.groups.find((g) => g.id === groupId);
+  if (!group) return;
+  state.activeWorkplaceGroup = groupId;
+  switchPanel('workplace');
+  renderWorkplace({ workspace, permissions: [] });
+  const identity = state.identity || await invoke('get_device_info').catch(() => null);
+  state.identity = identity;
+  renderWorkplaceMessages(group);
+}
+
+function renderWorkplaceMessages(group) {
+  const workspace = state.workplace;
+  const messages = (workspace.messages || []).filter((m) => m.group_id === group.id);
+  $('chat-header').innerHTML = `
+    <div class="chat-status"><strong># ${escapeHtml(group.name)}</strong><span>${group.member_ids.length} people</span></div>`;
+  $('messages').innerHTML = messages.length ? messages.map((m) => {
+    const mine = state.identity && m.sender_device_id === state.identity.device_id;
+    const sender = workspace.members.find((x) => x.device_id === m.sender_device_id);
+    const name = sender ? sender.display_name : shortId(m.sender_device_id);
+    return `<div class="msg-bubble ${mine ? 'outgoing' : 'incoming'}">${!mine ? `<div class="workplace-message-sender">${escapeHtml(name)}</div>` : ''}<div>${escapeHtml(m.body)}</div><div class="msg-meta">${formatTime(m.sent_at)}</div></div>`;
+  }).join('') : '<div class="empty-state"><p>No messages yet.</p><p class="muted">Send the first message to this group.</p></div>';
+  $('messages').scrollTop = $('messages').scrollHeight;
+  $('message-input').disabled = false;
+  $('message-input').placeholder = `Message #${group.name}`;
+  $('btn-send').disabled = false;
+}
+
+async function sendWorkplaceMessage() {
+  const input = $('message-input');
+  const body = input.value.trim();
+  const groupId = state.activeWorkplaceGroup;
+  if (!body || !groupId) return;
+  try {
+    await invoke('send_workplace_group_message', { groupId, body });
+    input.value = '';
+    input.style.height = 'auto';
+    await loadWorkplace();
+    const group = state.workplace.groups.find((g) => g.id === groupId);
+    if (group) renderWorkplaceMessages(group);
+  } catch (e) {
+    showToast(`Failed to send workplace message: ${e}`, true);
+  }
+}
+
 async function openConversation(deviceId, fallbackName) {
   state.activeConv = deviceId;
   try {
@@ -276,6 +271,7 @@ async function openConversation(deviceId, fallbackName) {
 }
 
 async function sendMessage() {
+  if (state.activeWorkplaceGroup) return sendWorkplaceMessage();
   const input = $('message-input');
   const body = input.value.trim();
   if (!body || !state.activeConv) return;
@@ -691,7 +687,7 @@ function switchPanel(name) {
   ['conversations', 'peers', 'transfers'].forEach((p) => {
     $(`panel-${p}`).classList.toggle('hidden', p !== name);
   });
-  if (name === 'conversations') loadConversations();
+  if (name === 'conversations') { state.activeWorkplaceGroup = null; loadConversations(); }
   else if (name === 'peers') loadPeers();
   else if (name === 'transfers') loadTransfers();
   else if (name === 'workplace') loadWorkplace();
@@ -740,6 +736,14 @@ function wireEvents() {
   });
 
   // Push events from the Rust discovery loop.
+  listen('workplace-message', async () => {
+    await loadWorkplace();
+    if (state.activeWorkplaceGroup && state.activePanel === 'workplace') {
+      const group = state.workplace && state.workplace.groups.find((g) => g.id === state.activeWorkplaceGroup);
+      if (group) renderWorkplaceMessages(group);
+    }
+  });
+
   listen('discovery-event', () => {
     if (state.activePanel === 'peers') loadPeers();
     if (state.activePanel === 'conversations') loadConversations();
