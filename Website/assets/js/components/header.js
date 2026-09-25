@@ -22,7 +22,6 @@ export function renderHeader() {
     <a href="./index.html#features">Features</a>
     <a href="./index.html#how-it-works">How it works</a>
     <a href="./index.html#download">Download</a>
-    <a class="btn btn-primary js-download" href="#" download>Download Capsi</a>
   </nav>
 </header>`;
 }
