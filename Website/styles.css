@@ -276,16 +276,12 @@ p { margin: 0 0 0.9em; }
 .step-icon {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 9px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  width: 34px;
+  height: 34px;
   color: var(--primary);
-  font-family: var(--mono);
-  font-size: 0.75rem;
   margin-bottom: 18px;
 }
+
 
 .feature-grid {
   display: grid;
@@ -304,15 +300,12 @@ p { margin: 0 0 0.9em; }
 .feature-icon {
   display: inline-grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 9px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  width: 30px;
+  height: 30px;
   color: var(--primary);
-  font-size: 1.05rem;
-  margin-bottom: 13px;
+  margin-bottom: 14px;
 }
+
 
 .windows-box {
   display: flex;
@@ -488,5 +481,14 @@ p { margin: 0 0 0.9em; }
   .download-cta { padding-top: 72px; padding-bottom: 72px; }
 }
 
-.feature-icon img,.step-icon img{width:20px;height:20px;display:block;}
-.hero-facts img{width:18px;height:18px;display:block;}
+.feature-icon img,
+.step-icon img {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+.hero-facts img {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
