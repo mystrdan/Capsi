@@ -6,37 +6,29 @@
 
 `Website/` contains the public-facing static website for **CAPSI by CAPSICOM** at `https://capsi.win`.
 
-## Public website
+## Structure
 
-The website is intentionally product-first. It communicates what Capsi is, how it works, its core features, local-first philosophy, current platform, FAQs, and contact information.
+- `index.html` — main product homepage
+- `about.html` — product/about and contact page
+- `thanks.html` — contact-form confirmation page
+- `assets/css/` — stylesheet entry point
+- `assets/js/` — website runtime modules
+- `assets/js/components/` — reusable header, footer, navigation, download and FAQ components
+- `assets/js/data/` — structured website data
+- `assets/icons/` — curated SVG interface icons
+- `assets/imgs/` — website image and brand assets
 
-Implementation details, repository workflow, release mechanics, and other developer-facing material stay out of the public-facing copy.
+The website remains plain static HTML, CSS and JavaScript. No framework or package installation is required.
 
-## Files
+## Public website boundary
 
-| File | Purpose |
-|---|---|
-| `index.html` | Main product homepage |
-| `about.html` | Product/about and contact page |
-| `styles.css` | Website styling and responsive layout |
-| `app.js` | Download-link resolution and mobile navigation |
-| `config.js` | Central website configuration |
-| `app-screenshot.png` | Capsi application preview |
-| `logo.png`, `logo-solid.png` | Capsi logo assets |
-| `favicon*.png`, `apple-touch-icon.png` | Browser/app icons |
-| `thanks.html` | Contact-form confirmation page |
+The public site is product-first. It explains what Capsi is, how it works, its documented capabilities, local-first behavior, current Windows availability, FAQs and contact information.
 
-## Download links
-
-All download buttons use the `js-download` class.
-
-`config.js` contains the fallback release asset and repository information. `app.js` applies the fallback immediately and then attempts to resolve the newest Windows installer from the latest release. If that lookup fails, the configured fallback remains in place.
-
-The release lookup is an implementation detail and is not presented as product functionality on the public site.
+Repository workflow and other developer-facing implementation details are not presented as product content.
 
 ## Run locally
 
-No build step or package installation is required:
+No build step is required:
 
 ```powershell
 cd Website
@@ -44,10 +36,8 @@ python -m http.server 8080
 # open http://localhost:8080/
 ```
 
-Or open `index.html` directly in a browser.
+## Deployment
 
-## Deploy
+Serve the contents of `Website/` as a static site. Asset paths are relative so the site can be hosted directly at `capsi.win`.
 
-Serve the contents of `Website/` as a static site. All asset paths are relative, so the folder can be served from `capsi.win` or another static host.
-
-Keep changes in this folder limited to the website unless a change outside it is explicitly required by the task.
+Keep website changes inside this folder unless a change outside it is explicitly required.
