@@ -17,40 +17,16 @@
   <meta name="twitter:image" content="https://capsi.win/app-screenshot.png">
   <meta name="twitter:title" content="Capsi — Messages and files, device to device.">
   <meta name="twitter:description" content="Run it. Find the computers. Send.">
-  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-128.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="./favicon-128.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/imgs/favicon-128.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/imgs/favicon-128.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/imgs/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-title" content="Capsi">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./assets/css/styles.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
 
-  <header class="site-header">
-    <div class="container header-inner">
-      <a class="brand" href="./index.html" aria-label="Capsi home">
-        <img src="./logo.png" alt="Capsi logo" width="28" height="28" class="brand-logo">
-        <span class="brand-text">CAPSI</span>
-      </a>
-      <nav class="site-nav" aria-label="Primary">
-        <a href="#features">Features</a>
-        <a href="#how-it-works">How it works</a>
-        <a href="#download">Download</a>
-      </nav>
-      <div class="header-actions">
-        <a class="btn btn-primary btn-sm js-download" href="#" download>Download Capsi</a>
-        <button class="menu-toggle" id="menu-toggle" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open menu">
-          <span></span><span></span><span></span>
-        </button>
-      </div>
-    </div>
-    <nav class="mobile-menu" id="mobile-menu" aria-label="Mobile" hidden>
-      <a href="#features">Features</a>
-      <a href="#how-it-works">How it works</a>
-      <a href="#download">Download</a>
-      <a class="btn btn-primary js-download" href="#" download>Download Capsi</a>
-    </nav>
-  </header>
+  <div data-component="header"></div>
 
   <main id="main">
     <section class="hero">
@@ -62,9 +38,9 @@
           <p class="hero-description">Capsi lets connected computers discover each other and communicate directly. No cloud service. No accounts. No unnecessary infrastructure.</p>
 
           <div class="hero-facts" aria-label="Capsi highlights">
-            <span><i aria-hidden="true">✓</i> Direct device-to-device</span>
-            <span><i aria-hidden="true">✓</i> No account</span>
-            <span><i aria-hidden="true">✓</i> No internet required</span>
+            <span><img src="./assets/icons/check.svg" alt=""> Direct device-to-device</span>
+            <span><img src="./assets/icons/check.svg" alt=""> No account</span>
+            <span><img src="./assets/icons/check.svg" alt=""> No internet required</span>
           </div>
 
           <div class="hero-actions">
@@ -76,7 +52,7 @@
 
         <div class="hero-panel" aria-label="Capsi app preview">
           <figure class="shot-frame hero-shot">
-            <img src="./app-screenshot.png" alt="Capsi application preview" width="1024" height="640" loading="eager" fetchpriority="high">
+            <img src="./assets/imgs/app-screenshot.png" alt="Capsi application preview" width="1024" height="640" loading="eager" fetchpriority="high">
           </figure>
         </div>
       </div>
@@ -104,17 +80,17 @@
         </div>
         <ol class="steps">
           <li>
-            <span class="step-icon" aria-hidden="true">01</span>
+            <span class="step-icon" aria-hidden="true"><img src="./assets/icons/run.svg" alt=""></span>
             <h3>Run</h3>
             <p>Install Capsi on the computers you want to connect and give each device a name.</p>
           </li>
           <li>
-            <span class="step-icon" aria-hidden="true">02</span>
+            <span class="step-icon" aria-hidden="true"><img src="./assets/icons/find.svg" alt=""></span>
             <h3>Find</h3>
             <p>Capsi discovers other computers running Capsi on the connected local network.</p>
           </li>
           <li>
-            <span class="step-icon" aria-hidden="true">03</span>
+            <span class="step-icon" aria-hidden="true"><img src="./assets/icons/send.svg" alt=""></span>
             <h3>Send</h3>
             <p>Accept a device, then send messages and files directly between the computers.</p>
           </li>
@@ -131,32 +107,32 @@
         </div>
         <div class="feature-grid">
           <div class="feature">
-            <span class="feature-icon" aria-hidden="true">⌁</span>
+            <span class="feature-icon" aria-hidden="true"><img src="./assets/icons/devices.svg" alt=""></span>
             <h3>Device Discovery</h3>
             <p>See nearby computers running Capsi without typing addresses.</p>
           </div>
           <div class="feature">
-            <span class="feature-icon" aria-hidden="true">↗</span>
+            <span class="feature-icon" aria-hidden="true"><img src="./assets/icons/message.svg" alt=""></span>
             <h3>Direct Messages</h3>
             <p>Send one-to-one text messages between accepted devices.</p>
           </div>
           <div class="feature">
-            <span class="feature-icon" aria-hidden="true">↑</span>
+            <span class="feature-icon" aria-hidden="true"><img src="./assets/icons/file-transfer.svg" alt=""></span>
             <h3>File Transfer</h3>
             <p>Offer files to another device and let the recipient accept or decline.</p>
           </div>
           <div class="feature">
-            <span class="feature-icon" aria-hidden="true">✓</span>
+            <span class="feature-icon" aria-hidden="true"><img src="./assets/icons/shield-check.svg" alt=""></span>
             <h3>Device Trust</h3>
             <p>New devices wait for you to accept them before communication begins.</p>
           </div>
           <div class="feature">
-            <span class="feature-icon" aria-hidden="true">⊘</span>
+            <span class="feature-icon" aria-hidden="true"><img src="./assets/icons/cloud-off.svg" alt=""></span>
             <h3>No Cloud</h3>
             <p>Your local conversations and transfers do not need a Capsi cloud service.</p>
           </div>
           <div class="feature">
-            <span class="feature-icon" aria-hidden="true">○</span>
+            <span class="feature-icon" aria-hidden="true"><img src="./assets/icons/user-off.svg" alt=""></span>
             <h3>No Account</h3>
             <p>No signup or login. A device name is all you need to get started.</p>
           </div>
@@ -167,7 +143,7 @@
     <section class="section shot-band" aria-label="Capsi application">
       <div class="container">
         <figure class="shot-frame">
-          <img src="./app-screenshot.png" alt="Capsi running with conversations, nearby devices and file transfer" width="1024" height="640" loading="lazy">
+          <img src="./assets/imgs/app-screenshot.png" alt="Capsi running with conversations, nearby devices and file transfer" width="1024" height="640" loading="lazy">
           <figcaption>Capsi keeps the experience focused on the devices around you.</figcaption>
         </figure>
       </div>
@@ -256,48 +232,9 @@
     </section>
   </main>
 
-  <footer class="site-footer">
-    <div class="container footer-inner">
-      <div class="footer-brand">
-        <p class="footer-name">CAPSI</p>
-        <p class="footer-by">by CAPSICOM</p>
-      </div>
-      <nav class="footer-nav" aria-label="Footer">
-        <a href="#download">Download</a>
-        <a href="./about.html">About</a>
-        <a href="https://x.com/runcapsi" rel="noopener">X</a>
-        <a href="./about.html#contact">Contact</a>
-      </nav>
-    </div>
-    <div class="container footer-base">
-      <p><a href="https://capsi.win">capsi.win</a> · Messages and files, device to device.</p>
-    </div>
-  </footer>
+  <div data-component="footer"></div>
 
-  <script src="./config.js"></script>
-  <script src="./app.js"></script>
-  <script>
-    (function () {
-      document.querySelectorAll('.faq-question').forEach(function (button) {
-        button.addEventListener('click', function () {
-          var item = button.parentElement;
-          var answer = item.querySelector('.faq-answer');
-          var open = button.getAttribute('aria-expanded') === 'true';
-
-          document.querySelectorAll('.faq-item').forEach(function (other) {
-            other.classList.remove('open');
-            other.querySelector('.faq-question').setAttribute('aria-expanded', 'false');
-            other.querySelector('.faq-answer').classList.remove('open');
-          });
-
-          if (!open) {
-            item.classList.add('open');
-            button.setAttribute('aria-expanded', 'true');
-            answer.classList.add('open');
-          }
-        });
-      });
-    }());
-  </script>
+  <script type="module" src="./assets/js/app.js"></script>
+  
 </body>
 </html>
