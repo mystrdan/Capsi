@@ -12,39 +12,15 @@
   <meta property="og:title" content="About Capsi — Messages and files, device to device.">
   <meta property="og:description" content="A lightweight utility for direct device-to-device communication.">
   <meta property="og:url" content="https://capsi.win/about.html">
-  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-128.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="./favicon-128.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/imgs/favicon-128.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/imgs/favicon-128.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/imgs/apple-touch-icon.png">
+  <link rel="stylesheet" href="./assets/css/styles.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
 
-  <header class="site-header">
-    <div class="container header-inner">
-      <a class="brand" href="./index.html" aria-label="Capsi home">
-        <img src="./logo.png" alt="Capsi logo" width="28" height="28" class="brand-logo">
-        <span class="brand-text">CAPSI</span>
-      </a>
-      <nav class="site-nav" aria-label="Primary">
-        <a href="./index.html#features">Features</a>
-        <a href="./index.html#how-it-works">How it works</a>
-        <a href="./index.html#download">Download</a>
-      </nav>
-      <div class="header-actions">
-        <a class="btn btn-primary btn-sm js-download" href="#" download>Download Capsi</a>
-        <button class="menu-toggle" id="menu-toggle" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open menu">
-          <span></span><span></span><span></span>
-        </button>
-      </div>
-    </div>
-    <nav class="mobile-menu" id="mobile-menu" aria-label="Mobile" hidden>
-      <a href="./index.html#features">Features</a>
-      <a href="./index.html#how-it-works">How it works</a>
-      <a href="./index.html#download">Download</a>
-      <a class="btn btn-primary js-download" href="#" download>Download Capsi</a>
-    </nav>
-  </header>
+  <div data-component="header"></div>
 
   <main id="main">
     <section class="hero">
@@ -121,25 +97,8 @@
     </section>
   </main>
 
-  <footer class="site-footer">
-    <div class="container footer-inner">
-      <div class="footer-brand">
-        <p class="footer-name">CAPSI</p>
-        <p class="footer-by">by CAPSICOM</p>
-      </div>
-      <nav class="footer-nav" aria-label="Footer">
-        <a href="./index.html#download">Download</a>
-        <a href="./about.html">About</a>
-        <a href="https://x.com/runcapsi" rel="noopener">X</a>
-        <a href="./about.html#contact">Contact</a>
-      </nav>
-    </div>
-    <div class="container footer-base">
-      <p><a href="https://capsi.win">capsi.win</a> · Messages and files, device to device.</p>
-    </div>
-  </footer>
+  <div data-component="footer"></div>
 
-  <script src="./config.js"></script>
-  <script src="./app.js"></script>
+  <script type="module" src="./assets/js/app.js"></script>
 </body>
 </html>
