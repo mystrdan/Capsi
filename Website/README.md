@@ -4,56 +4,39 @@
 
 > Run it. Find the computers. Send.
 
-This folder contains the official static website for **CAPSI** by **CAPSICOM**
-(`https://capsi.win`).
+`Website/` contains the public-facing static website for **CAPSI by CAPSICOM** at `https://capsi.win`.
+
+## Public website
+
+The website is intentionally product-first. It communicates what Capsi is, how it works, its core features, local-first philosophy, current platform, FAQs, and contact information.
+
+Implementation details, repository workflow, release mechanics, and other developer-facing material stay out of the public-facing copy.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `index.html` | Homepage: hero, how it works, features, on-premises, Windows, download CTA |
-| `about.html` | About + contact page |
-| `styles.css` | All website styles (dark Capsi theme, responsive) |
-| `app.js` | Mobile menu + applies the centralized download URL |
-| `config.js` | **Single place to change the download link** (`CAPSI_CONFIG.DOWNLOAD_URL`) |
-| `app-screenshot.png` | **Hero screenshot (image 1)** — full dark-UI collage: main chat window + splash/welcome + broadcast, file transfer, groups, settings, tray menu. Replace this file with the first image you posted. Displayed large in the hero (max 640px) and used as og:image / twitter:image. |
-| `app-live.png` | **Live-app band (image 2)** — real Windows photo of Capsi running (Conversations / Nearby / Files, type-a-message bar). Save the second image you posted under this name; the staged `<section class="shot-band" hidden>` in `index.html` unhides automatically once the file exists. |
-| `logo-solid.png` | Capsi logo variant |
-| `favicon.png` | Favicon |
+| `index.html` | Main product homepage |
+| `about.html` | Product/about and contact page |
+| `styles.css` | Website styling and responsive layout |
+| `app.js` | Download-link resolution and mobile navigation |
+| `config.js` | Central website configuration |
+| `app-screenshot.png` | Capsi application preview |
+| `logo.png`, `logo-solid.png` | Capsi logo assets |
+| `favicon*.png`, `apple-touch-icon.png` | Browser/app icons |
+| `thanks.html` | Contact-form confirmation page |
 
-## Download URL configuration
+## Download links
 
-All **Download Capsi** buttons carry class `js-download` and point at the
-direct GitHub release asset. `app.js` overwrites them at runtime from
-`config.js`, so there is exactly one value to change:
+All download buttons use the `js-download` class.
 
-```js
-// config.js
-const CAPSI_CONFIG = {
-  DOWNLOAD_URL: "https://github.com/mystrdan/Capsi/releases/latest/download/Capsi_1.0.0_x64-setup.exe",
-  ...
-};
-```
+`config.js` contains the fallback release asset and repository information. `app.js` applies the fallback immediately and then attempts to resolve the newest Windows installer from the latest release. If that lookup fails, the configured fallback remains in place.
 
-Flow: `capsi.win` → **Download Capsi** → installer downloads directly.
-No repository/release page in between.
-
-## Auto latest-release resolution
-
-`app.js` keeps the buttons fresh without manual edits:
-
-1. On load it applies `CAPSI_CONFIG.DOWNLOAD_URL` immediately (works offline).
-2. It then calls `GET https://api.github.com/repos/{GITHUB_REPO}/releases/latest`,
-   picks the Windows asset (NSIS `*-setup.exe` → any `.exe` → `.msi`;
-   source archives are never picked), and rewrites every `.js-download` href
-   to that asset's `browser_download_url`.
-
-To retarget (new owner/repo), edit `GITHUB_REPO` in `config.js` only.
-If the API is unreachable or rate-limited, buttons silently keep the fallback.
+The release lookup is an implementation detail and is not presented as product functionality on the public site.
 
 ## Run locally
 
-No build step, no dependencies. Serve statically, e.g.:
+No build step or package installation is required:
 
 ```powershell
 cd Website
@@ -65,6 +48,6 @@ Or open `index.html` directly in a browser.
 
 ## Deploy
 
-Copy the contents of `Website/` to any static host (GitHub Pages, Netlify,
-Vercel, Nginx, IIS, …) serving `index.html` at `/`. All asset paths are
-relative (`./…`) so the site works under `capsi.win` or a sub-path preview.
+Serve the contents of `Website/` as a static site. All asset paths are relative, so the folder can be served from `capsi.win` or another static host.
+
+Keep changes in this folder limited to the website unless a change outside it is explicitly required by the task.
