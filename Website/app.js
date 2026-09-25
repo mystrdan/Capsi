@@ -5,25 +5,20 @@
 
   function applyDownloadUrl(url) {
     var links = document.querySelectorAll("a.js-download");
-    for (var i = 0; i < links.length; i++) {
-      links[i].setAttribute("href", url);
-    }
+    for (var i = 0; i < links.length; i++) links[i].setAttribute("href", url);
   }
 
   function pickWindowsAsset(assets) {
     if (!assets || !assets.length) return null;
     function find(re) {
       for (var i = 0; i < assets.length; i++) {
-        if (re.test(assets[i] && assets[i].name || "")) return assets[i];
+        if (re.test((assets[i] && assets[i].name) || "")) return assets[i];
       }
       return null;
     }
-    // NSIS setup exe first, then any exe, then MSI — never source archives.
     return find(/setup.*\.exe$/i) || find(/\.exe$/i) || find(/\.msi$/i) || null;
   }
 
-  // Auto-resolve the newest Windows asset so Download buttons never go stale
-  // when a new GitHub Release is published. Falls back silently.
   function resolveLatestRelease() {
     try {
       var controller = new AbortController();
@@ -38,34 +33,16 @@
           var asset = pickWindowsAsset(rel && rel.assets);
           if (asset && asset.browser_download_url) applyDownloadUrl(asset.browser_download_url);
         })
-        .catch(function () { /* keep fallback URL */ });
-    } catch (e) { /* keep fallback URL */ }
+        .catch(function () {});
+    } catch (e) {}
   }
 
   applyDownloadUrl(FALLBACK_URL);
   resolveLatestRelease();
-  // Unhide the live-app band the moment app-live.png exists (HEAD check, no
-  // download). Until you save image 2 as Website/app-live.png the section
-  // stays hidden so there is never a broken image icon.
-  (function revealLiveShot() {
-    var band = document.querySelector('.shot-band[hidden]');
-    if (!band) return;
-    var img = band.querySelector('img');
-    if (!img) return;
-    var url = img.getAttribute('src');
-    if (!url) return;
-    function show() { band.removeAttribute('hidden'); band.classList.remove('shot-hidden'); }
-    try {
-      fetch(url, { method: 'HEAD' }).then(function (res) {
-        if (res && res.ok) show();
-        else { img.addEventListener('error', function () {}, { once: true }); }
-      }).catch(function () { /* stays hidden until the file is uploaded */ });
-    } catch (e) { /* stays hidden */ }
-    // Fallback: if the file loads despite HEAD being blocked, reveal it.
-    img.addEventListener('load', show, { once: true });
-  })();
+
   var toggle = document.getElementById("menu-toggle");
   var menu = document.getElementById("mobile-menu");
+
   if (toggle && menu) {
     toggle.addEventListener("click", function () {
       var open = menu.hasAttribute("hidden");
@@ -79,14 +56,15 @@
         toggle.setAttribute("aria-label", "Open menu");
       }
     });
+
     menu.addEventListener("click", function (e) {
       if (e.target && e.target.tagName === "A") {
         menu.setAttribute("hidden", "");
         toggle.setAttribute("aria-expanded", "false");
+        toggle.setAttribute("aria-label", "Open menu");
       }
     });
-    // Safety: if the viewport grows to desktop while the menu is open,
-    // close it so no mobile UI lingers.
+
     window.addEventListener("resize", function () {
       if (window.matchMedia("(min-width: 641px)").matches && !menu.hasAttribute("hidden")) {
         menu.setAttribute("hidden", "");
@@ -95,4 +73,4 @@
       }
     });
   }
-})();
+}());
