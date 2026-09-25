@@ -4,7 +4,7 @@
 
 > Run it. Find the computers. Send.
 
-`Website/` contains the public-facing static website for **CAPSI by CAPSICOM** at `https://capsi.win`.
+`Website/` contains the public-facing static website for **CAPSI** at `https://capsi.win`.
 
 ## Structure
 
