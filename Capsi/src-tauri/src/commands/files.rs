@@ -70,7 +70,7 @@ pub async fn offer_file(
     let envelope =
         capsi_core::protocol::Envelope::new(capsi_core::protocol::Message::FileOffer(offer));
 
-    let stored = StoredMessage {
+    let mut stored = StoredMessage {
         id: envelope.id.clone(),
         outgoing: true,
         sent_at: capsi_core::identity::device::now_secs(),

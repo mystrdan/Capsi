@@ -9,6 +9,7 @@ use capsi_core::identity::{trust::TrustStore, DeviceId, DeviceIdentity};
 use capsi_core::storage::conversation::{
     DeliveryState, MessageKind, MessageStore, StoredMessage, TransferState,
 };
+use tauri::Emitter;
 
 /// List all conversations, most-recently-active first.
 #[tauri::command]
@@ -141,7 +142,7 @@ pub async fn retry_message_deliveries(
         .unwrap_or_default();
 
     let mut delivered = 0usize;
-    for item in pending {
+    for item in &pending {
         let result = async {
             let peer = trust.get(&device_id).ok_or_else(|| "device is not known to Capsi".to_string())?;
             if !peer.is_trusted() { return Err("device is not trusted".to_string()); }

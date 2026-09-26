@@ -223,7 +223,7 @@ async fn handle_incoming_message(
                 return Err("sender is not a workplace member".into());
             }
             workspace
-                .append_message(&message.group_id, &sender, message.body)
+                .append_message(&message.group_id, &sender, message.body.clone())
                 .ok_or_else(|| "sender is not a member of the target group".to_string())?;
             workspace.mark_received_message(&envelope.id);
             store.save(&workspace)?;
@@ -259,10 +259,10 @@ async fn handle_incoming_message(
                 }
                 if !workspace.receive_broadcast(
                     message.broadcast_id.clone(),
-                    message.title,
-                    message.body,
+                    message.title.clone(),
+                    message.body.clone(),
                     peer_id.as_str().to_string(),
-                    message.department_id,
+                    message.department_id.clone(),
                     envelope.sent_at,
                 ) {
                     return Err("invalid workplace broadcast".into());
@@ -279,7 +279,7 @@ async fn handle_incoming_message(
             // containing the matching pending entry is changed.
             super::chat::mark_message_delivered(app, &peer_id, &receipt.message_id).await?;
             super::workplace::mark_workplace_delivery_delivered(
-                app, &peer_id, &receipt.message_id
+                app.clone(), &peer_id, &receipt.message_id
             ).await
         }
         capsi_core::protocol::Message::FileOffer(offer) => {

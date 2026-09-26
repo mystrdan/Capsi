@@ -265,6 +265,23 @@ impl Conversation {
             self.messages.drain(..excess);
         }
     }
+
+    /// Queue an outgoing envelope until the peer confirms persistence.
+    pub fn queue_delivery(&mut self, envelope: crate::protocol::Envelope, next_attempt_at: i64) {
+        if self.pending_deliveries.iter().any(|p| p.envelope.id == envelope.id) {
+            return;
+        }
+        self.pending_deliveries.push(PendingDelivery {
+            envelope,
+            attempts: 0,
+            next_attempt_at,
+            last_error: None,
+        });
+    }
+
+    pub fn remove_delivery(&mut self, message_id: &str) {
+        self.pending_deliveries.retain(|p| p.envelope.id != message_id);
+    }
 }
 
 /// Default history limit per conversation.
@@ -368,23 +385,6 @@ impl MessageStore {
         conversation.push(message);
         conversation.trim(limit);
         self.persist(device_id)
-    }
-
-    /// Queue an outgoing envelope until the peer confirms persistence.
-    pub fn queue_delivery(&mut self, envelope: crate::protocol::Envelope, next_attempt_at: i64) {
-        if self.pending_deliveries.iter().any(|p| p.envelope.id == envelope.id) {
-            return;
-        }
-        self.pending_deliveries.push(PendingDelivery {
-            envelope,
-            attempts: 0,
-            next_attempt_at,
-            last_error: None,
-        });
-    }
-
-    pub fn remove_delivery(&mut self, message_id: &str) {
-        self.pending_deliveries.retain(|p| p.envelope.id != message_id);
     }
 
     /// Mark an outgoing text message delivered and remove its retry entry.

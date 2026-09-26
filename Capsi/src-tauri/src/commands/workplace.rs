@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::State;
+use tauri::Emitter;
 
 use capsi_core::{identity::DeviceIdentity, workplace::{Permission, Role, Workspace, WorkspaceStore}};
 
@@ -206,7 +206,7 @@ pub async fn create_workplace_broadcast<R: tauri::Runtime>(
                 broadcast_id: broadcast.id,
                 title: broadcast.title,
                 body: broadcast.body,
-                department_id: broadcast.department_id,
+                department_id: broadcast.department_id.clone(),
             }
         )
     );
@@ -316,7 +316,7 @@ pub async fn retry_workplace_deliveries<R: tauri::Runtime>(
         .collect();
 
     let mut delivered = 0usize;
-    for pending in due {
+    for pending in &due {
         let peer_id = match capsi_core::identity::DeviceId::from_hex(&pending.recipient_device_id) {
             Ok(id) => id,
             Err(e) => {
