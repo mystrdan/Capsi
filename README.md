@@ -2,167 +2,254 @@
 
 **CAPSI — Messages and files, device to device.**
 
-> Run it. Find the computers. Send.
+> **Run it. Find the computers. Send.**
 
-Capsi by **CAPSICOM** is a lightweight on-premises communication and file-transfer utility. Devices discover
-each other over an available local communication network and exchange messages
-and files directly — including LAN, Wi-Fi, mobile hotspot, and other supported
-network interfaces. No cloud, no accounts, no unnecessary infrastructure.
+Capsi is a lightweight device-to-device communication utility. It is designed to let connected devices discover one another, exchange messages, and transfer files directly over a supported local communication network.
 
-- **Website:** https://capsi.win
-- **Repository:** https://github.com/mystrdan/Capsi
+Capsi is local-first: local communication does not require a Capsi cloud service, account system, or central workplace server.
+
+## Product
+
+- **Messages** — direct device-to-device messaging.
+- **Files** — direct file offers, acceptance, transfer, integrity checks, and delivery handling.
+- **Nearby** — discover other Capsi devices on the connected network.
+- **Trusted devices** — accept, block, rename, or forget peers.
+- **Workplace** — an optional local communication layer for trusted devices, with people, groups, departments, roles, broadcasts, and workplace conversations.
+- **Offline delivery** — pending messages are stored locally and retried when a recipient becomes reachable.
+- **Encrypted transport** — direct peer communication uses the application's signed handshake and encrypted transport.
+
+Capsi is intentionally not a cloud collaboration platform. The workplace layer is also designed to operate directly between trusted devices rather than introducing a central organization server.
+
+## Platforms
+
+The codebase is being developed around one shared application architecture for:
+
+- Windows
+- Android
+- macOS
+- iOS
+
+The frontend is shared across platforms while the Rust/Tauri layer provides native integration. Mobile layouts adapt the same Capsi interface rather than creating a separate mobile product.
+
+**Current release focus:** Windows.
+
+Android support is under active validation. The repository includes an Android build workflow, but a successful CI build or source-level mobile support should not be treated as proof of complete real-device compatibility until the APK has been installed and tested on actual Android hardware.
+
+## Architecture
+
+```text
+Capsi/
+├── frontend/          Shared HTML, CSS and JavaScript interface
+├── src-tauri/         Tauri application shell and native commands
+├── crates/
+│   └── capsi-core/    Platform-independent Capsi core
+└── scripts/            Build helpers
+```
+
+The intended separation is:
+
+```text
+                 CAPSI
+                   │
+          ┌────────┴────────┐
+          │                 │
+      Capsi Core        Shared UI
+        Rust            HTML/CSS/JS
+          │                 │
+   ┌──────┼──────┬──────────┐
+   │      │      │          │
+Windows Android macOS      iOS
+```
+
+Product behavior belongs in the shared core where possible. Platform-specific behavior belongs in the Tauri/native layer. The interface remains a shared product experience with responsive layouts for desktop, tablet, and mobile.
 
 ## Repository layout
 
-| Path | Contents |
+| Path | Purpose |
 |---|---|
-| `Capsi/` | Desktop application (Tauri + frontend) |
-| `Source/` | Brand sources: logos, UI reference, master prompt |
-| `Website/` | Official static website for `capsi.win` (see `Website/README.md`) |
+| `Capsi/` | Main Tauri application |
+| `Capsi/frontend/` | Shared application interface |
+| `Capsi/src-tauri/` | Tauri/Rust application shell and native commands |
+| `Capsi/crates/capsi-core/` | Shared platform-independent core |
+| `Capsi/scripts/` | Local build helpers |
+| `Source/` | Brand and product source material |
+| `Website/` | Static website for `capsi.win` |
 
-## Website quick start
+## Website
+
+The official website is:
+
+**https://capsi.win**
+
+Run the website locally:
 
 ```powershell
 cd Website
 python -m http.server 8080
-# open http://localhost:8080/
 ```
 
-The download buttons point at the latest Windows release asset:
+Then open `http://localhost:8080/`.
 
-```text
-https://github.com/mystrdan/Capsi/releases/latest/download/Capsi_1.0.0_x64-setup.exe
-```
+The website and application intentionally share the same product identity: Capsi, its dark utility-oriented visual language, restrained green accent, terminology, and icon style. The website is the product presentation; the application is the working utility.
 
-The URL lives in exactly one place: `Website/config.js`
-(`CAPSI_CONFIG.DOWNLOAD_URL`), and `Website/app.js` auto-resolves the newest
-Windows asset from the GitHub Releases API at runtime
-(`CAPSI_CONFIG.GITHUB_REPO`).
+## Windows development
 
-## Building the Windows installer
+The Windows build uses Rust, Tauri 2, and the MSVC toolchain.
 
-Requirements: Rust with the MSVC toolchain, the Visual Studio *Desktop
-development with C++* workload (for `rc.exe`, which embeds the icon and version
-metadata into `capsi.exe`), and a Tauri CLI (`cargo install tauri-cli
---version "^2" --locked`, or the npm package `@tauri-apps/cli` which provides a
-`tauri` command). NSIS does **not** need to be installed — the Tauri CLI
-downloads its own copy the first time it bundles.
+For local Windows development:
 
 ```powershell
 cd Capsi
-.\scripts\build-msvc.bat            # debug build for local testing
-.\scripts\build-msvc.bat release    # target\release\capsi.exe (portable)
-.\scripts\build-msvc.bat bundle     # release exe + NSIS installer
+cargo tauri dev
 ```
 
-`bundle` writes the file users actually download:
+For a debug executable:
+
+```powershell
+.\scripts\build-msvc.bat
+```
+
+For a release executable:
+
+```powershell
+.\scripts\build-msvc.bat release
+```
+
+For the Windows installer:
+
+```powershell
+.\scripts\build-msvc.bat bundle
+```
+
+The release installer is generated under:
 
 ```text
-Capsi/target/release/bundle/nsis/Capsi_1.0.0_x64-setup.exe
+Capsi/target/release/bundle/nsis/
 ```
 
-The installer is per-user (`currentUser`): it installs into `%LOCALAPPDATA%\Capsi`,
-adds Start Menu and desktop shortcuts, registers an uninstaller in *Apps &
-features* with publisher **CAPSICOM**, and installs the WebView2 runtime when the
-machine does not have it (`webviewInstallMode: downloadBootstrapper`).
+## Android development
 
-Pushing a `v*` tag runs the same build on GitHub Actions
-(`.github/workflows/release.yml`) and attaches the installer to the release.
+The Android target is generated by Tauri from the shared application source.
 
+Requirements include:
 
+- Java 17
+- Android SDK
+- Android platform/build tools
+- Android NDK
+- Rust Android targets
+- Tauri CLI 2
 
-## Workplace features
+Initialize Android once from the `Capsi` directory:
 
-Capsi is also being extended as a local workplace communication layer, built on
-top of its existing device discovery, trust and encrypted transport.
+```bash
+cargo tauri android init
+```
 
-### Implemented and working
+Build a debug APK:
 
-The following features are implemented in the current feature branch and have
-working code paths/tests where applicable:
+```bash
+cargo tauri android build --debug --apk
+```
 
-- **Device identity** — each installation has its own persistent device identity
-  and fingerprint.
-- **Network discovery** — Capsi advertises and discovers nearby devices over UDP on a supported local/network interface.
-- **Trusted devices** — peers can be accepted, blocked, renamed, or forgotten.
-  Workplace membership requires a trusted device.
-- **Encrypted peer transport** — Capsi uses a signed handshake and encrypted
-  TCP frames for direct device-to-device transport.
-- **Workspaces** — a local workplace can be created with the current device as Owner.
-- **People** — trusted devices can be added to the workplace as members.
-- **Roles & permissions** — Owner, Admin, Manager, and Member permissions are
-  enforced by the workplace commands.
-- **Groups** — groups can be created, members can be added/removed, and groups
-  can be deleted.
-- **Departments** — departments can be created and members can be assigned.
-- **Broadcast model** — authored broadcasts with optional department targeting
-  are represented and permission-checked locally.
-- **Workplace group messaging** — messages are stored locally and sent directly
-  to trusted group members over the encrypted transport.
-- **Workplace conversation UI** — groups can be opened as conversations with
-  message history, sender names, timestamps, and a message composer.
-- **Live incoming messages** — incoming workplace messages update the active
-  conversation through a Tauri event.
-- **Offline delivery queue** — workplace and regular 1-to-1 messages are
-  persisted locally before delivery, so an unavailable recipient does not lose
-  the message.
-- **Automatic retry** — queued deliveries retry in the background when
-  recipients become reachable again.
-- **Application delivery acknowledgements** — a message is marked delivered
-  only after the receiving device has accepted and persisted it.
-- **Idempotent delivery** — received envelope IDs/message IDs are tracked so a
-  retry cannot create duplicate history entries.
-- **Workplace broadcasts** — broadcasts can now fan out directly to all
-  workplace members or a selected department, using the same encrypted delivery
-  queue and acknowledgement path.
-- **Local-first storage** — workplace state and pending deliveries are persisted
-  on-device; no cloud account or central workplace server is required.
-- **Direct workplace synchronization** — workplace membership, groups,
-  departments, broadcasts and workplace message history can synchronize directly
-  between trusted workplace devices over the existing encrypted transport. No
-  workplace server is introduced.
+The repository also contains `.github/workflows/android.yml` for reproducible Android build validation in GitHub Actions.
 
-### Needs review / validation
+### Android blank-screen debugging
 
-The current implementation has not yet been compile-validated in this environment.
-Before calling the branch release-ready, run the Rust/Tauri build and tests, then
-validate Windows-to-Windows and Windows-to-Android behavior with real installations.
+A blank Android WebView should not be treated as a normal application state. The frontend startup path is designed to wait for the Tauri bridge before initializing native functionality and to show a visible startup error when the bridge is unavailable.
 
-The following areas specifically need review or further implementation:
+Real-device validation is still required. In particular, test:
 
-- **File resume/recovery** — interrupted transfers can now resume from the
-  receiver's contiguous chunk prefix. A full arbitrary missing-chunk bitmap is
-  not implemented yet.
-- **Concurrent file transfers** — cancellation is now wired through the
-  protocol, but concurrent-transfer stress testing and frontend progress polish
-  still need review.
-- **Network edge cases** — peer address changes, firewall rules, hotspot
-  isolation, sleeping devices, and reconnect behavior need real-device testing.
-- **Workplace synchronization validation** — the direct peer-to-peer sync path
-  is implemented, but it still needs Windows-to-Windows and Windows-to-Android
-  validation, including offline/reconnect and multiple-administrator changes.
-- **Android runtime validation** — the shared Rust core is designed for Windows
-  and Android and the Tauri shell is mobile-aware, but live Android device
-  validation is still required.
-- **File byte transfer validation** — encrypted offers, acceptance, chunk
-  delivery, integrity verification, completion receipts and contiguous-prefix
-  resume are implemented, but real cross-device stress testing is still
-  required.
+1. cold launch;
+2. launch without an existing Capsi device on the network;
+3. discovery;
+4. accepting a trusted device;
+5. opening a conversation;
+6. sending a message;
+7. receiving a message;
+8. file transfer;
+9. background/foreground transitions;
+10. reconnecting after the network changes.
 
-### Deliberately not part of Capsi
+## Cross-platform interface principles
 
-- **Central workplace administration** — Capsi's current philosophy is local-first
-  and does not introduce a cloud service, organization server, or central
-  account system. A centralized workplace administration service should not be
-  added merely to make synchronization easier.
+Capsi uses one product identity across platforms, but the layout should respect the device.
 
-The workplace layer remains local-first: no cloud service, external server,
-organization account system, or Internet connection is introduced. Devices only
-need a supported communication path to reach one another.
+### Desktop
 
-## Implementation status
+The desktop interface can use the larger navigation/sidebar and conversation workspace.
 
-This branch is being developed incrementally. “Implemented” above means the
-feature has been added to the current source and, where a deterministic test
-exists, covered by tests. Cross-device behavior should still be validated with
-two real Capsi installations before being treated as release-ready.
+### Mobile
+
+The mobile interface uses touch-sized controls, adaptive navigation, safe-area handling, and full-screen conversation views rather than shrinking the desktop layout into a phone-sized viewport.
+
+### Tablet
+
+Tablet layouts should sit between the desktop and phone experiences, using the same components and visual system.
+
+The goal is **one Capsi, adapted to the device**, not four unrelated applications.
+
+## Current implementation status
+
+### Implemented in source
+
+- Device identity and fingerprinting.
+- Local network discovery.
+- Trusted-device management.
+- Signed peer handshake.
+- Encrypted direct transport.
+- One-to-one messaging.
+- Local conversation history.
+- Direct file-transfer protocol.
+- File integrity verification.
+- Transfer cancellation and contiguous-prefix resume support.
+- Offline delivery queue.
+- Automatic delivery retry.
+- Delivery acknowledgements.
+- Idempotent message delivery.
+- Workplace creation and local membership model.
+- Workplace people, roles, permissions, groups, and departments.
+- Workplace broadcasts.
+- Workplace conversations.
+- Direct workplace synchronization between trusted devices.
+- Shared responsive frontend.
+- Mobile startup/bridge handling.
+- Android CI build path.
+
+### Still requires real-device validation
+
+Source implementation is not the same as production validation. The following must be tested with actual installations:
+
+- Windows ↔ Windows communication.
+- Windows ↔ Android communication.
+- Android ↔ Android communication.
+- macOS and iOS compatibility.
+- Network changes and reconnects.
+- Hotspot and Wi-Fi isolation behavior.
+- Firewall behavior.
+- Sleeping/waking devices.
+- Large and concurrent file transfers.
+- Interrupted transfer recovery.
+- Workplace synchronization conflicts.
+- Mobile lifecycle/background behavior.
+- Performance and battery behavior on mobile.
+
+## What Capsi does not introduce
+
+Capsi does not require a central cloud workspace for its local communication model.
+
+The project should not add a cloud account system, organization server, or centralized workplace administration layer merely to make peer-to-peer synchronization easier. Such additions would change the product's local-first architecture and philosophy.
+
+## Development principles
+
+1. **Keep it useful.** Avoid features that exist only to make the product look bigger.
+2. **Keep it local-first.** Do not introduce cloud infrastructure where direct communication is sufficient.
+3. **Keep the interface consistent.** Website and application should clearly belong to the same product.
+4. **Share the core.** Platform differences should live at the native boundary whenever possible.
+5. **Adapt the UI, not the identity.** Desktop, tablet, and mobile can have different layouts without becoming different products.
+6. **Verify before claiming.** Source implementation, CI success, and real-device behavior are separate things.
+7. **Do not invent capabilities.** Documentation should describe what the current code actually implements or clearly mark what still needs validation.
+
+## License
+
+See the repository license and individual project files for licensing information.
