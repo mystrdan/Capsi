@@ -38,6 +38,7 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
             crate::commands::app::open_website,
             crate::commands::device::get_device_info,
             crate::commands::device::set_device_name,
+            crate::commands::device::open_data_folder,
             crate::commands::device::export_device_id,
             crate::commands::device::reset_device,
             crate::commands::trust::list_peers,
