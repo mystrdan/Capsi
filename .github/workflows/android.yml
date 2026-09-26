@@ -1,0 +1,56 @@
+name: Capsi Android build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "Capsi/frontend/**"
+      - "Capsi/src-tauri/**"
+      - "Capsi/crates/**"
+      - "Capsi/Cargo.toml"
+      - "Capsi/Cargo.lock"
+      - ".github/workflows/android.yml"
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Capsi
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Initialize Android project
+        run: cargo tauri android init
+
+      - name: Build Android debug APK
+        run: cargo tauri android build --debug --apk
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Capsi-Android-debug
+          path: Capsi/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
