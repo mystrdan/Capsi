@@ -1,5 +1,5 @@
 export const FAQ = [
-  ["What is Capsi?", "Capsi by CAPSICOM is a lightweight Windows utility for sending messages and files directly between computers on a connected local network."],
+  ["What is Capsi?", "Capsi is a lightweight Windows utility for sending messages and files directly between computers on a connected local network."],
   ["Does Capsi require the internet?", "No internet connection is required for local device-to-device communication."],
   ["Do I need an account?", "No. There is no signup or login."],
   ["How do devices find each other?", "Capsi discovers other Capsi devices on the connected local network."],
