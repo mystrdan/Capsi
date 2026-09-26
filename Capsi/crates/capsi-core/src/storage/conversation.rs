@@ -89,8 +89,16 @@ impl StoredFile {
     }
 }
 
-/// One entry in a conversation.
+/// A text envelope waiting for an application-level delivery receipt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingDelivery {
+    pub envelope: crate::protocol::Envelope,
+    pub attempts: u32,
+    pub next_attempt_at: i64,
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredMessage {
     /// Message id (the same value as the envelope id, so receipts can refer to it).
     pub id: String,
@@ -175,6 +183,10 @@ pub struct Conversation {
     pub unread: u32,
     /// Unix seconds of the newest activity.
     pub updated_at: i64,
+    /// Durable outgoing deliveries. Entries are removed only after a
+    /// DeliveryReceipt is received from the peer.
+    #[serde(default)]
+    pub pending_deliveries: Vec<PendingDelivery>,
 }
 
 impl Conversation {
@@ -186,6 +198,7 @@ impl Conversation {
             messages: Vec::new(),
             unread: 0,
             updated_at: now_secs(),
+            pending_deliveries: Vec::new(),
         }
     }
 
@@ -251,6 +264,23 @@ impl Conversation {
             let excess = self.messages.len() - limit;
             self.messages.drain(..excess);
         }
+    }
+
+    /// Queue an outgoing envelope until the peer confirms persistence.
+    pub fn queue_delivery(&mut self, envelope: crate::protocol::Envelope, next_attempt_at: i64) {
+        if self.pending_deliveries.iter().any(|p| p.envelope.id == envelope.id) {
+            return;
+        }
+        self.pending_deliveries.push(PendingDelivery {
+            envelope,
+            attempts: 0,
+            next_attempt_at,
+            last_error: None,
+        });
+    }
+
+    pub fn remove_delivery(&mut self, message_id: &str) {
+        self.pending_deliveries.retain(|p| p.envelope.id != message_id);
     }
 }
 
@@ -333,6 +363,16 @@ impl MessageStore {
         self.conversations.get(device_id)
     }
 
+    /// Internal mutable access used by the Tauri retry worker.
+    pub fn conversations_mut_for_internal(&mut self, device_id: &DeviceId) -> Option<&mut Conversation> {
+        self.conversations.get_mut(device_id)
+    }
+
+    /// Persist one conversation after an internal queue mutation.
+    pub fn persist_for_internal(&self, device_id: &DeviceId) -> Result<()> {
+        self.persist(device_id)
+    }
+
     /// Add a message and write the conversation back to disk.
     pub fn append(
         &mut self,
@@ -345,6 +385,29 @@ impl MessageStore {
         conversation.push(message);
         conversation.trim(limit);
         self.persist(device_id)
+    }
+
+    /// Mark an outgoing text message delivered and remove its retry entry.
+    pub fn mark_delivery_delivered(&mut self, device_id: &DeviceId, message_id: &str) -> Result<bool> {
+        let updated = match self.conversations.get_mut(device_id) {
+            Some(conversation) => {
+                let mut found = false;
+                for message in &mut conversation.messages {
+                    if message.id == message_id && message.outgoing && message.kind == MessageKind::Text {
+                        message.state = DeliveryState::Delivered;
+                        found = true;
+                        break;
+                    }
+                }
+                conversation.remove_delivery(message_id);
+                found
+            }
+            None => false,
+        };
+        if updated {
+            self.persist(device_id)?;
+        }
+        Ok(updated)
     }
 
     /// Update a transfer's state and persist.

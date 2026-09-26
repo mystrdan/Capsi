@@ -3,14 +3,14 @@
 // Offer a file, accept/decline incoming offers, and track transfer progress.
 
 use super::{conversation_name, setup_app_data};
-use capsi_core::identity::{trust::TrustStore, DeviceId};
+use capsi_core::identity::{trust::TrustStore, DeviceId, DeviceIdentity};
 use capsi_core::storage::conversation::{
     DeliveryState, MessageKind, MessageStore, StoredFile, StoredMessage, TransferState,
 };
 use capsi_core::util::{digest_hex, human_size, new_id, safe_file_name};
 use capsi_core::TRANSFER_CHUNK_SIZE;
 
-/// Largest file Capsi will offer, until the chunked sender lands.
+/// Largest file Capsi will offer in the current release path.
 const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
 
 /// Offer a file to a trusted peer.
@@ -41,15 +41,11 @@ pub async fn offer_file(
 
     let metadata = std::fs::metadata(raw_path).map_err(|e| e.to_string())?;
     let file_size = metadata.len();
-    if file_size == 0 {
-        return Err("cannot send an empty file".into());
-    }
     if file_size > MAX_FILE_BYTES {
         return Err("files larger than 100 MB are not supported yet".into());
     }
 
-    let bytes = std::fs::read(raw_path).map_err(|e| e.to_string())?;
-    let digest = digest_hex(&bytes);
+    let digest = capsi_core::util::digest_file(raw_path).map_err(|e| e.to_string())?;
 
     let file_name = safe_file_name(
         raw_path
@@ -74,7 +70,7 @@ pub async fn offer_file(
     let envelope =
         capsi_core::protocol::Envelope::new(capsi_core::protocol::Message::FileOffer(offer));
 
-    let stored = StoredMessage {
+    let mut stored = StoredMessage {
         id: envelope.id.clone(),
         outgoing: true,
         sent_at: capsi_core::identity::device::now_secs(),
@@ -91,8 +87,31 @@ pub async fn offer_file(
         state: DeliveryState::Queued,
     };
 
+    let peer = trust
+        .get(&id)
+        .ok_or_else(|| "peer is not known to Capsi".to_string())?;
+    let address = peer
+        .last_address
+        .as_deref()
+        .ok_or_else(|| "peer address is not currently known".to_string())?;
+    let mut socket = address
+        .parse::<std::net::SocketAddr>()
+        .map_err(|e| format!("invalid peer address: {e}"))?;
+    socket.set_port(45892);
+
+    let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+    capsi_core::transport::connect_and_send(
+        &socket.to_string(),
+        &identity,
+        &id,
+        &envelope,
+    )
+    .await
+    .map_err(|e| format!("file offer delivery failed: {e}"))?;
+
     let peer_name = conversation_name(&data_dir, &id);
     let mut store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
+    stored.state = DeliveryState::Sent;
     store
         .append(&id, &peer_name, stored)
         .map_err(|e| e.to_string())?;
@@ -113,22 +132,86 @@ pub async fn accept_file(
     let data_dir = setup_app_data(&app)?;
     let id = DeviceId::from_hex(&device_id).map_err(|e| e.to_string())?;
 
-    let dest = match save_to {
-        Some(dir) => dir,
-        None => std::env::temp_dir()
-            .join("Capsi")
-            .join("received")
-            .to_string_lossy()
-            .to_string(),
+    let dest_dir = match save_to {
+        Some(dir) => std::path::PathBuf::from(dir),
+        None => std::env::temp_dir().join("Capsi").join("received"),
     };
-    std::fs::create_dir_all(&dest).map_err(|e| format!("cannot create {dest}: {e}"))?;
+    std::fs::create_dir_all(&dest_dir)
+        .map_err(|e| format!("cannot create {}: {e}", dest_dir.display()))?;
 
     let mut store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
+    let conversation = store
+        .get(&id)
+        .ok_or_else(|| "file offer was not found".to_string())?;
+    let file = conversation
+        .find_transfer(&transfer_id)
+        .ok_or_else(|| "file offer was not found".to_string())?;
+    let safe_name = safe_file_name(&file.file_name);
+    let mut target = file.local_path.as_ref()
+        .filter(|p| std::path::Path::new(p).exists())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| dest_dir.join(&safe_name));
+    // A fresh transfer must never overwrite an unrelated local file. A
+    // previously accepted transfer reuses its recorded destination so it can
+    // resume from the existing prefix after interruption.
+    if file.local_path.is_none() && target.exists() {
+        let stem = std::path::Path::new(&safe_name)
+            .file_stem().and_then(|s| s.to_str()).unwrap_or("capsi-file");
+        let ext = std::path::Path::new(&safe_name)
+            .extension().and_then(|s| s.to_str()).map(|s| format!(".{s}")).unwrap_or_default();
+        for n in 1..10_000u32 {
+            let candidate = dest_dir.join(format!("{stem} ({n}){ext}"));
+            if !candidate.exists() {
+                target = candidate;
+                break;
+            }
+        }
+    }
+    let resume_chunk = std::fs::metadata(&target)
+        .ok()
+        .map(|m| std::cmp::min(m.len() / capsi_core::TRANSFER_CHUNK_SIZE as u64, file.size / capsi_core::TRANSFER_CHUNK_SIZE as u64 + 1))
+        .unwrap_or(0);
+    let resume_len = std::cmp::min(
+        resume_chunk.saturating_mul(capsi_core::TRANSFER_CHUNK_SIZE as u64),
+        file.size,
+    );
+    if let Ok(handle) = std::fs::OpenOptions::new().write(true).create(true).open(&target) {
+        let _ = handle.set_len(resume_len);
+    }
+    let target_string = target.to_string_lossy().to_string();
+    let expected_peer = id.clone();
+
     store
-        .update_transfer(&id, &transfer_id, TransferState::Transferring, Some(dest))
+        .update_transfer(
+            &id,
+            &transfer_id,
+            TransferState::Transferring,
+            Some(target_string),
+        )
         .map_err(|e| e.to_string())?;
 
-    Ok(transfer_id)
+    let trust = TrustStore::load(&data_dir).map_err(|e| e.to_string())?;
+    let peer = trust.get(&expected_peer).ok_or_else(|| "peer is not known".to_string())?;
+    let address = peer.last_address.as_deref().ok_or_else(|| "peer address is not currently known".to_string())?;
+    let mut socket = address.parse::<std::net::SocketAddr>().map_err(|e| format!("invalid peer address: {e}"))?;
+    socket.set_port(45892);
+    let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+    let receipt = capsi_core::protocol::Envelope::new(
+        capsi_core::protocol::Message::FileReceipt {
+            transfer_id,
+            state: capsi_core::protocol::FileReceipt::Accepted { next_chunk: resume_chunk },
+        },
+    );
+    capsi_core::transport::connect_and_send(
+        &socket.to_string(),
+        &identity,
+        &expected_peer,
+        &receipt,
+    )
+    .await
+    .map_err(|e| format!("could not notify sender: {e}"))?;
+
+    Ok(receipt.id)
 }
 
 /// Decline an incoming file offer from a peer.
@@ -146,6 +229,62 @@ pub async fn decline_file(
         .update_transfer(&id, &transfer_id, TransferState::Declined, None)
         .map_err(|e| e.to_string())?;
 
+    let trust = TrustStore::load(&data_dir).map_err(|e| e.to_string())?;
+    if let Some(peer) = trust.get(&id) {
+        if let Some(address) = peer.last_address.as_deref() {
+            let mut socket = address.parse::<std::net::SocketAddr>()
+                .map_err(|e| format!("invalid peer address: {e}"))?;
+            socket.set_port(45892);
+            let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+            let receipt = capsi_core::protocol::Envelope::new(
+                capsi_core::protocol::Message::FileReceipt {
+                    transfer_id,
+                    state: capsi_core::protocol::FileReceipt::Declined,
+                },
+            );
+            let _ = capsi_core::transport::connect_and_send(
+                &socket.to_string(), &identity, &id, &receipt
+            ).await;
+        }
+    }
+
+    Ok(())
+}
+
+/// Cancel a file transfer and notify the peer when its current address is known.
+#[tauri::command]
+pub async fn cancel_file(
+    app: tauri::AppHandle,
+    device_id: String,
+    transfer_id: String,
+) -> Result<(), String> {
+    let data_dir = setup_app_data(&app)?;
+    let id = DeviceId::from_hex(&device_id).map_err(|e| e.to_string())?;
+    let mut store = MessageStore::load(&data_dir).map_err(|e| e.to_string())?;
+    let updated = store.update_transfer(
+        &id, &transfer_id, TransferState::Cancelled, None
+    ).map_err(|e| e.to_string())?;
+    if !updated {
+        return Err("file transfer was not found".into());
+    }
+    let trust = TrustStore::load(&data_dir).map_err(|e| e.to_string())?;
+    if let Some(peer) = trust.get(&id) {
+        if let Some(address) = peer.last_address.as_deref() {
+            let mut socket = address.parse::<std::net::SocketAddr>()
+                .map_err(|e| format!("invalid peer address: {e}"))?;
+            socket.set_port(45892);
+            let identity = DeviceIdentity::load_or_create(&data_dir).map_err(|e| e.to_string())?;
+            let receipt = capsi_core::protocol::Envelope::new(
+                capsi_core::protocol::Message::FileReceipt {
+                    transfer_id,
+                    state: capsi_core::protocol::FileReceipt::Cancelled,
+                },
+            );
+            let _ = capsi_core::transport::connect_and_send(
+                &socket.to_string(), &identity, &id, &receipt
+            ).await;
+        }
+    }
     Ok(())
 }
 

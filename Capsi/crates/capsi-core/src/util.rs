@@ -31,6 +31,22 @@ pub fn digest_hex(bytes: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// Hash a file incrementally without loading the entire file into memory.
+pub fn digest_file(path: &std::path::Path) -> Result<String> {
+    use std::io::Read;
+    use blake2::digest::consts::U32;
+    use blake2::{Blake2b, Digest};
+    let mut input = std::fs::File::open(path)?;
+    let mut hasher = Blake2b::<U32>::new();
+    let mut buffer = [0u8; 128 * 1024];
+    loop {
+        let count = input.read(&mut buffer)?;
+        if count == 0 { break; }
+        hasher.update(&buffer[..count]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
 /// True when `ip` is an address a Capsi beacon may legitimately come from.
 ///
 /// Capsi is a local-network app, so the threat to defend against is a beacon that

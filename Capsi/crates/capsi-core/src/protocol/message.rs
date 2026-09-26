@@ -54,7 +54,7 @@ pub struct FileOffer {
 #[serde(rename_all = "snake_case")]
 pub enum FileReceipt {
     /// The peer accepted and is ready for chunks.
-    Accepted,
+    Accepted { next_chunk: u64 },
     /// The peer said no (or has no room for it).
     Declined,
     /// Every chunk arrived and the digest matched.
@@ -71,6 +71,56 @@ pub struct Typing {
     pub active: bool,
 }
 
+/// A text message addressed to a workplace group.
+///
+/// The group id is a routing/authorization identifier, not a server-side
+/// destination. The eventual transport sends this payload directly to each
+/// eligible trusted device using Capsi's existing encrypted peer sessions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkplaceTextMessage {
+    pub group_id: String,
+    pub body: String,
+}
+
+/// A synchronized workplace state sent directly between trusted devices.
+/// No server is involved; the actor is checked against the receiver's current
+/// local workplace permissions before the state is applied.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkplaceSyncMessage {
+    pub actor_device_id: String,
+    pub state: crate::workplace::WorkspaceState,
+}
+
+/// A workplace broadcast sent directly to eligible workplace members.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkplaceBroadcastMessage {
+    pub broadcast_id: String,
+    pub title: String,
+    pub body: String,
+    pub department_id: Option<String>,
+}
+
+/// Application-level acknowledgement for a previously received message.
+///
+/// Transport success only proves that the encrypted frame reached the peer's
+/// socket. This receipt is emitted after the peer has accepted and persisted
+/// the message, allowing senders to distinguish "sent" from "delivered".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeliveryReceipt {
+    pub message_id: String,
+}
+
+impl WorkplaceTextMessage {
+    pub fn new(group_id: &str, body: &str) -> Result<Self> {
+        let group_id = group_id.trim();
+        if group_id.is_empty() {
+            return Err(CapsiError::Invalid("workplace group id cannot be empty".into()));
+        }
+        let text = TextMessage::new(body)?;
+        Ok(Self { group_id: group_id.to_string(), body: text.body })
+    }
+}
+
 /// The message bodies.
 ///
 /// `#[serde(tag = "kind")]` keeps the JSON self-describing, which makes it
@@ -83,6 +133,14 @@ pub enum Message {
     Text(TextMessage),
     /// A file is on offer.
     FileOffer(FileOffer),
+    /// A text message addressed to a workplace group.
+    WorkplaceText(WorkplaceTextMessage),
+    /// A synchronized workplace state.
+    WorkplaceSync(WorkplaceSyncMessage),
+    /// A workplace broadcast delivered to eligible members.
+    WorkplaceBroadcast(WorkplaceBroadcastMessage),
+    /// Application-level delivery acknowledgement for a text/workplace message.
+    DeliveryReceipt(DeliveryReceipt),
     /// A response to [`Message::FileOffer`].
     FileReceipt {
         /// Which transfer this is about.
@@ -113,6 +171,10 @@ impl Message {
         match self {
             Self::Text(_) => "text",
             Self::FileOffer(_) => "file_offer",
+            Self::WorkplaceText(_) => "workplace_text",
+            Self::WorkplaceSync(_) => "workplace_sync",
+            Self::WorkplaceBroadcast(_) => "workplace_broadcast",
+            Self::DeliveryReceipt(_) => "delivery_receipt",
             Self::FileReceipt { .. } => "file_receipt",
             Self::FileChunk { .. } => "file_chunk",
             Self::Typing(_) => "typing",
@@ -125,7 +187,7 @@ impl Message {
     /// Typing indicators and chunk traffic are transient: they drive the UI while
     /// they fly, but storing every chunk would bloat the message log.
     pub fn is_conversation_item(&self) -> bool {
-        matches!(self, Self::Text(_) | Self::FileOffer(_))
+        matches!(self, Self::Text(_) | Self::FileOffer(_) | Self::WorkplaceText(_))
     }
 }
 
@@ -248,7 +310,7 @@ mod tests {
     #[test]
     fn a_receipt_round_trips() {
         for state in [
-            FileReceipt::Accepted,
+            FileReceipt::Accepted { next_chunk: 0 },
             FileReceipt::Declined,
             FileReceipt::Completed,
             FileReceipt::Failed,
@@ -264,6 +326,45 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn a_workplace_sync_round_trips() {
+        let workspace = crate::workplace::Workspace::new("Office", "owner");
+        let message = WorkplaceSyncMessage {
+            actor_device_id: "owner".into(),
+            state: workspace.network_state(),
+        };
+        let envelope = Envelope::new(Message::WorkplaceSync(message.clone()));
+        let parsed = Envelope::from_json(&envelope.to_json().unwrap()).unwrap();
+        assert_eq!(parsed.message, Message::WorkplaceSync(message));
+    }
+
+    #[test]
+    fn a_workplace_broadcast_round_trips() {
+        let b = WorkplaceBroadcastMessage {
+            broadcast_id: "b-1".into(),
+            title: "Notice".into(),
+            body: "Hello team".into(),
+            department_id: None,
+        };
+        let envelope = Envelope::new(Message::WorkplaceBroadcast(b.clone()));
+        let parsed = Envelope::from_json(&envelope.to_json().unwrap()).unwrap();
+        assert_eq!(parsed.message, Message::WorkplaceBroadcast(b));
+    }
+
+    #[test]
+    fn a_delivery_receipt_round_trips() {
+        let receipt = DeliveryReceipt { message_id: "m-123".into() };
+        let envelope = Envelope::new(Message::DeliveryReceipt(receipt.clone()));
+        let parsed = Envelope::from_json(&envelope.to_json().unwrap()).unwrap();
+        assert_eq!(parsed.message, Message::DeliveryReceipt(receipt));
+        assert_eq!(parsed.message.kind(), "delivery_receipt");
+    }
+
+    #[test]
+    fn delivery_receipts_are_not_conversation_items() {
+        assert!(!Message::DeliveryReceipt(DeliveryReceipt { message_id: "m".into() }).is_conversation_item());
+    }
+
     fn an_unknown_protocol_version_is_refused() {
         let mut envelope = Envelope::new(Message::Goodbye);
         envelope.version = "capsi/99".into();
@@ -293,6 +394,7 @@ mod tests {
         .is_conversation_item());
         assert!(!Message::Typing(Typing { active: true }).is_conversation_item());
         assert!(!Message::Goodbye.is_conversation_item());
+        assert!(Message::WorkplaceText(WorkplaceTextMessage::new("g", "ok").unwrap()).is_conversation_item());
         assert!(!Message::FileChunk {
             transfer_id: "t".into(),
             index: 0,
@@ -300,6 +402,22 @@ mod tests {
             data: String::new(),
         }
         .is_conversation_item());
+    }
+
+    #[test]
+    fn a_workplace_text_round_trips_with_group_id() {
+        let message = WorkplaceTextMessage::new("group-1", "hello team").unwrap();
+        let envelope = Envelope::new(Message::WorkplaceText(message.clone()));
+        let parsed = Envelope::from_json(&envelope.to_json().unwrap()).unwrap();
+        assert_eq!(parsed.message, Message::WorkplaceText(message));
+        assert_eq!(parsed.message.kind(), "workplace_text");
+    }
+
+    #[test]
+    fn workplace_text_reuses_normal_message_validation() {
+        assert!(WorkplaceTextMessage::new("", "hello").is_err());
+        assert!(WorkplaceTextMessage::new("group-1", "   ").is_err());
+        assert!(WorkplaceTextMessage::new("group-1", &"x".repeat(MAX_TEXT_MESSAGE_BYTES + 1)).is_err());
     }
 
     #[test]

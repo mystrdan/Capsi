@@ -1,14 +1,12 @@
 // Capsi - Tauri shell entry point (desktop + mobile).
 //
-// Thin layer over `capsi_core`: boots the runtime, wires commands into JS,
+// Thin layer over capsi_core: boots the runtime, wires commands into JS,
 // and - on desktop only - keeps a system tray alive while minimised.
-// Android/iOS have no tray; the same core + frontend run there unchanged.
 
 pub mod commands;
 
 use tauri::Manager;
 
-/// Shared builder: plugins, bootstrap thread, commands. Desktop adds a tray.
 fn build_app() -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
@@ -55,13 +53,25 @@ fn build_app() -> tauri::Builder<tauri::Wry> {
             crate::commands::files::offer_file,
             crate::commands::files::accept_file,
             crate::commands::files::decline_file,
+            crate::commands::files::cancel_file,
             crate::commands::files::list_transfers,
             crate::commands::settings::get_settings,
             crate::commands::settings::save_settings,
+            crate::commands::workplace::get_workplace,
+            crate::commands::workplace::create_workplace,
+            crate::commands::workplace::add_workplace_member,
+            crate::commands::workplace::remove_workplace_member,
+            crate::commands::workplace::create_workplace_department,
+            crate::commands::workplace::assign_workplace_department,
+            crate::commands::workplace::create_workplace_group,
+            crate::commands::workplace::add_workplace_group_member,
+            crate::commands::workplace::remove_workplace_group_member,
+            crate::commands::workplace::delete_workplace_group,
+            crate::commands::workplace::create_workplace_broadcast,
+            crate::commands::workplace::send_workplace_group_message,
         ])
 }
 
-/// Run Capsi on desktop and mobile from one entry point.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     build_app()
@@ -69,14 +79,12 @@ pub fn run() {
         .expect("capsi failed to start");
 }
 
-/// Tray icon + menu. Desktop only: phones have no tray.
 #[cfg(desktop)]
 pub fn setup_tray(app: &tauri::AppHandle) -> Result<(), String> {
     use tauri::{
         menu::{Menu, MenuItem},
         tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     };
-    // Load the tray icon PNG that was generated from the logo.
     let icon_bytes = include_bytes!("../icons/icon.png");
     let icon = tauri::image::Image::from_bytes(icon_bytes)
         .map_err(|e| format!("cannot load tray icon: {e}"))?;
@@ -99,9 +107,7 @@ pub fn setup_tray(app: &tauri::AppHandle) -> Result<(), String> {
                     let _ = window.set_focus();
                 }
             }
-            "quit" => {
-                app.exit(0);
-            }
+            "quit" => app.exit(0),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
