@@ -1,20 +1,9 @@
 // Capsi - Tauri command: device operations.
 //
-// Identity inspection, export and reset. All of these are read-only except
-// reset, which requires the user to confirm in the UI first.
+// Identity inspection, export, reset and opening the local data directory.
 
 use super::{IdentityInfo, setup_app_data, load_device_name, save_device_name};
 use capsi_core::identity::DeviceIdentity;
-
-/// The local device fingerprint and exchange key as the UI needs it.
-#[derive(serde::Serialize)]
-pub struct DeviceSnapshot {
-    pub device_id: String,
-    pub fingerprint: String,
-    pub device_name: String,
-    pub exchange_key: String,
-    pub data_dir: String,
-}
 
 /// Return the current device identity summary.
 #[tauri::command]
@@ -65,45 +54,54 @@ pub async fn set_device_name(
     Ok(())
 }
 
+/// Open Capsi's local data directory using the operating system's handler.
+/// On mobile, there may be no user-visible file manager for the app sandbox,
+/// so the command reports that the action is unavailable instead of failing
+/// silently.
+#[tauri::command]
+pub async fn open_data_folder(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        let data_dir = setup_app_data(&app)?;
+        tauri_plugin_opener::OpenerExt::opener(&app)
+            .open_path(data_dir.to_string_lossy().as_ref(), None::<&str>)
+            .map_err(|e| format!("cannot open data folder: {e}"))?;
+        Ok(())
+    }
+
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        Err("Opening the app data folder is not available on this platform".into())
+    }
+}
+
 /// Export the device id as a short, copyable string.
 #[tauri::command]
 pub async fn export_device_id(app: tauri::AppHandle) -> Result<String, String> {
     let data_dir = setup_app_data(&app)?;
     let identity = DeviceIdentity::load_or_create(&data_dir)
         .map_err(|e| e.to_string())?;
-    // The device id itself is the Ed25519 public key, hex-encoded.
     Ok(identity.id().as_str().to_string())
 }
 
 /// Wipe this device's identity and create a brand-new one.
-///
-/// There is no going back from this: old conversations cannot be decrypted
-/// anymore. The UI must confirm before calling.
 #[tauri::command]
 pub async fn reset_device(app: tauri::AppHandle) -> Result<IdentityInfo, String> {
     let data_dir = setup_app_data(&app)?;
-
-    // Remove the old identity file so `load_or_create` generates a new one.
     let id_path = capsi_core::identity::device::identity_path(&data_dir);
     let _ = std::fs::remove_file(&id_path);
-
-    // Blow away trust state too: a new device is a stranger to all old peers.
     let trust_path = capsi_core::identity::trust::TrustStore::path(&data_dir);
     let _ = std::fs::remove_file(&trust_path);
-
-    // Remove per-conversation history so the user is not left with orphaned files.
     let conv_dir = data_dir.join("conversations");
     if conv_dir.exists() {
         let _ = std::fs::remove_dir_all(&conv_dir);
     }
-
     let identity = DeviceIdentity::load_or_create(&data_dir)
         .map_err(|e| e.to_string())?;
     let trust = capsi_core::identity::trust::TrustStore::load(&data_dir)
         .map_err(|e| e.to_string())?;
-
     save_device_name(&data_dir, &format!("Capsi-{}", identity.id().short()))?;
-
     Ok(IdentityInfo {
         device_id: identity.id().clone(),
         fingerprint: identity.fingerprint().to_string(),
@@ -123,12 +121,8 @@ pub async fn export_handshake(app: tauri::AppHandle) -> Result<HandshakeExport, 
     let data_dir = setup_app_data(&app)?;
     let identity = DeviceIdentity::load_or_create(&data_dir)
         .map_err(|e| e.to_string())?;
-
     let handshake = capsi_core::crypto::session::Handshake::create(&identity)
         .map_err(|e| e.to_string())?;
-
-    // `signed_bytes` only borrows the handshake, so it has to be computed before
-    // the `String` fields are moved out into the response.
     let signed_bytes_hex = handshake
         .signed_bytes()
         .map_err(|e| e.to_string())?
@@ -136,7 +130,6 @@ pub async fn export_handshake(app: tauri::AppHandle) -> Result<HandshakeExport, 
         .map(|b| format!("{b:02x}"))
         .collect::<Vec<_>>()
         .join("");
-
     Ok(HandshakeExport {
         device_id: identity.id().as_str().to_string(),
         nonce: handshake.nonce,
