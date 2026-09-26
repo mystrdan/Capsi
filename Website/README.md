@@ -4,56 +4,31 @@
 
 > Run it. Find the computers. Send.
 
-This folder contains the official static website for **CAPSI** by **CAPSICOM**
-(`https://capsi.win`).
+`Website/` contains the public-facing static website for **CAPSI** at `https://capsi.win`.
 
-## Files
+## Structure
 
-| File | Purpose |
-|---|---|
-| `index.html` | Homepage: hero, how it works, features, on-premises, Windows, download CTA |
-| `about.html` | About + contact page |
-| `styles.css` | All website styles (dark Capsi theme, responsive) |
-| `app.js` | Mobile menu + applies the centralized download URL |
-| `config.js` | **Single place to change the download link** (`CAPSI_CONFIG.DOWNLOAD_URL`) |
-| `app-screenshot.png` | **Hero screenshot (image 1)** — full dark-UI collage: main chat window + splash/welcome + broadcast, file transfer, groups, settings, tray menu. Replace this file with the first image you posted. Displayed large in the hero (max 640px) and used as og:image / twitter:image. |
-| `app-live.png` | **Live-app band (image 2)** — real Windows photo of Capsi running (Conversations / Nearby / Files, type-a-message bar). Save the second image you posted under this name; the staged `<section class="shot-band" hidden>` in `index.html` unhides automatically once the file exists. |
-| `logo-solid.png` | Capsi logo variant |
-| `favicon.png` | Favicon |
+- `index.html` — main product homepage
+- `about.html` — product/about and contact page
+- `thanks.html` — contact-form confirmation page
+- `assets/css/` — stylesheet entry point
+- `assets/js/` — website runtime modules
+- `assets/js/components/` — reusable header, footer, navigation, download and FAQ components
+- `assets/js/data/` — structured website data
+- `assets/icons/` — curated SVG interface icons
+- `assets/imgs/` — website image and brand assets
 
-## Download URL configuration
+The website remains plain static HTML, CSS and JavaScript. No framework or package installation is required.
 
-All **Download Capsi** buttons carry class `js-download` and point at the
-direct GitHub release asset. `app.js` overwrites them at runtime from
-`config.js`, so there is exactly one value to change:
+## Public website boundary
 
-```js
-// config.js
-const CAPSI_CONFIG = {
-  DOWNLOAD_URL: "https://github.com/mystrdan/Capsi/releases/latest/download/Capsi_1.0.0_x64-setup.exe",
-  ...
-};
-```
+The public site is product-first. It explains what Capsi is, how it works, its documented capabilities, local-first behavior, current Windows availability, FAQs and contact information.
 
-Flow: `capsi.win` → **Download Capsi** → installer downloads directly.
-No repository/release page in between.
-
-## Auto latest-release resolution
-
-`app.js` keeps the buttons fresh without manual edits:
-
-1. On load it applies `CAPSI_CONFIG.DOWNLOAD_URL` immediately (works offline).
-2. It then calls `GET https://api.github.com/repos/{GITHUB_REPO}/releases/latest`,
-   picks the Windows asset (NSIS `*-setup.exe` → any `.exe` → `.msi`;
-   source archives are never picked), and rewrites every `.js-download` href
-   to that asset's `browser_download_url`.
-
-To retarget (new owner/repo), edit `GITHUB_REPO` in `config.js` only.
-If the API is unreachable or rate-limited, buttons silently keep the fallback.
+Repository workflow and other developer-facing implementation details are not presented as product content.
 
 ## Run locally
 
-No build step, no dependencies. Serve statically, e.g.:
+No build step is required:
 
 ```powershell
 cd Website
@@ -61,10 +36,8 @@ python -m http.server 8080
 # open http://localhost:8080/
 ```
 
-Or open `index.html` directly in a browser.
+## Deployment
 
-## Deploy
+Serve the contents of `Website/` as a static site. Asset paths are relative so the site can be hosted directly at `capsi.win`.
 
-Copy the contents of `Website/` to any static host (GitHub Pages, Netlify,
-Vercel, Nginx, IIS, …) serving `index.html` at `/`. All asset paths are
-relative (`./…`) so the site works under `capsi.win` or a sub-path preview.
+Keep website changes inside this folder unless a change outside it is explicitly required.

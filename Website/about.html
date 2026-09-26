@@ -1,122 +1,160 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>About Capsi â€” Messages and files, device to device.</title>
-  <meta name="description" content="About Capsi by CAPSICOM: a lightweight local-network utility for sending messages and files directly between devices.">
+  <title>About Capsi — Messages and files, device to device.</title>
+  <meta name="description" content="Learn what Capsi is, why it is local-first, and how it keeps device-to-device communication simple.">
   <link rel="canonical" href="https://capsi.win/about.html">
   <meta name="theme-color" content="#0B101A">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="CAPSI">
-  <meta property="og:title" content="About Capsi â€” Messages and files, device to device.">
-  <meta property="og:description" content="About Capsi by CAPSICOM: a lightweight local-network utility for sending messages and files directly between devices.">
+  <meta property="og:title" content="About Capsi — Messages and files, device to device.">
+  <meta property="og:description" content="A lightweight utility for direct device-to-device communication.">
   <meta property="og:url" content="https://capsi.win/about.html">
-  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-128.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="./favicon-128.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/imgs/favicon-128.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/imgs/favicon-128.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/imgs/apple-touch-icon.png">
+  <link rel="stylesheet" href="./assets/css/styles.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
-  <header class="site-header">
-    <div class="container header-inner">
-      <a class="brand" href="./index.html" aria-label="Capsi home">
-        <img src="./logo.png" alt="Capsi logo" width="28" height="28" class="brand-logo">
-        <span class="brand-text">CAPSI</span>
-      </a>
-      <nav class="site-nav" aria-label="Primary">
-        <a href="./index.html#features">Features</a>
-        <a href="./index.html#how-it-works">How it works</a>
-        <a href="./index.html#download">Download</a>
-      </nav>
-      <div class="header-actions">
-        <a class="btn btn-primary btn-sm js-download" href="https://github.com/mystrdan/Capsi/releases/latest/download/Capsi_1.0.0_x64-setup.exe" download>Download Capsi</a>
-        <button class="menu-toggle" id="menu-toggle" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open menu"><span></span><span></span><span></span></button>
-      </div>
-    </div>
-    <nav class="mobile-menu" id="mobile-menu" aria-label="Mobile" hidden>
-      <a href="./index.html#features">Features</a>
-      <a href="./index.html#how-it-works">How it works</a>
-      <a href="./index.html#download">Download</a>
-      <a class="btn btn-primary js-download" href="https://github.com/mystrdan/Capsi/releases/latest/download/Capsi_1.0.0_x64-setup.exe" download>Download Capsi</a>
-    </nav>
-  </header>
+
+  <div data-component="header"></div>
+
   <main id="main">
     <section class="hero">
       <div class="container narrow">
-        <p class="eyebrow">ABOUT <span class="eyebrow-sep">Â·</span> <span class="byline">by CAPSICOM</span></p>
-        <h1>About Capsi</h1>
+        <p class="eyebrow">ABOUT CAPSI</p>
+        <h1>Communication doesn't always need a middleman.</h1>
         <p class="lede"><strong>Messages and files, device to device.</strong></p>
-        <p class="supporting">Capsi is a lightweight local-network communication and file-transfer utility by CAPSICOM. Computers on the same Wi-Fi or wired network discover each other and exchange messages and files directly.</p>
+        <p class="supporting">Capsi is a lightweight utility for computers that need to communicate directly. It helps connected devices find one another, exchange messages, and move files without putting a cloud service in the middle.</p>
       </div>
     </section>
-    <section class="section" aria-labelledby="use-heading">
+
+    <section class="section principle" aria-labelledby="idea-heading">
+      <div class="container principle-grid">
+        <div>
+          <p class="eyebrow">THE IDEA</p>
+          <h2 id="idea-heading">When your devices can reach each other, they should be able to talk to each other.</h2>
+        </div>
+        <div>
+          <p>Capsi keeps communication close to the devices involved. There is no signup flow to work through and no online workspace to maintain just to send something from one computer to another.</p>
+          <p class="supporting">The connection can be a LAN, Wi-Fi, wired Ethernet, or another connected local network. Capsi works with the connection you already have.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="works-heading">
+      <div class="container">
+        <div class="section-heading">
+          <p class="eyebrow">HOW IT WORKS</p>
+          <h2 id="works-heading">Run. Find. Send.</h2>
+          <p class="section-sub">There is very little to configure.</p>
+        </div>
+        <ol class="steps">
+          <li>
+            <span class="step-icon" aria-hidden="true"><img src="./assets/icons/run.svg" alt=""></span>
+            <h3>Run</h3>
+            <p>Open Capsi on the computers you want to connect.</p>
+          </li>
+          <li>
+            <span class="step-icon" aria-hidden="true"><img src="./assets/icons/search.svg" alt=""></span>
+            <h3>Find</h3>
+            <p>Capsi discovers other computers running Capsi on the connected local network.</p>
+          </li>
+          <li>
+            <span class="step-icon" aria-hidden="true"><img src="./assets/icons/send.svg" alt=""></span>
+            <h3>Send</h3>
+            <p>Accept a device, then send messages and files directly between the computers.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="does-heading">
       <div class="container narrow">
-        <h2 id="use-heading">What it does</h2>
-        <ul class="about-list">
-          <li>Lists nearby computers running Capsi on the same local network.</li>
-          <li>Sends one-to-one text messages between devices you have accepted.</li>
-          <li>Sends files (one per offer, up to 100 MB) to a device you have accepted, after the other side accepts the file.</li>
-          <li>Keeps per-device conversation history stored locally on your computer.</li>
-        </ul>
-        <h2 style="margin-top:32px">What it does not do</h2>
-        <ul class="about-list">
-          <li>No cloud chat service for local communication; downloads come from GitHub releases.</li>
-          <li>No accounts, signup, or login â€” identity is a device name plus a locally stored key.</li>
-          <li>No social feed, groups, or extras; no claims about encryption, anonymity, or cross-network reach â€” see open questions below.</li>
-        </ul>
+        <div class="section-heading">
+          <p class="eyebrow">WHAT IT DOES</p>
+          <h2 id="does-heading">The useful parts. Nothing extra.</h2>
+        </div>
+        <div class="about-columns">
+          <div class="about-block">
+            <h3>Messages</h3>
+            <p>Send one-to-one text messages between accepted devices.</p>
+          </div>
+          <div class="about-block">
+            <h3>Files</h3>
+            <p>Offer files to another device and let the recipient accept or decline.</p>
+          </div>
+          <div class="about-block">
+            <h3>Devices</h3>
+            <p>Discover nearby computers running Capsi without manually entering addresses.</p>
+          </div>
+          <div class="about-block">
+            <h3>Local history</h3>
+            <p>Keep conversation history locally on the computer rather than relying on a cloud chat service.</p>
+          </div>
+        </div>
       </div>
     </section>
+
+    <section class="section local-first" aria-labelledby="local-heading">
+      <div class="container local-first-grid">
+        <div>
+          <p class="eyebrow">LOCAL FIRST</p>
+          <h2 id="local-heading">Your devices. Your network. Your data.</h2>
+        </div>
+        <div class="local-copy">
+          <p>Capsi does not need an external chat service to move messages and files between connected devices.</p>
+          <ul class="about-list">
+            <li>No account or signup flow</li>
+            <li>No Capsi cloud service for local communication</li>
+            <li>No internet connection required for local communication</li>
+            <li>Conversation history stays on the device</li>
+          </ul>
+          <p class="supporting">Capsi is a local communication utility, not a promise of anonymity. Your network still has its own rules, visibility, and controls.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="windows" aria-labelledby="windows-heading">
+      <div class="container windows-box">
+        <div>
+          <p class="eyebrow">CURRENT RELEASE</p>
+          <h2 id="windows-heading">Capsi for Windows.</h2>
+          <p>Install it on the computers you want to connect and start sending.</p>
+        </div>
+        <a class="btn btn-primary js-download" href="#" download>Get Capsi</a>
+      </div>
+    </section>
+
     <section class="section" id="contact" aria-labelledby="contact-heading">
       <div class="container narrow">
-        <h2 id="contact-heading">Contact</h2>
-        <p class="supporting">For questions about Capsi, use the form below or the contact points listed.</p>
+        <p class="eyebrow">GET IN TOUCH</p>
+        <h2 id="contact-heading">Have feedback?</h2>
+        <p class="supporting">Questions, feedback, bugs, or ideas are welcome.</p>
         <div class="contact-card">
-          <p><strong>X (Twitter):</strong> <a href="https://x.com/runcapsi" rel="noopener">X (Formerly Twitter)</a></p>
+          <p><strong>X:</strong> <a href="https://x.com/runcapsi" rel="noopener">@runcapsi</a></p>
           <p style="margin:0"><strong>Email:</strong> <a href="mailto:developer@capsi.win">developer@capsi.win</a></p>
-          <p style="margin:0"><strong>Website:</strong> <a href="https://capsi.win">capsi.win</a></p>
         </div>
-        <form class="contact-form" action="https://formsubmit.co/developer@capsi.win" method="POST" netlify netlify-honeypot="bot-field" style="margin-top:28px">
+        <form class="contact-form" action="https://formsubmit.co/developer@capsi.win" method="POST" style="margin-top:28px">
           <input type="hidden" name="_next" value="https://capsi.win/thanks.html">
           <input type="hidden" name="_subject" value="Capsi feedback">
           <p class="visually-hidden"><input name="bot-field" tabindex="-1" autocomplete="off"></p>
-          <p>
-            <label for="name">Name</label>
-            <input type="text" id="name" name="name" required autocomplete="name">
-          </p>
-          <p>
-            <label for="email">Email</label>
-            <input type="email" id="email" name="_replyto" required autocomplete="email">
-          </p>
-          <p>
-            <label for="message">Message</label>
-            <textarea id="message" name="message" rows="5" required></textarea>
-          </p>
+          <p><label for="name">Name</label><input type="text" id="name" name="name" required autocomplete="name"></p>
+          <p><label for="email">Email</label><input type="email" id="email" name="_replyto" required autocomplete="email"></p>
+          <p><label for="message">Message</label><textarea id="message" name="message" rows="6" required></textarea></p>
           <p class="form-actions">
             <button type="submit" class="btn btn-primary">Send message</button>
+            <a class="btn btn-ghost" href="./index.html">Back to home</a>
           </p>
         </form>
-        <div class="hero-actions">
-          <a class="btn btn-primary js-download" href="https://github.com/mystrdan/Capsi/releases/latest/download/Capsi_1.0.0_x64-setup.exe" download>Download Capsi</a>
-          <a class="btn btn-ghost" href="./index.html">Back to home</a>
-        </div>
       </div>
     </section>
   </main>
-  <footer class="site-footer">
-    <div class="container footer-inner">
-      <div class="footer-brand"><p class="footer-name">CAPSI</p><p class="footer-by">by CAPSICOM</p></div>
-      <nav class="footer-nav" aria-label="Footer">
-        <a href="./index.html#download">Download</a>
-        <a href="./about.html">About</a>
-        <a href="https://x.com/runcapsi" rel="noopener">X (Formerly Twitter)</a>
-        <a href="./about.html#contact">Contact</a>
-      </nav>
-    </div>
-    <div class="container footer-base"><p><a href="https://capsi.win">capsi.win</a> &middot; Messages and files, device to device. &middot; Downloads served from the latest GitHub release.</p></div>
-  </footer>
-  <script src="./config.js"></script>
-  <script src="./app.js"></script>
+
+  <div data-component="footer"></div>
+  <script type="module" src="./assets/js/app.js"></script>
 </body>
 </html>
