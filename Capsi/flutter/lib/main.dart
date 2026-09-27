@@ -174,6 +174,17 @@ class _CapsiHomeState extends State<CapsiHome> {
   ];
 
   @override
+  void _showSettings(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _SettingsDialog(
+        native: native,
+        dataDirectory: dataDirectory,
+        trustedDeviceCount: trustedDevices.length,
+      ),
+    );
+  }
+
   Widget build(BuildContext context) {
     final page = pages[selected];
     final body = _PageBody(
@@ -263,7 +274,18 @@ class _DesktopContent extends StatelessWidget {
                     ],
                   ),
                 ),
-                _NetworkStatus(available: native != null),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _NetworkStatus(available: native != null),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Settings',
+                      onPressed: () => _showSettings(context),
+                      icon: const Icon(Icons.settings_outlined),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -317,6 +339,269 @@ class _CapsiMark extends StatelessWidget {
         height: 42,
         fit: BoxFit.contain,
       ),
+    );
+  }
+}
+
+class _SettingsDialog extends StatelessWidget {
+  final CapsiNative? native;
+  final String? dataDirectory;
+  final int trustedDeviceCount;
+
+  const _SettingsDialog({
+    required this.native,
+    required this.dataDirectory,
+    required this.trustedDeviceCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final version = native?.runtimeVersion ?? '1.0.2';
+    final protocol = native?.protocolVersion ?? 'Unavailable';
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.settings_outlined),
+          const SizedBox(width: 10),
+          const Expanded(child: Text('Settings')),
+          IconButton(
+            tooltip: 'Close',
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.close),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 620,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SettingsSection(
+                title: 'Connection',
+                children: [
+                  _SettingsRow(
+                    icon: Icons.wifi_outlined,
+                    title: 'Direct communication',
+                    subtitle: 'Capsi communicates device to device. No Capsi cloud is required.',
+                    trailing: _NetworkStatus(available: native != null),
+                  ),
+                  _SettingsRow(
+                    icon: Icons.radar_outlined,
+                    title: 'Discovery',
+                    subtitle: 'UDP discovery port 45893',
+                    trailing: const Icon(Icons.check_circle_outline, color: Color(0xFFB8F36B)),
+                  ),
+                  _SettingsRow(
+                    icon: Icons.message_outlined,
+                    title: 'Messages',
+                    subtitle: 'TCP message listener port 45892',
+                    trailing: const Icon(Icons.check_circle_outline, color: Color(0xFFB8F36B)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _SettingsSection(
+                title: 'Privacy & devices',
+                children: [
+                  _SettingsRow(
+                    icon: Icons.verified_user_outlined,
+                    title: 'Trusted devices',
+                    subtitle: '$trustedDeviceCount trusted device${trustedDeviceCount == 1 ? '' : 's'}',
+                    trailing: const Icon(Icons.chevron_right),
+                  ),
+                  const _SettingsRow(
+                    icon: Icons.lock_outline,
+                    title: 'Trust model',
+                    subtitle: 'Only devices you accept can exchange messages and files.',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _SettingsSection(
+                title: 'Storage',
+                children: [
+                  _SettingsRow(
+                    icon: Icons.folder_outlined,
+                    title: 'Capsi data',
+                    subtitle: dataDirectory ?? 'Application data directory unavailable',
+                    trailing: dataDirectory == null
+                        ? const Icon(Icons.error_outline)
+                        : IconButton(
+                            tooltip: 'Copy path',
+                            onPressed: () async {
+                              await Clipboard.setData(ClipboardData(text: dataDirectory!));
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Data path copied.')),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.copy_outlined),
+                          ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _SettingsSection(
+                title: 'Appearance',
+                children: const [
+                  _SettingsRow(
+                    icon: Icons.dark_mode_outlined,
+                    title: 'Theme',
+                    subtitle: 'Dark',
+                    trailing: Text('Current', style: TextStyle(color: Color(0xFF858D88))),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _SettingsSection(
+                title: 'About',
+                children: [
+                  _SettingsRow(
+                    icon: Icons.info_outline,
+                    title: 'Capsi',
+                    subtitle: 'Messages and files, device to device.',
+                    trailing: Text('v$version'),
+                  ),
+                  _SettingsRow(
+                    icon: Icons.memory_outlined,
+                    title: 'Runtime',
+                    subtitle: native == null ? 'Rust core is not loaded.' : 'Rust core linked',
+                    trailing: Text(protocol),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.open_in_new_outlined),
+                    title: const Text('About Capsi'),
+                    subtitle: const Text('Product, version and architecture information'),
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => _AboutDialog(native: native),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsSection extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+
+  const _SettingsSection({required this.title, required this.children});
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 7),
+            child: Text(
+              title.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 11,
+                letterSpacing: 1.1,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF858D88),
+              ),
+            ),
+          ),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              child: Column(children: children),
+            ),
+          ),
+        ],
+      );
+}
+
+class _SettingsRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget? trailing;
+
+  const _SettingsRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+        contentPadding: const EdgeInsets.symmetric(vertical: 3),
+        leading: Icon(icon, color: const Color(0xFFB8F36B)),
+        title: Text(title),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: Text(subtitle, style: const TextStyle(color: Color(0xFF858D88))),
+        ),
+        trailing: trailing,
+      );
+}
+
+class _AboutDialog extends StatelessWidget {
+  final CapsiNative? native;
+
+  const _AboutDialog({required this.native});
+
+  @override
+  Widget build(BuildContext context) {
+    final runtime = native?.runtimeVersion ?? 'Unavailable';
+    final protocol = native?.protocolVersion ?? 'Unavailable';
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          Image.asset('assets/capsi-logo-512.png', width: 38, height: 38),
+          const SizedBox(width: 12),
+          const Text('About Capsi'),
+        ],
+      ),
+      content: const SizedBox(
+        width: 500,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Messages and files, device to device.',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Capsi is a lightweight communication utility built around direct device-to-device exchange. It does not require a Capsi cloud account or Internet service for local communication.',
+              style: TextStyle(height: 1.5, color: Color(0xFF9AA19C)),
+            ),
+            SizedBox(height: 18),
+            Text('CAPSICOM', style: TextStyle(fontWeight: FontWeight.w700)),
+            SizedBox(height: 4),
+            Text('Capsi 1.0.2', style: TextStyle(color: Color(0xFF858D88))),
+          ],
+        ),
+      ),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 8, bottom: 6),
+          child: Text(
+            'Runtime $runtime · Protocol $protocol',
+            style: const TextStyle(fontSize: 11, color: Color(0xFF666E69)),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
     );
   }
 }
