@@ -251,7 +251,18 @@ class _PageBody extends StatelessWidget {
                 if (label == 'Nearby' && peers.isNotEmpty) ...[
                   const SizedBox(height: 18),
                   for (final peer in peers.take(8))
-                    ListTile(leading: const Icon(Icons.computer_outlined), title: Text(peer.name), subtitle: Text(peer.fingerprint.isEmpty ? peer.tcpAddress : peer.fingerprint)),
+                    ListTile(
+                      leading: const Icon(Icons.computer_outlined),
+                      title: Text(peer.name),
+                      subtitle: Text(peer.fingerprint.isEmpty ? peer.tcpAddress : peer.fingerprint),
+                      trailing: dataDirectory == null ? null : FilledButton(
+                        onPressed: () {
+                          final accepted = native?.acceptTrust(dataDirectory!, peer.deviceId);
+                          if (accepted != null) onTrustChanged();
+                        },
+                        child: const Text('Accept'),
+                      ),
+                    ),
                 ],
                 const SizedBox(height: 20),
                 if (label == 'Nearby') OutlinedButton.icon(onPressed: scanning ? null : onScan, icon: Icon(scanning ? Icons.sync : Icons.refresh), label: Text(scanning ? 'Scanning…' : 'Scan again')),
