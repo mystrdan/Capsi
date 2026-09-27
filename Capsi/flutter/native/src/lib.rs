@@ -536,6 +536,49 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                             }
                         }
                     }
+                    Message::WorkplaceBroadcast(broadcast) => {
+                        if peer_id.as_str() == identity.id().as_str() {
+                            continue;
+                        }
+                        let store = capsi_core::workplace::WorkspaceStore::new(&data_dir);
+                        let Some(mut workspace) = (match store.load() {
+                            Ok(value) => value,
+                            Err(error) => {
+                                message_event(&thread_latest, serde_json::json!({"error":error}));
+                                continue;
+                            }
+                        }) else {
+                            continue;
+                        };
+                        if !workspace.members.iter().any(|m| m.device_id == peer_id.as_str()) {
+                            continue;
+                        }
+                        if workspace.receive_broadcast(
+                            broadcast.broadcast_id.clone(),
+                            broadcast.title.clone(),
+                            broadcast.body.clone(),
+                            peer_id.as_str().to_string(),
+                            broadcast.department_id.clone(),
+                            capsi_core::workplace::WorkspaceState {
+                                id: workspace.id.clone(),
+                                name: workspace.name.clone(),
+                                created_at: workspace.created_at,
+                                updated_at: workspace.updated_at,
+                                owner_device_id: workspace.owner_device_id.clone(),
+                                members: workspace.members.clone(),
+                                groups: workspace.groups.clone(),
+                                departments: workspace.departments.clone(),
+                                broadcasts: Vec::new(),
+                                messages: Vec::new(),
+                            }.updated_at,
+                        ) {
+                            let _ = store.save(&workspace);
+                            message_event(&thread_latest, serde_json::json!({
+                                "type":"workplace_broadcast",
+                                "broadcast_id":broadcast.broadcast_id
+                            }));
+                        }
+                    }
                     Message::Text(text) => {
                         let mut stored = match StoredMessage::text(&text.body, false) {
                             Ok(message) => message,
