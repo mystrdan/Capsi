@@ -824,7 +824,24 @@ pub extern "C" fn capsi_workplace_create(
     let result = (|| -> Result<_, String> {
         let identity = DeviceIdentity::load_or_create(&dir).map_err(|e| e.to_string())?;
         let device_id = identity.id().as_str().to_string();
-        let workspace = capsi_core::workplace::Workspace::new(name, device_id);
+        let mut workspace = capsi_core::workplace::Workspace::new(name, device_id.clone());
+        if let Some(owner) = workspace.members.iter_mut().find(|member| member.device_id == device_id) {
+            owner.display_name = "This device".into();
+        }
+
+        // Existing trusted devices become workplace members when the owner
+        // creates the workplace. This avoids an empty workspace when trust was
+        // established before the workplace itself was created.
+        if let Ok(trusted) = TrustStore::load(&dir) {
+            for member in trusted.trusted() {
+                workspace.add_member(
+                    member.device_id.as_str(),
+                    member.display_name(),
+                    capsi_core::workplace::Role::Member,
+                );
+            }
+        }
+
         capsi_core::workplace::WorkspaceStore::new(&dir).save(&workspace)?;
         Ok(workspace)
     })();
