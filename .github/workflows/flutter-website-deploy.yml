@@ -6,6 +6,7 @@ on:
     paths:
       - "Website/flutter/**"
       - ".github/workflows/flutter-website-deploy.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -32,10 +33,13 @@ jobs:
 
       - name: Publish built site into Vercel project root
         run: |
+          set -e
           rm -rf Website/_flutter_build
           mkdir -p Website/_flutter_build
           cp -R Website/flutter/build/web/. Website/_flutter_build/
-          rm -rf Website/assets Website/*.html Website/*.js Website/*.json
+
+          # Keep the Flutter source tree, replace only the Vercel site root.
+          find Website -mindepth 1 -maxdepth 1 ! -name flutter ! -name _flutter_build -exec rm -rf {} +
           cp -R Website/_flutter_build/. Website/
           rm -rf Website/_flutter_build
           rm -rf Website/flutter/build
@@ -46,7 +50,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Website
           if git diff --cached --quiet; then
-            echo "No generated website changes to commit."
+            echo "No generated website changes."
             exit 0
           fi
           git commit -m "build: publish Flutter website"
