@@ -1234,7 +1234,12 @@ where
         let mut workspace = store.load()?.ok_or_else(|| "workplace has not been created".to_string())?;
         mutate(&mut workspace, &identity)?;
         store.save(&workspace).map_err(|e| e.to_string())?;
-        serde_json::to_value(workspace).map_err(|e| e.to_string())
+        let sync = sync_workplace_to_members(dir, &identity, &workspace);
+        let mut value = serde_json::to_value(&workspace).map_err(|e| e.to_string())?;
+        if let Some(object) = value.as_object_mut() {
+            object.insert("sync".into(), serde_json::to_value(sync).unwrap_or_default());
+        }
+        Ok(value)
     })();
     match result {
         Ok(value) => trust_result(value),
