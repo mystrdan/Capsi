@@ -59,6 +59,14 @@ typedef _TrustAcceptDart = ffi.Pointer<ffi.Char> Function(
 
 typedef _FreeStringNative = ffi.Void Function(ffi.Pointer<ffi.Char>);
 typedef _FreeStringDart = void Function(ffi.Pointer<ffi.Char>);
+typedef _MessageStartNative = ffi.Uint64 Function(ffi.Pointer<ffi.Char>, ffi.Uint16);
+typedef _MessageStartDart = int Function(ffi.Pointer<ffi.Char>, int);
+typedef _MessagePollNative = ffi.Pointer<ffi.Char> Function(ffi.Uint64);
+typedef _MessagePollDart = ffi.Pointer<ffi.Char> Function(int);
+typedef _MessageStopNative = ffi.Void Function(ffi.Uint64);
+typedef _MessageStopDart = void Function(int);
+typedef _MessageSendNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+typedef _MessageSendDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 
 class KnownDevice {
   const KnownDevice({required this.deviceId, required this.name, this.alias, required this.state, required this.fingerprint, this.lastAddress});
@@ -126,6 +134,10 @@ class CapsiNative {
         _trustIgnore = _library.lookupFunction<_TrustActionNative, _TrustActionDart>('capsi_trust_ignore'),
         _discoveryPoll = _library.lookupFunction<_DiscoveryPollNative, _DiscoveryPollDart>('capsi_discovery_poll'),
         _discoveryStop = _library.lookupFunction<_DiscoveryStopNative, _DiscoveryStopDart>('capsi_discovery_stop'),
+        _messageStart = _library.lookupFunction<_MessageStartNative, _MessageStartDart>('capsi_message_start'),
+        _messagePoll = _library.lookupFunction<_MessagePollNative, _MessagePollDart>('capsi_message_poll'),
+        _messageStop = _library.lookupFunction<_MessageStopNative, _MessageStopDart>('capsi_message_stop'),
+        _messageSend = _library.lookupFunction<_MessageSendNative, _MessageSendDart>('capsi_message_send'),
         _freeString = _library.lookupFunction<_FreeStringNative, _FreeStringDart>('capsi_free_string');
 
   final ffi.DynamicLibrary _library;
@@ -139,6 +151,10 @@ class CapsiNative {
   final _TrustActionDart _trustIgnore;
   final _DiscoveryPollDart _discoveryPoll;
   final _DiscoveryStopDart _discoveryStop;
+  final _MessageStartDart _messageStart;
+  final _MessagePollDart _messagePoll;
+  final _MessageStopDart _messageStop;
+  final _MessageSendDart _messageSend;
   final _FreeStringDart _freeString;
 
   static CapsiNative? tryLoad() {
@@ -243,6 +259,39 @@ class CapsiNative {
   }
 
   void stopDiscovery(int handle) => _discoveryStop(handle);
+
+  int startMessageListener({required String dataDirectory, int tcpPort = 45892}) {
+    final dir = dataDirectory.toNativeUtf8();
+    try { return _messageStart(dir.cast<ffi.Char>(), tcpPort); }
+    finally { calloc.free(dir); }
+  }
+
+  Map<String, dynamic>? pollMessage(int handle) {
+    final pointer = _messagePoll(handle);
+    if (pointer == ffi.nullptr) return null;
+    try {
+      final value = jsonDecode(_readString(pointer));
+      return value is Map<String, dynamic> ? value : null;
+    } finally { _freeString(pointer); }
+  }
+
+  void stopMessageListener(int handle) => _messageStop(handle);
+
+  String? sendMessage(String dataDirectory, String deviceId, String body) {
+    final dir = dataDirectory.toNativeUtf8();
+    final id = deviceId.toNativeUtf8();
+    final text = body.toNativeUtf8();
+    try {
+      final pointer = _messageSend(dir.cast<ffi.Char>(), id.cast<ffi.Char>(), text.cast<ffi.Char>());
+      if (pointer == ffi.nullptr) return null;
+      try {
+        final value = jsonDecode(_readString(pointer));
+        return value is String ? value : null;
+      } finally { _freeString(pointer); }
+    } finally {
+      calloc.free(dir); calloc.free(id); calloc.free(text);
+    }
+  }
 
   ffi.Pointer<ffi.Char> _callTrust(
     _TrustListDart fn,
