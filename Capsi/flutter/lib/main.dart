@@ -248,6 +248,8 @@ class _PageBody extends StatefulWidget {
 class _PageBodyState extends State<_PageBody> {
   String? selectedDevice;
   String draft = '';
+  String? selectedWorkplaceGroup;
+  String workplaceDraft = '';
 
   @override
   Widget build(BuildContext context) {
@@ -348,77 +350,263 @@ class _PageBodyState extends State<_PageBody> {
     final broadcasts = (workspace['broadcasts'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? const [];
     final messages = (workspace['messages'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? const [];
 
-    return ListView(padding: const EdgeInsets.all(28), children: [
-      Row(children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(workspace['name']?.toString() ?? 'WorkPlace', style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 6),
-          const Text('Local workplace'),
-        ])),
-        IconButton(onPressed: widget.onTrustChanged, tooltip: 'Refresh', icon: const Icon(Icons.refresh)),
-      ]),
-      const SizedBox(height: 22),
-      Wrap(spacing: 14, runSpacing: 14, children: [
-        _WorkplaceStat('Members', members.length),
-        _WorkplaceStat('Groups', groups.length),
-        _WorkplaceStat('Departments', departments.length),
-        _WorkplaceStat('Broadcasts', broadcasts.length),
-        _WorkplaceStat('Messages', messages.length),
-      ]),
-      const SizedBox(height: 22),
-      Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: [
-          OutlinedButton.icon(
-            onPressed: widget.native == null || widget.dataDirectory == null ? null : () => _createWorkplaceName(context, 'Create group', (name) => widget.native!.createWorkplaceGroup(widget.dataDirectory!, name)),
-            icon: const Icon(Icons.group_add_outlined),
-            label: const Text('Group'),
+    if (groups.isNotEmpty && (selectedWorkplaceGroup == null || !groups.any((g) => g['id'] == selectedWorkplaceGroup))) {
+      selectedWorkplaceGroup = groups.first['id']?.toString();
+    }
+    final group = groups.cast<Map<String, dynamic>?>().firstWhere(
+      (g) => g?['id']?.toString() == selectedWorkplaceGroup,
+      orElse: () => null,
+    );
+    final groupId = group?['id']?.toString();
+    final groupMessages = groupId == null
+        ? const <Map<String, dynamic>>[]
+        : messages.where((m) => m['group_id']?.toString() == groupId).toList();
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 0, 28, 16),
+          child: Row(
+            children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(workspace['name']?.toString() ?? 'WorkPlace', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 4),
+                Text('${members.length} people · ${groups.length} groups · ${departments.length} departments'),
+              ])),
+              OutlinedButton.icon(
+                onPressed: widget.native == null || widget.dataDirectory == null
+                    ? null
+                    : () => _createWorkplaceName(context, 'Create group', (name) => widget.native!.createWorkplaceGroup(widget.dataDirectory!, name)),
+                icon: const Icon(Icons.group_add_outlined),
+                label: const Text('Group'),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: widget.native == null || widget.dataDirectory == null ? null : () => _createBroadcast(context),
+                icon: const Icon(Icons.campaign_outlined),
+                label: const Text('Broadcast'),
+              ),
+              IconButton(onPressed: widget.onTrustChanged, tooltip: 'Refresh', icon: const Icon(Icons.refresh)),
+            ],
           ),
-          OutlinedButton.icon(
-            onPressed: widget.native == null || widget.dataDirectory == null ? null : () => _createWorkplaceName(context, 'Create department', (name) => widget.native!.createWorkplaceDepartment(widget.dataDirectory!, name)),
-            icon: const Icon(Icons.apartment_outlined),
-            label: const Text('Department'),
+        ),
+        Expanded(
+          child: Row(
+            children: [
+              SizedBox(
+                width: 290,
+                child: Card(
+                  margin: const EdgeInsets.only(left: 28, right: 12, bottom: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                        child: Row(children: [
+                          Text('Groups', style: Theme.of(context).textTheme.titleMedium),
+                          const Spacer(),
+                          Text(groups.length.toString(), style: Theme.of(context).textTheme.bodySmall),
+                        ]),
+                      ),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: groups.isEmpty
+                            ? const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('Create a group to start messaging.', textAlign: TextAlign.center)))
+                            : ListView(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                children: [
+                                  for (final item in groups)
+                                    ListTile(
+                                      selected: item['id']?.toString() == groupId,
+                                      leading: const Icon(Icons.group_outlined),
+                                      title: Text(item['name']?.toString() ?? 'Group'),
+                                      subtitle: Text('${(item['member_ids'] as List?)?.length ?? 0} members'),
+                                      onTap: () => setState(() {
+                                        selectedWorkplaceGroup = item['id']?.toString();
+                                        workplaceDraft = '';
+                                      }),
+                                      trailing: IconButton(
+                                        tooltip: 'Add member',
+                                        icon: const Icon(Icons.person_add_alt_1_outlined),
+                                        onPressed: () => _addWorkplaceMember(context, item, members),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                      ),
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Text('People ${members.length}', style: Theme.of(context).textTheme.bodySmall),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Card(
+                  margin: const EdgeInsets.only(right: 28, bottom: 20),
+                  child: group == null
+                      ? const Center(child: Text('Select a group to view messages.'))
+                      : Column(
+                          children: [
+                            ListTile(
+                              leading: const Icon(Icons.group_outlined),
+                              title: Text(group['name']?.toString() ?? 'Group'),
+                              subtitle: Text('${(group['member_ids'] as List?)?.length ?? 0} members'),
+                              trailing: IconButton(
+                                tooltip: 'Add member',
+                                icon: const Icon(Icons.person_add_alt_1_outlined),
+                                onPressed: () => _addWorkplaceMember(context, group, members),
+                              ),
+                            ),
+                            const Divider(height: 1),
+                            Expanded(
+                              child: groupMessages.isEmpty
+                                  ? const Center(child: Text('No messages in this group yet.'))
+                                  : ListView.builder(
+                                      padding: const EdgeInsets.all(20),
+                                      itemCount: groupMessages.length,
+                                      itemBuilder: (_, index) {
+                                        final message = groupMessages[index];
+                                        final senderId = message['sender_device_id']?.toString();
+                                        final sender = members.cast<Map<String, dynamic>?>().firstWhere(
+                                          (m) => m?['device_id']?.toString() == senderId,
+                                          orElse: () => null,
+                                        );
+                                        final outgoing = senderId != null && senderId == _localWorkplaceMemberId(workspace);
+                                        return Align(
+                                          alignment: outgoing ? Alignment.centerRight : Alignment.centerLeft,
+                                          child: Container(
+                                            constraints: const BoxConstraints(maxWidth: 560),
+                                            margin: const EdgeInsets.only(bottom: 10),
+                                            child: Card(
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    if (!outgoing) Text(sender?['display_name']?.toString() ?? 'Member', style: Theme.of(context).textTheme.labelSmall),
+                                                    const SizedBox(height: 4),
+                                                    Text(message['body']?.toString() ?? ''),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                            ),
+                            const Divider(height: 1),
+                            Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(children: [
+                                Expanded(
+                                  child: TextField(
+                                    onChanged: (value) => workplaceDraft = value,
+                                    onSubmitted: (_) => _sendWorkplaceMessage(),
+                                    decoration: const InputDecoration(hintText: 'Message this group', border: OutlineInputBorder()),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                FilledButton.icon(
+                                  onPressed: _sendWorkplaceMessage,
+                                  icon: const Icon(Icons.send),
+                                  label: const Text('Send'),
+                                ),
+                              ]),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+            ],
           ),
-          OutlinedButton.icon(
-            onPressed: widget.native == null || widget.dataDirectory == null ? null : () => _createBroadcast(context),
-            icon: const Icon(Icons.campaign_outlined),
-            label: const Text('Broadcast'),
+        ),
+        if (departments.isNotEmpty || broadcasts.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 0, 28, 16),
+            child: Row(children: [
+              Text('Departments ${departments.length}', style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(width: 18),
+              Text('Broadcasts ${broadcasts.length}', style: Theme.of(context).textTheme.bodySmall),
+            ]),
           ),
-        ],
-      ),
-      const SizedBox(height: 28),
-      Text('People', style: Theme.of(context).textTheme.titleLarge),
-      const SizedBox(height: 10),
-      if (members.isEmpty)
-        const Card(child: Padding(padding: EdgeInsets.all(20), child: Text('No members yet. Accept trusted devices from Nearby.')))
-      else
-        for (final member in members)
-          Card(child: ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: Text(member['display_name']?.toString().isNotEmpty == true ? member['display_name'].toString() : 'Unnamed device'),
-            subtitle: Text(member['role']?.toString().split('.').last ?? 'Member'),
-          )),
-      const SizedBox(height: 24),
-      Text('Groups & departments', style: Theme.of(context).textTheme.titleLarge),
-      const SizedBox(height: 10),
-      if (groups.isEmpty && departments.isEmpty)
-        const Card(child: Padding(padding: EdgeInsets.all(20), child: Text('No groups or departments yet.')))
-      else ...[
-        for (final group in groups)
-          Card(child: ListTile(leading: const Icon(Icons.group_outlined), title: Text(group['name']?.toString() ?? 'Group'), subtitle: Text('${(group['member_ids'] as List?)?.length ?? 0} members'))),
-        for (final department in departments)
-          Card(child: ListTile(leading: const Icon(Icons.apartment_outlined), title: Text(department['name']?.toString() ?? 'Department'), subtitle: Text('${(department['member_ids'] as List?)?.length ?? 0} members'))),
       ],
-      const SizedBox(height: 24),
-      Text('Broadcasts', style: Theme.of(context).textTheme.titleLarge),
-      const SizedBox(height: 10),
-      if (broadcasts.isEmpty)
-        const Card(child: Padding(padding: EdgeInsets.all(20), child: Text('No broadcasts yet.')))
-      else
-        for (final broadcast in broadcasts.reversed.take(10))
-          Card(child: ListTile(leading: const Icon(Icons.campaign_outlined), title: Text(broadcast['title']?.toString() ?? 'Broadcast'), subtitle: Text(broadcast['body']?.toString() ?? ''))),
-    ]);
+    );
+  }
+
+  String? _localWorkplaceMemberId(Map<String, dynamic> workspace) {
+    final people = (workspace['members'] as List?)?.whereType<Map<String, dynamic>>() ?? const <Map<String, dynamic>>[];
+    for (final member in people) {
+      if (member['display_name']?.toString() == 'This device') return member['device_id']?.toString();
+    }
+    return null;
+  }
+
+  void _sendWorkplaceMessage() {
+    final data = widget.dataDirectory;
+    final native = widget.native;
+    final text = workplaceDraft.trim();
+    final groupId = selectedWorkplaceGroup;
+    if (data == null || native == null || groupId == null || text.isEmpty) return;
+    final result = native.sendWorkplaceMessage(data, groupId, text);
+    if (result != null && result['error'] == null && mounted) {
+      setState(() => workplaceDraft = '');
+      widget.onTrustChanged();
+    } else if (mounted && result?['error'] != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result!['error'].toString())));
+    }
+  }
+
+  Future<void> _addWorkplaceMember(
+    BuildContext context,
+    Map<String, dynamic> group,
+    List<Map<String, dynamic>> members,
+  ) async {
+    final current = (group['member_ids'] as List?)?.map((e) => e.toString()).toSet() ?? <String>{};
+    final available = members.where((member) => !current.contains(member['device_id']?.toString())).toList();
+    if (available.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All WorkPlace members are already in this group.')));
+      return;
+    }
+    Map<String, dynamic>? chosen;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Add member to ${group['name']?.toString() ?? 'group'}'),
+        content: SizedBox(
+          width: 420,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final member in available)
+                ListTile(
+                  leading: const Icon(Icons.person_outline),
+                  title: Text(member['display_name']?.toString().isNotEmpty == true ? member['display_name'].toString() : 'Unnamed device'),
+                  subtitle: Text(member['role']?.toString().split('.').last ?? 'Member'),
+                  onTap: () {
+                    chosen = member;
+                    Navigator.pop(dialogContext);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || chosen == null || widget.native == null || widget.dataDirectory == null) return;
+    final result = widget.native!.addWorkplaceGroupMember(
+      widget.dataDirectory!,
+      group['id']?.toString() ?? '',
+      chosen!['device_id']?.toString() ?? '',
+    );
+    if (result != null && result['error'] == null) {
+      widget.onTrustChanged();
+    } else if (mounted && result?['error'] != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result!['error'].toString())));
+    }
   }
 
   Future<void> _createWorkplaceName(
