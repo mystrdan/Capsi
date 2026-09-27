@@ -907,7 +907,20 @@ pub extern "C" fn capsi_workplace_load(data_dir: *const c_char) -> *mut c_char {
         None => return error_json("data directory is invalid"),
     };
     match capsi_core::workplace::WorkspaceStore::new(&dir).load() {
-        Ok(Some(workspace)) => trust_result(workspace),
+        Ok(Some(workspace)) => {
+            let identity = match DeviceIdentity::load_or_create(&dir) {
+                Ok(value) => value,
+                Err(error) => return error_json(&error.to_string()),
+            };
+            let mut value = match serde_json::to_value(&workspace) {
+                Ok(value) => value,
+                Err(error) => return error_json(&error.to_string()),
+            };
+            if let Some(object) = value.as_object_mut() {
+                object.insert("local_device_id".into(), serde_json::json!(identity.id().as_str()));
+            }
+            trust_result(value)
+        }
         Ok(None) => into_c_string("null".into()),
         Err(error) => error_json(&error),
     }
