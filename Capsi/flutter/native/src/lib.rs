@@ -711,6 +711,48 @@ pub extern "C" fn capsi_conversation_load(data_dir: *const c_char, device_id: *c
     }
 }
 
+
+#[no_mangle]
+pub extern "C" fn capsi_workplace_load(data_dir: *const c_char) -> *mut c_char {
+    let dir = match c_path(data_dir) {
+        Some(path) => path,
+        None => return error_json("data directory is invalid"),
+    };
+    match capsi_core::workplace::WorkspaceStore::new(&dir).load() {
+        Ok(Some(workspace)) => trust_result(workspace),
+        Ok(None) => into_c_string("null".into()),
+        Err(error) => error_json(&error),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_workplace_create(
+    data_dir: *const c_char,
+    name: *const c_char,
+) -> *mut c_char {
+    let dir = match c_path(data_dir) {
+        Some(path) => path,
+        None => return error_json("data directory is invalid"),
+    };
+    let name = match c_string(name) {
+        Some(value) if !value.trim().is_empty() => value,
+        _ => return error_json("workplace name is invalid"),
+    };
+
+    let result = (|| -> Result<_, String> {
+        let identity = DeviceIdentity::load_or_create(&dir).map_err(|e| e.to_string())?;
+        let device_id = identity.device_id().as_str().to_string();
+        let workspace = capsi_core::workplace::Workspace::new(name, device_id);
+        capsi_core::workplace::WorkspaceStore::new(&dir).save(&workspace)?;
+        Ok(workspace)
+    })();
+
+    match result {
+        Ok(workspace) => trust_result(workspace),
+        Err(error) => error_json(&error),
+    }
+}
+
 /// Stable native boundary for the Flutter client.
 ///
 /// Keep this API C-compatible. Higher-level Capsi operations should be backed
