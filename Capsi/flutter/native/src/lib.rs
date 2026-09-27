@@ -1,5 +1,8 @@
 use std::ffi::{c_char, CStr, CString};
 use std::time::Duration;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
+use base64::Engine as _;
 use tokio::net::TcpListener;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -9,7 +12,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 use capsi_core::discovery::Discovery;
 use capsi_core::identity::{DeviceIdentity, DeviceId};
 use capsi_core::identity::trust::TrustStore;
-use capsi_core::protocol::{Envelope, Message, TextMessage};
+use capsi_core::protocol::{Envelope, FileOffer, FileReceipt, Message, TextMessage};
+use capsi_core::storage::conversation::TransferState;
 use capsi_core::storage::conversation::{DeliveryState, MessageKind, MessageStore, StoredMessage};
 
 struct DiscoverySession {
@@ -415,6 +419,82 @@ pub extern "C" fn capsi_message_send(
         stored.state = DeliveryState::Sent;
         messages.append(&device_id, &peer.name, stored)?;
         Ok(envelope.id)
+    })();
+
+    match result {
+        Ok(id) => trust_result(id),
+        Err(error) => error_json(&error.to_string()),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_file_send(
+    data_dir: *const c_char,
+    device_id: *const c_char,
+    file_path: *const c_char,
+) -> *mut c_char {
+    let data_dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    let device_id = match c_string(device_id).and_then(|value| DeviceId::from_hex(&value).ok()) {
+        Some(id) => id,
+        None => return error_json("device id is invalid"),
+    };
+    let file_path = match c_path(file_path) { Some(path) => path, None => return error_json("file path is invalid") };
+
+    let result = (|| -> capsi_core::Result<String> {
+        let trust = TrustStore::load(&data_dir)?;
+        let peer = trust.get(&device_id)
+            .filter(|device| device.is_trusted())
+            .ok_or_else(|| capsi_core::CapsiError::NotFound("device is not trusted".into()))?
+            .clone();
+        let address = peer.last_address.clone()
+            .ok_or_else(|| capsi_core::CapsiError::NotFound("trusted device has no known address".into()))?;
+        let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
+        let socket = format!("{host}:45892");
+
+        let metadata = std::fs::metadata(&file_path)?;
+        if !metadata.is_file() {
+            return Err(capsi_core::CapsiError::Invalid("selected path is not a file".into()));
+        }
+        let size = metadata.len();
+        let digest = capsi_core::util::digest_file(&file_path)?;
+        let chunk_size = capsi_core::TRANSFER_CHUNK_SIZE as u64;
+        let chunks = if size == 0 { 0 } else { (size + chunk_size - 1) / chunk_size };
+        let transfer_id = capsi_core::util::new_id("t");
+        let file_name = capsi_core::util::safe_file_name(
+            file_path.file_name().and_then(|n| n.to_str()).unwrap_or("capsi-file")
+        );
+        let offer = FileOffer { transfer_id: transfer_id.clone(), file_name: file_name.clone(), size, digest, chunks };
+        let identity = DeviceIdentity::load_or_create(&data_dir)?;
+        let offer_envelope = Envelope::new(Message::FileOffer(offer.clone()));
+
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build()
+            .map_err(|e| capsi_core::CapsiError::Unsupported(format!("runtime: {e}")))?;
+        runtime.block_on(async {
+            capsi_core::transport::connect_and_send(&socket, &identity, &device_id, &offer_envelope).await
+        })?;
+
+        let mut messages = MessageStore::load(&data_dir)?;
+        let stored = StoredMessage::file(&offer, true);
+        messages.append(&device_id, &peer.name, stored)?;
+
+        let mut input = File::open(&file_path)?;
+        let mut buffer = vec![0u8; capsi_core::TRANSFER_CHUNK_SIZE];
+        for index in 0..chunks {
+            let read = input.read(&mut buffer)?;
+            if read == 0 { break; }
+            let raw = &buffer[..read];
+            let chunk = Message::FileChunk {
+                transfer_id: transfer_id.clone(),
+                index,
+                digest: capsi_core::util::digest_hex(raw),
+                data: base64::engine::general_purpose::STANDARD.encode(raw),
+            };
+            let envelope = Envelope::new(chunk);
+            runtime.block_on(async {
+                capsi_core::transport::connect_and_send(&socket, &identity, &device_id, &envelope).await
+            })?;
+        }
+        Ok(transfer_id)
     })();
 
     match result {
