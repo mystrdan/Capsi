@@ -2,7 +2,7 @@ name: Build Flutter website
 
 on:
   push:
-    branches: [flutter-migration]
+    branches: [main]
     paths:
       - "Website/flutter/**"
       - ".github/workflows/flutter-website-deploy.yml"
