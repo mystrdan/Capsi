@@ -21,10 +21,32 @@ class CapsiApp extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.dark,
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF0B0D0E),
+        scaffoldBackgroundColor: const Color(0xFF090B0C),
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF7AC943),
+          seedColor: const Color(0xFFB8F36B),
           brightness: Brightness.dark,
+          surface: const Color(0xFF111516),
+        ),
+        dividerColor: const Color(0x18FFFFFF),
+        navigationRailTheme: const NavigationRailThemeData(
+          backgroundColor: Color(0xFF0E1112),
+          indicatorColor: Color(0x18B8F36B),
+          selectedIconTheme: IconThemeData(color: Color(0xFFB8F36B)),
+          selectedLabelTextStyle: TextStyle(color: Color(0xFFF4F6F2), fontWeight: FontWeight.w700),
+          unselectedIconTheme: IconThemeData(color: Color(0xFF777E79)),
+          unselectedLabelTextStyle: TextStyle(color: Color(0xFF777E79)),
+        ),
+        cardTheme: const CardThemeData(
+          color: Color(0xFF111516),
+          surfaceTintColor: Colors.transparent,
+          margin: EdgeInsets.zero,
+        ),
+        inputDecorationTheme: const InputDecorationTheme(
+          filled: true,
+          fillColor: Color(0xFF0E1112),
+          border: OutlineInputBorder(borderSide: BorderSide(color: Color(0x18FFFFFF))),
+          enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0x18FFFFFF))),
+          focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0x66B8F36B))),
         ),
       ),
       home: const CapsiHome(),
@@ -144,11 +166,11 @@ class _CapsiHomeState extends State<CapsiHome> {
   }
 
   static const pages = <({IconData icon, String label})>[
-    (icon: Icons.near_me_outlined, label: 'Nearby'),
+    (icon: Icons.radar_outlined, label: 'Nearby'),
     (icon: Icons.workspaces_outlined, label: 'WorkPlace'),
     (icon: Icons.chat_bubble_outline, label: 'Messages'),
     (icon: Icons.folder_outlined, label: 'Files'),
-    (icon: Icons.devices_other_outlined, label: 'Trusted devices'),
+    (icon: Icons.verified_user_outlined, label: 'Trusted devices'),
   ];
 
   @override
@@ -203,15 +225,14 @@ class _CapsiHomeState extends State<CapsiHome> {
 class _CapsiMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primary,
-        borderRadius: BorderRadius.circular(12),
+    return Tooltip(
+      message: 'Capsi',
+      child: Image.asset(
+        'assets/capsi-logo-512.png',
+        width: 42,
+        height: 42,
+        fit: BoxFit.contain,
       ),
-      alignment: Alignment.center,
-      child: const Text('C', style: TextStyle(color: Colors.black, fontSize: 24, fontWeight: FontWeight.w800)),
     );
   }
 }
