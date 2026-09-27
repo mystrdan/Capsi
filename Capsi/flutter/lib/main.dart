@@ -390,14 +390,20 @@ class _SettingsDialog extends StatelessWidget {
                   _SettingsRow(
                     icon: Icons.radar_outlined,
                     title: 'Discovery',
-                    subtitle: 'UDP discovery port 45893',
-                    trailing: const Icon(Icons.check_circle_outline, color: Color(0xFFB8F36B)),
+                    subtitle: 'Discovery is used to find nearby Capsi devices.',
+                    trailing: Icon(
+                      native == null ? Icons.error_outline : Icons.check_circle_outline,
+                      color: native == null ? Colors.orange : const Color(0xFFB8F36B),
+                    ),
                   ),
                   _SettingsRow(
                     icon: Icons.message_outlined,
                     title: 'Messages',
-                    subtitle: 'TCP message listener port 45892',
-                    trailing: const Icon(Icons.check_circle_outline, color: Color(0xFFB8F36B)),
+                    subtitle: 'Messages use Capsi direct device-to-device transport.',
+                    trailing: Icon(
+                      native == null ? Icons.error_outline : Icons.check_circle_outline,
+                      color: native == null ? Colors.orange : const Color(0xFFB8F36B),
+                    ),
                   ),
                 ],
               ),
@@ -1351,6 +1357,7 @@ ListView(
     }
   }
 
+  // Keep transfer and message UI deliberately simple; transport details belong to the core.
   String _formatBytes(dynamic value) {
     final bytes = value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '');
     if (bytes == null) return 'Size unknown';
