@@ -1,6 +1,6 @@
 [package]
 name = "capsi"
-version = "1.0.1"
+version = "1.0.2"
 description = "Capsi by CAPSICOM - Download. Run. Connect."
 authors = ["CAPSICOM"]
 edition = "2021"

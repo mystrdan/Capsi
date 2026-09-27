@@ -1,6 +1,6 @@
 (function () {
   var cfg = window.CAPSI_CONFIG || {};
-  var FALLBACK_URL = cfg.DOWNLOAD_URL || "https://github.com/mystrdan/Capsi/releases/latest/download/Capsi_1.0.1_x64-setup.exe";
+  var FALLBACK_URL = cfg.DOWNLOAD_URL || "https://github.com/mystrdan/Capsi/releases/latest/download/Capsi_1.0.2_x64-setup.exe";
   var REPO = cfg.GITHUB_REPO || "mystrdan/Capsi";
 
   function applyDownloadUrl(url) {
