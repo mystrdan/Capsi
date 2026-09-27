@@ -541,6 +541,65 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                             }
                         }
                     }
+                    Message::WorkplaceText(workplace_message) => {
+                        let store = capsi_core::workplace::WorkspaceStore::new(&data_dir);
+                        let Some(mut workspace) = (match store.load() {
+                            Ok(value) => value,
+                            Err(error) => {
+                                message_event(&thread_latest, serde_json::json!({"error":error}));
+                                continue;
+                            }
+                        }) else {
+                            continue;
+                        };
+
+                        if workspace.has_received_message(&envelope.id) {
+                            continue;
+                        }
+
+                        let authorized = workspace.groups.iter()
+                            .find(|group| group.id == workplace_message.group_id)
+                            .map(|group| group.member_ids.iter().any(|id| id == peer_id.as_str()))
+                            .unwrap_or(false)
+                            && workspace.members.iter().any(|member| member.device_id == peer_id.as_str());
+
+                        if !authorized {
+                            message_event(&thread_latest, serde_json::json!({
+                                "error":"workplace message sender is not a member of the group",
+                                "device_id":peer_id.as_str(),
+                                "group_id":workplace_message.group_id
+                            }));
+                            continue;
+                        }
+
+                        if let Some(message_id) = workspace.append_message(
+                            &workplace_message.group_id,
+                            peer_id.as_str(),
+                            workplace_message.body.clone(),
+                        ) {
+                            workspace.messages.last_mut().map(|message| message.id = message_id.clone());
+                            workspace.mark_received_message(&envelope.id);
+                            workspace.touch();
+                            if let Err(error) = store.save(&workspace) {
+                                message_event(&thread_latest, serde_json::json!({"error":error}));
+                                continue;
+                            }
+
+                            let receipt = Envelope::new(Message::DeliveryReceipt(
+                                capsi_core::protocol::DeliveryReceipt { message_id: envelope.id.clone() }
+                            ));
+                            let socket = format!("{}:{}", addr.ip(), 45892);
+                            let _ = capsi_core::transport::connect_and_send(&socket, &identity, &peer_id, &receipt).await;
+
+                            message_event(&thread_latest, serde_json::json!({
+                                "type":"workplace_message",
+                                "device_id":peer_id.as_str(),
+                                "group_id":workplace_message.group_id,
+                                "message_id":message_id,
+                                "body":workplace_message.body
+                            }));
+                        }
+                    }
                     Message::WorkplaceBroadcast(broadcast) => {
                         if peer_id.as_str() == identity.id().as_str() {
                             continue;
@@ -617,6 +676,12 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                     Message::DeliveryReceipt(receipt) => {
                         if let Ok(mut messages) = MessageStore::load(&data_dir) {
                             let _ = messages.mark_delivery_delivered(&peer_id, &receipt.message_id);
+                        }
+                        if let Ok(Some(mut workspace)) = capsi_core::workplace::WorkspaceStore::new(&data_dir).load() {
+                            if workspace.mark_delivery_delivered(&receipt.message_id, peer_id.as_str()) {
+                                workspace.touch();
+                                let _ = capsi_core::workplace::WorkspaceStore::new(&data_dir).save(&workspace);
+                            }
                         }
                         message_event(&thread_latest, serde_json::json!({
                             "type":"delivery_receipt",
@@ -890,6 +955,105 @@ pub extern "C" fn capsi_workplace_create(
             object.insert("sync".into(), serde_json::to_value(sync_status).unwrap_or_default());
         }
         Ok(value)
+    })();
+
+    match result {
+        Ok(value) => trust_result(value),
+        Err(error) => error_json(&error),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_workplace_send_message(
+    data_dir: *const c_char,
+    group_id: *const c_char,
+    body: *const c_char,
+) -> *mut c_char {
+    let dir = match c_path(data_dir) {
+        Some(path) => path,
+        None => return error_json("data directory is invalid"),
+    };
+    let group_id = match c_string(group_id).filter(|v| !v.trim().is_empty()) {
+        Some(value) => value,
+        None => return error_json("group id is invalid"),
+    };
+    let body = match c_string(body).filter(|v| !v.trim().is_empty()) {
+        Some(value) => value,
+        None => return error_json("message body is invalid"),
+    };
+
+    let result = (|| -> Result<serde_json::Value, String> {
+        let identity = DeviceIdentity::load_or_create(&dir).map_err(|e| e.to_string())?;
+        let local_id = identity.id().as_str().to_string();
+        let store = capsi_core::workplace::WorkspaceStore::new(&dir);
+        let mut workspace = store.load()?.ok_or_else(|| "workplace has not been created".to_string())?;
+
+        if !workspace.permissions_for(&local_id).contains(&capsi_core::workplace::Permission::SendMessages) {
+            return Err("device is not allowed to send workplace messages".into());
+        }
+        let message_id = workspace
+            .append_message(&group_id, &local_id, body.clone())
+            .ok_or_else(|| "device is not a member of this group".to_string())?;
+        workspace.touch();
+
+        let envelope = Envelope::new(Message::WorkplaceText(
+            capsi_core::protocol::WorkplaceTextMessage::new(&group_id, &body)
+                .map_err(|e| e.to_string())?,
+        ));
+
+        let trust = TrustStore::load(&dir).map_err(|e| e.to_string())?;
+        let recipients: Vec<String> = workspace.groups.iter()
+            .find(|group| group.id == group_id)
+            .map(|group| group.member_ids.iter()
+                .filter(|id| *id != &local_id)
+                .filter(|id| workspace.members.iter().any(|member| &member.device_id == *id))
+                .cloned()
+                .collect())
+            .unwrap_or_default();
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .map_err(|e| format!("runtime: {e}"))?;
+
+        let mut delivered = 0usize;
+        let mut queued = 0usize;
+        for recipient in &recipients {
+            let Some(device_id) = DeviceId::from_hex(recipient).ok() else {
+                queued += 1;
+                continue;
+            };
+            let Some(device) = trust.get(&device_id).filter(|device| device.is_trusted()) else {
+                queued += 1;
+                continue;
+            };
+            let Some(address) = device.last_address.clone() else {
+                workspace.queue_delivery(envelope.clone(), recipient.clone(), now_millis());
+                queued += 1;
+                continue;
+            };
+            let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
+            let socket = format!("{host}:45892");
+            match runtime.block_on(async {
+                capsi_core::transport::connect_and_send(&socket, &identity, &device_id, &envelope).await
+            }) {
+                Ok(()) => delivered += 1,
+                Err(error) => {
+                    workspace.queue_delivery(envelope.clone(), recipient.clone(), now_millis());
+                    let _ = error;
+                    queued += 1;
+                }
+            }
+        }
+
+        store.save(&workspace).map_err(|e| e.to_string())?;
+        Ok(serde_json::json!({
+            "message_id": message_id,
+            "group_id": group_id,
+            "delivered": delivered,
+            "queued": queued,
+        }))
     })();
 
     match result {
