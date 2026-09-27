@@ -862,12 +862,17 @@ ListView(
   Widget _files(BuildContext context) {
     final data = widget.dataDirectory;
     final native = widget.native;
-    final conversations = data == null || native == null ? const <Map<String, dynamic>>[] : native.conversations(data);
+    final conversations = data == null || native == null
+        ? const <Map<String, dynamic>>[]
+        : native.conversations(data);
     final files = <({String deviceId, String name, Map<String, dynamic> file})>[];
+
     for (final conversation in conversations) {
       final deviceId = conversation['device_id']?.toString() ?? '';
       final name = conversation['name']?.toString() ?? 'Device';
-      final messages = (conversation['messages'] as List?)?.whereType<Map<String, dynamic>>() ?? const <Map<String, dynamic>>[];
+      final messages = (conversation['messages'] as List?)
+              ?.whereType<Map<String, dynamic>>() ??
+          const <Map<String, dynamic>>[];
       for (final message in messages) {
         final file = message['file'];
         if (message['kind'] == 'file' && file is Map<String, dynamic>) {
@@ -876,121 +881,361 @@ ListView(
       }
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(28),
-      children: [
-        Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 720;
+        return ListView(
+          padding: EdgeInsets.fromLTRB(compact ? 16 : 28, 20, compact ? 16 : 28, 32),
           children: [
-            Text('Files', style: Theme.of(context).textTheme.titleLarge),
-            const Spacer(),
-            FilledButton.icon(
-              onPressed: widget.trustedDevices.isEmpty ? null : _pickAndSendFile,
-              icon: const Icon(Icons.attach_file),
-              label: const Text('Send file'),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Files', style: Theme.of(context).textTheme.titleLarge),
+                      const SizedBox(height: 5),
+                      Text(
+                        'Send files directly to trusted devices.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: const Color(0xFF8E9691),
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                FilledButton.icon(
+                  onPressed: widget.trustedDevices.isEmpty ? null : _pickAndSendFile,
+                  icon: const Icon(Icons.upload_file_outlined),
+                  label: Text(compact ? 'Send' : 'Send file'),
+                ),
+              ],
             ),
+            const SizedBox(height: 20),
+            if (files.isEmpty)
+              const _EmptyPanel(
+                icon: Icons.folder_open_outlined,
+                title: 'No file transfers yet',
+                message: 'Choose a trusted device and send a file. Transfers stay device to device.',
+              )
+            else
+              for (final item in files.reversed)
+                Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: _DeviceIcon(icon: _fileIcon(item.file['file_name']?.toString() ?? '')),
+                    title: Text(
+                      item.file['file_name']?.toString() ?? 'File',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      '\${item.name} · \${_formatBytes(item.file['size'])} · \${item.file['state'] ?? 'unknown'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: Icon(
+                      _fileStateIcon(item.file['state']?.toString()),
+                      color: _fileStateColor(item.file['state']?.toString()),
+                    ),
+                  ),
+                ),
           ],
-        ),
-        const SizedBox(height: 8),
-        const Text('Files move directly between trusted devices. Nothing is uploaded to a cloud service.'),
-        const SizedBox(height: 20),
-        if (files.isEmpty)
-          const Card(child: Padding(padding: EdgeInsets.all(24), child: Text('No file transfers yet.')))
-        else
-          for (final item in files.reversed)
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.insert_drive_file_outlined),
-                title: Text(item.file['file_name']?.toString() ?? 'File'),
-                subtitle: Text('${item.name} · ${item.file['size'] ?? 0} bytes · ${item.file['state'] ?? 'unknown'}'),
-              ),
-            ),
-      ],
+        );
+      },
     );
+  }
+
+  IconData _fileIcon(String name) {
+    final lower = name.toLowerCase();
+    if (lower.endsWith('.pdf')) return Icons.picture_as_pdf_outlined;
+    if (lower.endsWith('.zip') || lower.endsWith('.rar') || lower.endsWith('.7z')) {
+      return Icons.archive_outlined;
+    }
+    if (lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.gif')) {
+      return Icons.image_outlined;
+    }
+    if (lower.endsWith('.mp4') ||
+        lower.endsWith('.mov') ||
+        lower.endsWith('.mkv') ||
+        lower.endsWith('.webm')) {
+      return Icons.movie_outlined;
+    }
+    if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.m4a')) {
+      return Icons.audio_file_outlined;
+    }
+    if (lower.endsWith('.doc') || lower.endsWith('.docx')) return Icons.description_outlined;
+    if (lower.endsWith('.xls') || lower.endsWith('.xlsx')) return Icons.table_chart_outlined;
+    if (lower.endsWith('.ppt') || lower.endsWith('.pptx')) return Icons.slideshow_outlined;
+    return Icons.insert_drive_file_outlined;
+  }
+
+  IconData _fileStateIcon(String? state) {
+    switch (state?.toLowerCase()) {
+      case 'complete':
+      case 'completed':
+      case 'delivered':
+        return Icons.check_circle_outline;
+      case 'failed':
+      case 'error':
+        return Icons.error_outline;
+      case 'queued':
+      case 'pending':
+        return Icons.schedule_outlined;
+      default:
+        return Icons.sync_outlined;
+    }
+  }
+
+  Color _fileStateColor(String? state) {
+    switch (state?.toLowerCase()) {
+      case 'complete':
+      case 'completed':
+      case 'delivered':
+        return const Color(0xFFB8F36B);
+      case 'failed':
+      case 'error':
+        return Colors.orange;
+      default:
+        return const Color(0xFF858D88);
+    }
+  }
+
+  String _formatBytes(dynamic value) {
+    final bytes = value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '');
+    if (bytes == null) return 'Size unknown';
+    if (bytes < 1024) return '\${bytes.toInt()} B';
+    if (bytes < 1024 * 1024) return '\${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '\${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '\${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   Future<void> _pickAndSendFile() async {
     final data = widget.dataDirectory;
     final native = widget.native;
     if (data == null || native == null || widget.trustedDevices.isEmpty || !mounted) return;
-    final selectedId = selectedDevice ?? widget.trustedDevices.first.deviceId;
+
+    final selectedId = _validSelectedDevice() ?? widget.trustedDevices.first.deviceId;
     final result = await FilePicker.platform.pickFiles(withData: false);
     if (!mounted || result == null || result.files.single.path == null) return;
+
     final transferId = native.sendFile(data, selectedId, result.files.single.path!);
     if (transferId == null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File transfer failed.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('File transfer failed.')),
+      );
     } else if (mounted) {
       setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File transfer started.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('File transfer started.')),
+      );
     }
   }
 
   Widget _messages(BuildContext context) {
     final devices = widget.trustedDevices;
-    if (devices.isEmpty) return const Center(child: Text('Accept a device from Nearby before starting a conversation.'));
-    selectedDevice ??= devices.first.deviceId;
-    final selected = devices.firstWhere((d) => d.deviceId == selectedDevice, orElse: () => devices.first);
+    if (devices.isEmpty) {
+      return const _EmptyPanel(
+        icon: Icons.chat_bubble_outline,
+        title: 'No trusted devices',
+        message: 'Accept a device from Nearby before starting a conversation.',
+      );
+    }
+
+    final currentId = _validSelectedDevice() ?? devices.first.deviceId;
+    if (selectedDevice != currentId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && selectedDevice != currentId) {
+          setState(() => selectedDevice = currentId);
+        }
+      });
+    }
+
+    final selected = devices.firstWhere(
+      (d) => d.deviceId == currentId,
+      orElse: () => devices.first,
+    );
     final data = widget.dataDirectory;
     final native = widget.native;
-    final conversation = data == null || native == null ? null : native.conversation(data, selected.deviceId);
-    final messages = (conversation?['messages'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? const <Map<String, dynamic>>[];
+    final conversation =
+        data == null || native == null ? null : native.conversation(data, selected.deviceId);
+    final messages = (conversation?['messages'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .toList() ??
+        const <Map<String, dynamic>>[];
 
-    return Row(
-      children: [
-        SizedBox(
-          width: 260,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 720;
+        if (compact) {
+          return Column(
             children: [
-              for (final device in devices)
-                ListTile(
-                  selected: device.deviceId == selected.deviceId,
-                  leading: const Icon(Icons.computer_outlined),
-                  title: Text(device.displayName),
-                  subtitle: Text(device.state),
-                  onTap: () => setState(() => selectedDevice = device.deviceId),
+              SizedBox(
+                height: 76,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  itemCount: devices.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (_, index) {
+                    final device = devices[index];
+                    final active = device.deviceId == selected.deviceId;
+                    return ChoiceChip(
+                      selected: active,
+                      avatar: const Icon(Icons.computer_outlined, size: 18),
+                      label: Text(device.displayName),
+                      onSelected: (_) => setState(() => selectedDevice = device.deviceId),
+                    );
+                  },
                 ),
+              ),
+              const Divider(height: 1),
+              Expanded(child: _conversationPane(context, selected, messages)),
             ],
+          );
+        }
+
+        return Row(
+          children: [
+            SizedBox(
+              width: 270,
+              child: ListView(
+                padding: const EdgeInsets.all(14),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 4, 6, 10),
+                    child: Text(
+                      'Conversations',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  for (final device in devices)
+                    ListTile(
+                      selected: device.deviceId == selected.deviceId,
+                      leading: _DeviceIcon(icon: Icons.computer_outlined),
+                      title: Text(
+                        device.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(device.state),
+                      onTap: () => setState(() => selectedDevice = device.deviceId),
+                    ),
+                ],
+              ),
+            ),
+            const VerticalDivider(width: 1),
+            Expanded(child: _conversationPane(context, selected, messages)),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _conversationPane(
+    BuildContext context,
+    KnownDevice selected,
+    List<Map<String, dynamic>> messages,
+  ) {
+    return Column(
+      children: [
+        ListTile(
+          leading: _DeviceIcon(icon: Icons.computer_outlined),
+          title: Text(selected.displayName),
+          subtitle: Text(
+            selected.fingerprint.isEmpty ? selected.state : selected.fingerprint,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Icon(
+            selected.state.toLowerCase() == 'accepted'
+                ? Icons.verified_outlined
+                : Icons.circle_outlined,
+            color: selected.state.toLowerCase() == 'accepted'
+                ? const Color(0xFFB8F36B)
+                : const Color(0xFF777E79),
           ),
         ),
-        const VerticalDivider(width: 1),
+        const Divider(height: 1),
         Expanded(
-          child: Column(
-            children: [
-              ListTile(title: Text(selected.displayName), subtitle: Text(selected.fingerprint)),
-              const Divider(height: 1),
-              Expanded(
-                child: messages.isEmpty
-                    ? const Center(child: Text('No messages yet. Say hello.'))
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(20),
-                        itemCount: messages.length,
-                        itemBuilder: (_, index) {
-                          final message = messages[index];
-                          final outgoing = message['outgoing'] == true;
-                          return Align(
-                            alignment: outgoing ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Card(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), child: Text(message['body']?.toString() ?? ''))),
-                          );
-                        },
+          child: messages.isEmpty
+              ? const _EmptyPanel(
+                  icon: Icons.chat_bubble_outline,
+                  title: 'No messages yet',
+                  message: 'Send the first message to this device.',
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: messages.length,
+                  itemBuilder: (_, index) {
+                    final message = messages[index];
+                    final outgoing = message['outgoing'] == true;
+                    return Align(
+                      alignment: outgoing ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 620),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            child: Text(message['body']?.toString() ?? ''),
+                          ),
+                        ),
                       ),
-              ),
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    Expanded(child: TextField(onChanged: (value) => draft = value, onSubmitted: (_) => _send(), decoration: const InputDecoration(hintText: 'Message', border: OutlineInputBorder()))),
-                    IconButton(onPressed: widget.trustedDevices.isEmpty ? null : _pickAndSendFile, tooltip: 'Send file', icon: const Icon(Icons.attach_file)),
-                    const SizedBox(width: 10),
-                    FilledButton.icon(onPressed: _send, icon: const Icon(Icons.send), label: const Text('Send')),
-                  ],
+                    );
+                  },
                 ),
-              ),
-            ],
+        ),
+        const Divider(height: 1),
+        SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: TextField(
+                    onChanged: (value) => draft = value,
+                    onSubmitted: (_) => _send(),
+                    minLines: 1,
+                    maxLines: 4,
+                    textInputAction: TextInputAction.newline,
+                    decoration: const InputDecoration(
+                      hintText: 'Write a message',
+                      prefixIcon: Icon(Icons.chat_bubble_outline),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  onPressed: _pickAndSendFile,
+                  tooltip: 'Send file',
+                  icon: const Icon(Icons.attach_file),
+                ),
+                const SizedBox(width: 6),
+                IconButton.filled(
+                  onPressed: draft.trim().isEmpty ? null : _send,
+                  tooltip: 'Send message',
+                  icon: const Icon(Icons.send),
+                ),
+              ],
+            ),
           ),
         ),
       ],
     );
+  }
+
+  String? _validSelectedDevice() {
+    final id = selectedDevice;
+    if (id == null) return null;
+    return widget.trustedDevices.any((device) => device.deviceId == id) ? id : null;
   }
 
   void _send() {
