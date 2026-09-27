@@ -268,7 +268,7 @@ class _PageBodyState extends State<_PageBody> {
               children: [
                 Icon(Icons.devices_outlined, size: 54, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(height: 20),
-                Text(widget.peers.isEmpty ? 'No Nearby devices yet' : widget.peers.length.toString() + ' device' + (widget.peers.length == 1 ? '' : 's') + ' found', style: Theme.of(context).textTheme.titleLarge),
+                Text(widget.peers.isEmpty ? 'No Nearby devices yet' : '${widget.peers.length} device${widget.peers.length == 1 ? '' : 's'} found', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 10),
                 const Text('Capsi finds devices directly on the local network. No cloud service or account is involved.', textAlign: TextAlign.center),
                 if (widget.peers.isNotEmpty) ...[
@@ -290,7 +290,7 @@ class _PageBodyState extends State<_PageBody> {
                 const SizedBox(height: 20),
                 OutlinedButton.icon(onPressed: widget.scanning ? null : widget.onScan, icon: Icon(widget.scanning ? Icons.sync : Icons.refresh), label: Text(widget.scanning ? 'Scanning…' : 'Scan again')),
                 const SizedBox(height: 12),
-                Text(widget.native == null ? 'Rust core not packaged for this build yet.' : 'Rust ' + widget.native!.runtimeVersion + ' · ' + widget.native!.protocolVersion, style: Theme.of(context).textTheme.bodySmall),
+                Text(widget.native == null ? 'Rust core not packaged for this build yet.' : 'Rust ${widget.native!.runtimeVersion} · ${widget.native!.protocolVersion}', style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(height: 12),
                 const Text('Run it. Find devices. Send.', style: TextStyle(fontWeight: FontWeight.w600)),
               ],
