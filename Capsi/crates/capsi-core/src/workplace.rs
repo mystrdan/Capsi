@@ -163,6 +163,43 @@ impl Workspace {
             return Err("synchronized workspace owner role is invalid".into());
         }
 
+        // Reject malformed administration state before replacing the local model.
+        // Groups/departments/messages may only reference members that exist in
+        // the synchronized member list.
+        let member_ids = state.members.iter()
+            .map(|m| m.device_id.as_str())
+            .collect::<BTreeSet<_>>();
+        for group in &state.groups {
+            if group.member_ids.iter().any(|id| !member_ids.contains(id.as_str())) {
+                return Err("synchronized group references an unknown member".into());
+            }
+        }
+        for department in &state.departments {
+            if department.member_ids.iter().any(|id| !member_ids.contains(id.as_str())) {
+                return Err("synchronized department references an unknown member".into());
+            }
+        }
+        for member in &state.members {
+            if let Some(department_id) = &member.department_id {
+                let Some(department) = state.departments.iter().find(|d| &d.id == department_id) else {
+                    return Err("synchronized member references an unknown department".into());
+                };
+                if !department.member_ids.iter().any(|id| id == &member.device_id) {
+                    return Err("synchronized department is missing its member reference".into());
+                }
+            }
+        }
+        for message in &state.messages {
+            let Some(group) = state.groups.iter().find(|g| g.id == message.group_id) else {
+                return Err("synchronized message references an unknown group".into());
+            };
+            if !member_ids.contains(message.sender_device_id.as_str())
+                || !group.member_ids.iter().any(|id| id == &message.sender_device_id)
+            {
+                return Err("synchronized message sender is not a group member".into());
+            }
+        }
+
         if !matches!(actor.role, Role::Owner) {
             let privileged = |members: &[Member]| {
                 members.iter()
@@ -530,6 +567,37 @@ mod tests {
         alice.apply_network_state(state, "owner").unwrap();
         assert_eq!(alice.members.len(), 2);
         assert_eq!(alice.pending_deliveries.len(), 1);
+    }
+
+    #[test]
+    fn malformed_sync_references_are_rejected() {
+        let mut workspace = Workspace::new("Office", "owner");
+        workspace.add_member("alice", "Alice", Role::Member);
+        let mut incoming = workspace.network_state();
+        incoming.groups.push(Group {
+            id: "group-1".into(),
+            name: "Broken".into(),
+            description: String::new(),
+            member_ids: vec!["unknown".into()],
+        });
+        assert!(workspace.apply_network_state(incoming, "owner").is_err());
+    }
+
+    #[test]
+    fn synchronized_message_must_belong_to_group_member() {
+        let mut workspace = Workspace::new("Office", "owner");
+        workspace.add_member("alice", "Alice", Role::Member);
+        let group_id = workspace.create_group("Team", "");
+        workspace.add_to_group(&group_id, "alice");
+        let mut incoming = workspace.network_state();
+        incoming.messages.push(WorkplaceMessage {
+            id: "message-1".into(),
+            group_id,
+            sender_device_id: "owner".into(),
+            body: "invalid".into(),
+            sent_at: now(),
+        });
+        assert!(workspace.apply_network_state(incoming, "owner").is_err());
     }
 
     #[test]
