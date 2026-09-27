@@ -561,7 +561,7 @@ class _PageBodyState extends State<_PageBody> {
     final groups = (workspace?['groups'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? const [];
     final groupId = selectedWorkplaceGroup != null && groups.any((g) => g['id']?.toString() == selectedWorkplaceGroup)
         ? selectedWorkplaceGroup
-        : groups.firstOrNull?['id']?.toString();
+        : (groups.isEmpty ? null : groups.first['id']?.toString());
     if (data == null || native == null || groupId == null || text.isEmpty) return;
     final result = native.sendWorkplaceMessage(data, groupId, text);
     if (result != null && result['error'] == null && mounted) {
