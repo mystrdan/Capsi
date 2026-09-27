@@ -235,7 +235,7 @@ class _CapsiHomeState extends State<CapsiHome> {
           body: compact
               ? Column(
                   children: [
-                    Expanded(child: _DesktopContent(page: page, body: body, native: native)),
+                    Expanded(child: _DesktopContent(page: page, body: body, native: native, initializing: initializing, initializationError: initializationError, onRetry: _retryInitialization)),
                     NavigationBar(
                       selectedIndex: selected,
                       onDestinationSelected: (index) => setState(() => selected = index),
@@ -280,8 +280,11 @@ class _DesktopContent extends StatelessWidget {
   final ({IconData icon, String label}) page;
   final Widget body;
   final CapsiNative? native;
+  final bool initializing;
+  final String? initializationError;
+  final VoidCallback onRetry;
 
-  const _DesktopContent({required this.page, required this.body, required this.native});
+  const _DesktopContent({required this.page, required this.body, required this.native, required this.initializing, required this.initializationError, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -320,6 +323,14 @@ class _DesktopContent extends StatelessWidget {
           ),
         ),
         const Divider(height: 1),
+        if (initializationError != null)
+          MaterialBanner(
+            content: Text('Capsi could not finish starting: $initializationError'),
+            leading: const Icon(Icons.error_outline),
+            actions: [
+              TextButton(onPressed: onRetry, child: const Text('Retry')),
+            ],
+          ),
         Expanded(child: body),
       ],
     );
