@@ -231,6 +231,227 @@ pub extern "C" fn capsi_discovery_stop(handle: u64) {
     }
 }
 
+
+fn message_sessions() -> &'static Mutex<HashMap<u64, MessageSession>> {
+    MESSAGE_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) -> u64 {
+    let data_dir = match c_path(data_dir) { Some(path) => path, None => return 0 };
+    let stop = Arc::new(AtomicBool::new(false));
+    let latest = Arc::new(Mutex::new(String::from("null")));
+    let thread_stop = Arc::clone(&stop);
+    let thread_latest = Arc::clone(&latest);
+
+    if std::thread::Builder::new().name("capsi-messages".into()).spawn(move || {
+        let runtime = match tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build() {
+            Ok(runtime) => runtime,
+            Err(_) => return,
+        };
+        runtime.block_on(async move {
+            let identity = match DeviceIdentity::load_or_create(&data_dir) {
+                Ok(identity) => Arc::new(identity),
+                Err(_) => return,
+            };
+            let listener = match TcpListener::bind(("0.0.0.0", tcp_port)).await {
+                Ok(listener) => listener,
+                Err(error) => {
+                    message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                    return;
+                }
+            };
+
+            while !thread_stop.load(Ordering::Acquire) {
+                let accepted = tokio::time::timeout(Duration::from_millis(500), listener.accept()).await;
+                let (stream, addr) = match accepted {
+                    Ok(Ok(value)) => value,
+                    Ok(Err(error)) => {
+                        message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                        continue;
+                    }
+                    Err(_) => continue,
+                };
+
+                let (peer_id, envelope) = match capsi_core::transport::accept_and_read(stream, &identity).await {
+                    Ok(value) => value,
+                    Err(error) => {
+                        message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                        continue;
+                    }
+                };
+
+                let trust = match TrustStore::load(&data_dir) {
+                    Ok(store) => store,
+                    Err(error) => {
+                        message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                        continue;
+                    }
+                };
+                let known = match trust.get(&peer_id) {
+                    Some(device) if device.is_trusted() => device.clone(),
+                    _ => {
+                        message_event(&thread_latest, serde_json::json!({"error":"untrusted device","device_id":peer_id.as_str()}));
+                        continue;
+                    }
+                };
+
+                match envelope.message.clone() {
+                    Message::Text(text) => {
+                        let mut stored = match StoredMessage::text(&text.body, false) {
+                            Ok(message) => message,
+                            Err(error) => {
+                                message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                                continue;
+                            }
+                        };
+                        stored.id = envelope.id.clone();
+                        stored.sent_at = envelope.sent_at;
+                        stored.state = DeliveryState::Delivered;
+
+                        let mut messages = match MessageStore::load(&data_dir) {
+                            Ok(store) => store,
+                            Err(error) => {
+                                message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                                continue;
+                            }
+                        };
+                        if let Err(error) = messages.append(&peer_id, &known.name, stored) {
+                            message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                            continue;
+                        }
+
+                        let receipt = Envelope::new(Message::DeliveryReceipt(capsi_core::protocol::DeliveryReceipt {
+                            message_id: envelope.id.clone(),
+                        }));
+                        let socket = format!("{}:{}", addr.ip(), 45892);
+                        let _ = capsi_core::transport::connect_and_send(&socket, &identity, &peer_id, &receipt).await;
+
+                        message_event(&thread_latest, serde_json::json!({
+                            "type":"message",
+                            "device_id":peer_id.as_str(),
+                            "message_id":envelope.id,
+                            "body":text.body
+                        }));
+                    }
+                    Message::DeliveryReceipt(receipt) => {
+                        if let Ok(mut messages) = MessageStore::load(&data_dir) {
+                            let _ = messages.mark_delivery_delivered(&peer_id, &receipt.message_id);
+                        }
+                        message_event(&thread_latest, serde_json::json!({
+                            "type":"delivery_receipt",
+                            "device_id":peer_id.as_str(),
+                            "message_id":receipt.message_id
+                        }));
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }).is_err() {
+        return 0;
+    }
+
+    let id = NEXT_MESSAGE_ID.fetch_add(1, Ordering::Relaxed);
+    if let Ok(mut sessions) = message_sessions().lock() {
+        sessions.insert(id, MessageSession { stop, latest });
+        id
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_message_poll(handle: u64) -> *mut c_char {
+    let json = message_sessions().lock().ok()
+        .and_then(|sessions| sessions.get(&handle).and_then(|session| session.latest.lock().ok().map(|value| value.clone())))
+        .unwrap_or_else(|| "null".into());
+    into_c_string(json)
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_message_stop(handle: u64) {
+    if let Ok(mut sessions) = message_sessions().lock() {
+        if let Some(session) = sessions.remove(&handle) {
+            session.stop.store(true, Ordering::Release);
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_message_send(
+    data_dir: *const c_char,
+    device_id: *const c_char,
+    body: *const c_char,
+) -> *mut c_char {
+    let data_dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    let device_id = match c_string(device_id).and_then(|value| DeviceId::from_hex(&value).ok()) {
+        Some(id) => id,
+        None => return error_json("device id is invalid"),
+    };
+    let body = match c_string(body) { Some(value) => value, None => return error_json("message body is invalid") };
+
+    let result = (|| -> capsi_core::Result<String> {
+        let trust = TrustStore::load(&data_dir)?;
+        let peer = trust.get(&device_id)
+            .filter(|device| device.is_trusted())
+            .ok_or_else(|| capsi_core::CapsiError::NotFound("device is not trusted".into()))?
+            .clone();
+        let address = peer.last_address.clone()
+            .ok_or_else(|| capsi_core::CapsiError::NotFound("trusted device has no known address".into()))?;
+        let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
+        let socket = format!("{host}:45892");
+
+        let identity = DeviceIdentity::load_or_create(&data_dir)?;
+        let text = TextMessage::new(&body)?;
+        let envelope = Envelope::new(Message::Text(text.clone()));
+
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build()
+            .map_err(|e| capsi_core::CapsiError::Unsupported(format!("runtime: {e}")))?;
+        runtime.block_on(async {
+            capsi_core::transport::connect_and_send(&socket, &identity, &device_id, &envelope).await
+        })?;
+
+        let mut messages = MessageStore::load(&data_dir)?;
+        let mut stored = StoredMessage::text(&text.body, true)?;
+        stored.id = envelope.id.clone();
+        stored.sent_at = envelope.sent_at;
+        stored.state = DeliveryState::Sent;
+        messages.append(&device_id, &peer.name, stored)?;
+        Ok(envelope.id)
+    })();
+
+    match result {
+        Ok(id) => trust_result(id),
+        Err(error) => error_json(&error.to_string()),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_conversations_list(data_dir: *const c_char) -> *mut c_char {
+    let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    match MessageStore::load(&dir) {
+        Ok(store) => trust_result(store.list()),
+        Err(error) => error_json(&error.to_string()),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_conversation_load(data_dir: *const c_char, device_id: *const c_char) -> *mut c_char {
+    let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    let id = match c_string(device_id).and_then(|value| DeviceId::from_hex(&value).ok()) {
+        Some(id) => id,
+        None => return error_json("device id is invalid"),
+    };
+    match MessageStore::load(&dir) {
+        Ok(store) => match store.get(&id) {
+            Some(conversation) => trust_result(conversation),
+            None => error_json("conversation not found"),
+        },
+        Err(error) => error_json(&error.to_string()),
+    }
+}
+
 /// Stable native boundary for the Flutter client.
 ///
 /// Keep this API C-compatible. Higher-level Capsi operations should be backed
