@@ -46,6 +46,8 @@ class _CapsiHomeState extends State<CapsiHome> {
   Timer? discoveryTimer;
   String? dataDirectory;
   List<KnownDevice> trustedDevices = const [];
+  int messageHandle = 0;
+  Timer? messageTimer;
 
   @override
   void initState() {
@@ -61,6 +63,7 @@ class _CapsiHomeState extends State<CapsiHome> {
     if (native == null) return;
     _loadTrust();
     _startDiscovery();
+    _startMessages();
   }
 
   void _loadTrust() {
@@ -68,6 +71,19 @@ class _CapsiHomeState extends State<CapsiHome> {
     final dir = dataDirectory;
     if (bridge == null || dir == null || !mounted) return;
     setState(() => trustedDevices = bridge.trustList(dir));
+  }
+
+  void _startMessages() {
+    final bridge = native;
+    final dir = dataDirectory;
+    if (bridge == null || dir == null) return;
+    messageHandle = bridge.startMessageListener(dataDirectory: dir);
+    if (messageHandle == 0) return;
+    messageTimer = Timer.periodic(const Duration(milliseconds: 750), (_) {
+      if (!mounted) return;
+      bridge.pollMessage(messageHandle);
+      setState(() {});
+    });
   }
 
   void _startDiscovery() {
@@ -100,6 +116,9 @@ class _CapsiHomeState extends State<CapsiHome> {
   @override
   void dispose() {
     discoveryTimer?.cancel();
+    messageTimer?.cancel();
+    final messageBridge = native;
+    if (messageBridge != null && messageHandle != 0) messageBridge.stopMessageListener(messageHandle);
     final bridge = native;
     if (bridge != null && discoveryHandle != 0) {
       bridge.stopDiscovery(discoveryHandle);
@@ -197,7 +216,7 @@ class _NetworkStatus extends StatelessWidget {
   }
 }
 
-class _PageBody extends StatelessWidget {
+class _PageBody extends StatefulWidget {
   final String label;
   final List<CapsiPeer> peers;
   final bool scanning;
@@ -209,8 +228,16 @@ class _PageBody extends StatelessWidget {
   const _PageBody({required this.label, required this.peers, required this.scanning, required this.native, required this.onScan, required this.trustedDevices, required this.onTrustChanged, required this.dataDirectory});
 
   @override
+  State<_PageBody> createState() => _PageBodyState();
+}
+
+class _PageBodyState extends State<_PageBody> {
+  String? selectedDevice;
+  String draft = '';
+
+  @override
   Widget build(BuildContext context) {
-    if (label == 'Trusted devices') {
+    if (widget.label == 'Trusted devices') {
       return ListView(
         padding: const EdgeInsets.all(28),
         children: [
@@ -218,18 +245,20 @@ class _PageBody extends StatelessWidget {
           const SizedBox(height: 8),
           const Text('Only devices you accept are allowed to exchange messages and files.'),
           const SizedBox(height: 20),
-          if (trustedDevices.isEmpty)
+          if (widget.trustedDevices.isEmpty)
             const Card(child: Padding(padding: EdgeInsets.all(24), child: Text('No trusted devices yet. Accept a device from Nearby to add it here.')))
           else
-            for (final device in trustedDevices)
-              Card(child: ListTile(
-                leading: const Icon(Icons.verified_user_outlined),
-                title: Text(device.displayName),
-                subtitle: Text(device.fingerprint),
-              )),
+            for (final device in widget.trustedDevices)
+              Card(child: ListTile(leading: const Icon(Icons.verified_user_outlined), title: Text(device.displayName), subtitle: Text(device.fingerprint))),
         ],
       );
     }
+
+    if (widget.label == 'Messages') return _messages(context);
+    if (widget.label == 'Files') {
+      return const Center(child: Text('File transfer UI is next; the Rust protocol already defines encrypted offers, receipts and chunks.'));
+    }
+
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 680),
@@ -242,32 +271,29 @@ class _PageBody extends StatelessWidget {
               children: [
                 Icon(Icons.devices_outlined, size: 54, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(height: 20),
-                Text(peers.isEmpty ? 'No $label yet' : '${peers.length} device${peers.length == 1 ? '' : 's'} found', style: Theme.of(context).textTheme.titleLarge),
+                Text(widget.peers.isEmpty ? 'No Nearby devices yet' : widget.peers.length.toString() + ' device' + (widget.peers.length == 1 ? '' : 's') + ' found', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 10),
-                const Text(
-                  'Capsi is ready for the Rust core. The Flutter interface is now the shared UI foundation for Windows, Android, macOS and iOS.',
-                  textAlign: TextAlign.center,
-                ),
-                if (label == 'Nearby' && peers.isNotEmpty) ...[
+                const Text('Capsi finds devices directly on the local network. No cloud service or account is involved.', textAlign: TextAlign.center),
+                if (widget.peers.isNotEmpty) ...[
                   const SizedBox(height: 18),
-                  for (final peer in peers.take(8))
+                  for (final peer in widget.peers.take(8))
                     ListTile(
                       leading: const Icon(Icons.computer_outlined),
                       title: Text(peer.name),
                       subtitle: Text(peer.fingerprint.isEmpty ? peer.tcpAddress : peer.fingerprint),
-                      trailing: dataDirectory == null ? null : FilledButton(
+                      trailing: widget.dataDirectory == null ? null : FilledButton(
                         onPressed: () {
-                          final accepted = native?.acceptTrust(dataDirectory!, peer.deviceId);
-                          if (accepted != null) onTrustChanged();
+                          final accepted = widget.native?.acceptTrust(widget.dataDirectory!, peer.deviceId);
+                          if (accepted != null) widget.onTrustChanged();
                         },
                         child: const Text('Accept'),
                       ),
                     ),
                 ],
                 const SizedBox(height: 20),
-                if (label == 'Nearby') OutlinedButton.icon(onPressed: scanning ? null : onScan, icon: Icon(scanning ? Icons.sync : Icons.refresh), label: Text(scanning ? 'Scanning…' : 'Scan again')),
+                OutlinedButton.icon(onPressed: widget.scanning ? null : widget.onScan, icon: Icon(widget.scanning ? Icons.sync : Icons.refresh), label: Text(widget.scanning ? 'Scanning…' : 'Scan again')),
                 const SizedBox(height: 12),
-                Text(native == null ? 'Rust core not packaged for this build yet.' : 'Rust ${native!.runtimeVersion} · ${native!.protocolVersion}', style: Theme.of(context).textTheme.bodySmall),
+                Text(widget.native == null ? 'Rust core not packaged for this build yet.' : 'Rust ' + widget.native!.runtimeVersion + ' · ' + widget.native!.protocolVersion, style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(height: 12),
                 const Text('Run it. Find devices. Send.', style: TextStyle(fontWeight: FontWeight.w600)),
               ],
@@ -277,4 +303,82 @@ class _PageBody extends StatelessWidget {
       ),
     );
   }
+
+  Widget _messages(BuildContext context) {
+    final devices = widget.trustedDevices;
+    if (devices.isEmpty) return const Center(child: Text('Accept a device from Nearby before starting a conversation.'));
+    selectedDevice ??= devices.first.deviceId;
+    final selected = devices.firstWhere((d) => d.deviceId == selectedDevice, orElse: () => devices.first);
+    final data = widget.dataDirectory;
+    final native = widget.native;
+    final conversation = data == null || native == null ? null : native.conversation(data, selected.deviceId);
+    final messages = (conversation?['messages'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? const <Map<String, dynamic>>[];
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 260,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              for (final device in devices)
+                ListTile(
+                  selected: device.deviceId == selected.deviceId,
+                  leading: const Icon(Icons.computer_outlined),
+                  title: Text(device.displayName),
+                  subtitle: Text(device.state),
+                  onTap: () => setState(() => selectedDevice = device.deviceId),
+                ),
+            ],
+          ),
+        ),
+        const VerticalDivider(width: 1),
+        Expanded(
+          child: Column(
+            children: [
+              ListTile(title: Text(selected.displayName), subtitle: Text(selected.fingerprint)),
+              const Divider(height: 1),
+              Expanded(
+                child: messages.isEmpty
+                    ? const Center(child: Text('No messages yet. Say hello.'))
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(20),
+                        itemCount: messages.length,
+                        itemBuilder: (_, index) {
+                          final message = messages[index];
+                          final outgoing = message['outgoing'] == true;
+                          return Align(
+                            alignment: outgoing ? Alignment.centerRight : Alignment.centerLeft,
+                            child: Card(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), child: Text(message['body']?.toString() ?? ''))),
+                          );
+                        },
+                      ),
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Expanded(child: TextField(onChanged: (value) => draft = value, onSubmitted: (_) => _send(), decoration: const InputDecoration(hintText: 'Message', border: OutlineInputBorder()))),
+                    const SizedBox(width: 10),
+                    FilledButton.icon(onPressed: _send, icon: const Icon(Icons.send), label: const Text('Send')),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _send() {
+    final text = draft.trim();
+    final data = widget.dataDirectory;
+    final native = widget.native;
+    if (text.isEmpty || data == null || native == null || selectedDevice == null) return;
+    final id = native.sendMessage(data, selectedDevice!, text);
+    if (id != null && mounted) setState(() => draft = '');
+  }
 }
+\n
