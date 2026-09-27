@@ -200,24 +200,29 @@ pub extern "C" fn capsi_trust_accept(
                 .save(&workspace)
                 .map_err(capsi_core::CapsiError::Io)?;
 
-            let address = device.last_address.clone()
-                .ok_or_else(|| capsi_core::CapsiError::NotFound("trusted device has no known address".into()))?;
-            let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
-            let socket = format!("{host}:45892");
-            let sync = Envelope::new(Message::WorkplaceSync(
-                capsi_core::protocol::WorkplaceSyncMessage {
-                    actor_device_id: identity.id().as_str().to_string(),
-                    state: workspace.network_state(),
-                },
-            ));
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .enable_time()
-                .build()
-                .map_err(|e| capsi_core::CapsiError::Unsupported(format!("runtime: {e}")))?;
-            runtime.block_on(async {
-                capsi_core::transport::connect_and_send(&socket, &identity, &id, &sync).await
-            })?;
+            // The trust relationship is local and should not be rolled back
+            // just because the invitee is temporarily offline. Initial workplace
+            // synchronization is therefore best-effort; the next workplace
+            // mutation can synchronize the member again.
+            if let Some(address) = device.last_address.clone() {
+                let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
+                let socket = format!("{host}:45892");
+                let sync = Envelope::new(Message::WorkplaceSync(
+                    capsi_core::protocol::WorkplaceSyncMessage {
+                        actor_device_id: identity.id().as_str().to_string(),
+                        state: workspace.network_state(),
+                    },
+                ));
+                if let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+                    .enable_io()
+                    .enable_time()
+                    .build()
+                {
+                    let _ = runtime.block_on(async {
+                        capsi_core::transport::connect_and_send(&socket, &identity, &id, &sync).await
+                    });
+                }
+            }
         }
 
         Ok(serde_json::to_value(device)?)
