@@ -343,7 +343,7 @@ class _PageBodyState extends State<_PageBody> {
               child: ListTile(
                 leading: const Icon(Icons.insert_drive_file_outlined),
                 title: Text(item.file['file_name']?.toString() ?? 'File'),
-                subtitle: Text(item.name + ' · ' + (item.file['size']?.toString() ?? '0') + ' bytes · ' + (item.file['state']?.toString() ?? 'unknown')),
+                subtitle: Text('${item.name} · ${item.file['size'] ?? 0} bytes · ${item.file['state'] ?? 'unknown'}'),
               ),
             ),
       ],
