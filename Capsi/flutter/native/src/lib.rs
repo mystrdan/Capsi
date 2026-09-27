@@ -297,6 +297,163 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                 };
 
                 match envelope.message.clone() {
+                    Message::FileOffer(offer) => {
+                        let mut messages = match MessageStore::load(&data_dir) {
+                            Ok(store) => store,
+                            Err(error) => {
+                                message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                                continue;
+                            }
+                        };
+                        let incoming_dir = data_dir.join("files").join("incoming");
+                        if let Err(error) = std::fs::create_dir_all(&incoming_dir) {
+                            message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                            continue;
+                        }
+                        let temp_path = incoming_dir.join(format!("{}.part", offer.transfer_id));
+                        if let Err(error) = File::create(&temp_path) {
+                            message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                            continue;
+                        }
+                        let mut stored = StoredMessage::file(&offer, false);
+                        stored.id = envelope.id.clone();
+                        stored.sent_at = envelope.sent_at;
+                        if let Some(file) = stored.file.as_mut() {
+                            file.local_path = Some(temp_path.to_string_lossy().to_string());
+                            file.state = if offer.size == 0 { TransferState::Complete } else { TransferState::Transferring };
+                        }
+                        if let Err(error) = messages.append(&peer_id, &known.name, stored) {
+                            message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                            continue;
+                        }
+
+                        if offer.size == 0 {
+                            let final_path = data_dir.join("files").join("downloads").join(&offer.file_name);
+                            let _ = std::fs::create_dir_all(final_path.parent().unwrap_or(&data_dir));
+                            let _ = std::fs::rename(&temp_path, &final_path);
+                            let _ = messages.update_transfer(&peer_id, &offer.transfer_id, TransferState::Complete, Some(final_path.to_string_lossy().to_string()));
+                        }
+
+                        let receipt_state = if offer.size == 0 {
+                            FileReceipt::Completed
+                        } else {
+                            FileReceipt::Accepted { next_chunk: 0 }
+                        };
+                        let receipt = Envelope::new(Message::FileReceipt {
+                            transfer_id: offer.transfer_id.clone(),
+                            state: receipt_state,
+                        });
+                        let socket = format!("{}:{}", addr.ip(), 45892);
+                        let _ = capsi_core::transport::connect_and_send(&socket, &identity, &peer_id, &receipt).await;
+                        message_event(&thread_latest, serde_json::json!({
+                            "type":"file_offer",
+                            "device_id":peer_id.as_str(),
+                            "transfer_id":offer.transfer_id,
+                            "file_name":offer.file_name,
+                            "size":offer.size
+                        }));
+                    }
+                    Message::FileChunk { transfer_id, index, digest, data } => {
+                        let raw = match base64::engine::general_purpose::STANDARD.decode(data) {
+                            Ok(bytes) => bytes,
+                            Err(error) => {
+                                message_event(&thread_latest, serde_json::json!({"error": format!("invalid file chunk: {error}")}));
+                                continue;
+                            }
+                        };
+                        if capsi_core::util::digest_hex(&raw) != digest {
+                            message_event(&thread_latest, serde_json::json!({"error":"file chunk digest mismatch","transfer_id":transfer_id}));
+                            continue;
+                        }
+
+                        let mut messages = match MessageStore::load(&data_dir) {
+                            Ok(store) => store,
+                            Err(error) => {
+                                message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                                continue;
+                            }
+                        };
+                        let conversation = match messages.get(&peer_id) {
+                            Some(value) => value,
+                            None => {
+                                message_event(&thread_latest, serde_json::json!({"error":"unknown file transfer","transfer_id":transfer_id}));
+                                continue;
+                            }
+                        };
+                        let file = match conversation.find_transfer(&transfer_id) {
+                            Some(value) => value.clone(),
+                            None => {
+                                message_event(&thread_latest, serde_json::json!({"error":"unknown file transfer","transfer_id":transfer_id}));
+                                continue;
+                            }
+                        };
+                        let temp_path = match file.local_path {
+                            Some(path) => PathBuf::from(path),
+                            None => {
+                                message_event(&thread_latest, serde_json::json!({"error":"file transfer has no local path","transfer_id":transfer_id}));
+                                continue;
+                            }
+                        };
+                        let current_len = std::fs::metadata(&temp_path).map(|m| m.len()).unwrap_or(0);
+                        let expected_index = current_len / capsi_core::TRANSFER_CHUNK_SIZE as u64;
+                        if index != expected_index {
+                            message_event(&thread_latest, serde_json::json!({"error":"file chunk out of order","transfer_id":transfer_id,"expected":expected_index,"received":index}));
+                            continue;
+                        }
+                        let mut output = match OpenOptions::new().append(true).open(&temp_path) {
+                            Ok(file) => file,
+                            Err(error) => {
+                                message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                                continue;
+                            }
+                        };
+                        if let Err(error) = output.write_all(&raw) {
+                            message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                            continue;
+                        }
+
+                        let new_len = current_len + raw.len() as u64;
+                        if new_len >= file.size {
+                            if new_len != file.size || capsi_core::util::digest_file(&temp_path).ok().as_deref() != Some(file.digest.as_str()) {
+                                let _ = messages.update_transfer(&peer_id, &transfer_id, TransferState::Failed, None);
+                                message_event(&thread_latest, serde_json::json!({"error":"file digest or size mismatch","transfer_id":transfer_id}));
+                                continue;
+                            }
+                            let download_dir = data_dir.join("files").join("downloads");
+                            let _ = std::fs::create_dir_all(&download_dir);
+                            let final_path = download_dir.join(&file.file_name);
+                            if let Err(error) = std::fs::rename(&temp_path, &final_path) {
+                                message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                                continue;
+                            }
+                            let _ = messages.update_transfer(&peer_id, &transfer_id, TransferState::Complete, Some(final_path.to_string_lossy().to_string()));
+                            let receipt = Envelope::new(Message::FileReceipt {
+                                transfer_id: transfer_id.clone(),
+                                state: FileReceipt::Completed,
+                            });
+                            let socket = format!("{}:{}", addr.ip(), 45892);
+                            let _ = capsi_core::transport::connect_and_send(&socket, &identity, &peer_id, &receipt).await;
+                            message_event(&thread_latest, serde_json::json!({"type":"file_complete","device_id":peer_id.as_str(),"transfer_id":transfer_id,"file_name":file.file_name,"size":file.size}));
+                        }
+                    }
+                    Message::FileReceipt { transfer_id, state } => {
+                        let state_name = match state {
+                            FileReceipt::Accepted { .. } => TransferState::Transferring,
+                            FileReceipt::Declined => TransferState::Declined,
+                            FileReceipt::Completed => TransferState::Complete,
+                            FileReceipt::Failed => TransferState::Failed,
+                            FileReceipt::Cancelled => TransferState::Cancelled,
+                        };
+                        if let Ok(mut messages) = MessageStore::load(&data_dir) {
+                            let _ = messages.update_transfer(&peer_id, &transfer_id, state_name, None);
+                        }
+                        message_event(&thread_latest, serde_json::json!({
+                            "type":"file_receipt",
+                            "device_id":peer_id.as_str(),
+                            "transfer_id":transfer_id,
+                            "state":format!("{:?}", state)
+                        }));
+                    }
                     Message::Text(text) => {
                         let mut stored = match StoredMessage::text(&text.body, false) {
                             Ok(message) => message,
