@@ -183,7 +183,7 @@ class _CapsiHomeState extends State<CapsiHome> {
                     children: [
                       Text(page.label, style: Theme.of(context).textTheme.headlineSmall),
                       const Spacer(),
-                      const _NetworkStatus(),
+                      _NetworkStatus(available: native != null),
                     ],
                   ),
                 ),
@@ -214,13 +214,14 @@ class _CapsiMark extends StatelessWidget {
 }
 
 class _NetworkStatus extends StatelessWidget {
-  const _NetworkStatus();
+  final bool available;
+  const _NetworkStatus({required this.available});
 
   @override
   Widget build(BuildContext context) {
-    return const Chip(
-      avatar: Icon(Icons.circle, size: 9, color: Color(0xFF7AC943)),
-      label: Text('Local network'),
+    return Chip(
+      avatar: Icon(Icons.circle, size: 9, color: available ? const Color(0xFF7AC943) : Colors.orange),
+      label: Text(available ? 'Local network' : 'Native core unavailable'),
     );
   }
 }
