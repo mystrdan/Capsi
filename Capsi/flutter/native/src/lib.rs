@@ -1097,7 +1097,7 @@ pub extern "C" fn capsi_workplace_add_group_member(
         None => return error_json("device id is invalid"),
     };
 
-    workplace_mutate(&dir_to_c(&dir), move |workspace, identity| {
+    workplace_mutate_path(&dir, move |workspace, identity| {
         if !workspace.permissions_for(identity.id().as_str()).contains(&capsi_core::workplace::Permission::ManageGroups) {
             return Err("device is not allowed to manage groups".into());
         }
