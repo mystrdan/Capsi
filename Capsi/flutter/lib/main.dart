@@ -52,6 +52,7 @@ class _CapsiHomeState extends State<CapsiHome> {
   Map<String, dynamic>? workplaceData;
   int messageHandle = 0;
   Timer? messageTimer;
+  Timer? workplaceTimer;
 
   @override
   void initState() {
@@ -67,6 +68,7 @@ class _CapsiHomeState extends State<CapsiHome> {
     if (native == null) return;
     _loadTrust();
     _loadWorkplace();
+    workplaceTimer = Timer.periodic(const Duration(seconds: 2), (_) => _loadWorkplace());
     _startDiscovery();
     _startMessages();
   }
@@ -131,6 +133,7 @@ class _CapsiHomeState extends State<CapsiHome> {
   void dispose() {
     discoveryTimer?.cancel();
     messageTimer?.cancel();
+    workplaceTimer?.cancel();
     final messageBridge = native;
     if (messageBridge != null && messageHandle != 0) messageBridge.stopMessageListener(messageHandle);
     final bridge = native;
