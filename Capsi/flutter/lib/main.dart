@@ -182,12 +182,6 @@ class _CapsiHomeState extends State<CapsiHome> {
   }
 }
 
-List<CapsiPeer> _probePeers() {
-  final bridge = CapsiNative.tryLoad();
-  if (bridge == null) return const [];
-  return bridge.discoveryProbe(deviceName: 'Capsi device');
-}
-
 class _CapsiMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -381,4 +375,4 @@ class _PageBodyState extends State<_PageBody> {
     if (id != null && mounted) setState(() => draft = '');
   }
 }
-\n
+
