@@ -24,8 +24,8 @@ typedef _DiscoveryProbeDart = ffi.Pointer<ffi.Char> Function(
 );
 
 
-typedef _DiscoveryStartNative = ffi.Uint64 Function(ffi.Pointer<ffi.Char>, ffi.Uint16);
-typedef _DiscoveryStartDart = int Function(ffi.Pointer<ffi.Char>, int);
+typedef _DiscoveryStartNative = ffi.Uint64 Function(ffi.Pointer<ffi.Char>, ffi.Uint16, ffi.Pointer<ffi.Char>);
+typedef _DiscoveryStartDart = int Function(ffi.Pointer<ffi.Char>, int, ffi.Pointer<ffi.Char>);
 
 typedef _DiscoveryPollNative = ffi.Pointer<ffi.Char> Function(ffi.Uint64);
 typedef _DiscoveryPollDart = ffi.Pointer<ffi.Char> Function(int);
@@ -33,8 +33,35 @@ typedef _DiscoveryPollDart = ffi.Pointer<ffi.Char> Function(int);
 typedef _DiscoveryStopNative = ffi.Void Function(ffi.Uint64);
 typedef _DiscoveryStopDart = void Function(int);
 
+typedef _TrustListNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>);
+typedef _TrustListDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>);
+
+typedef _TrustActionNative = ffi.Pointer<ffi.Char> Function(
+  ffi.Pointer<ffi.Char>,
+  ffi.Pointer<ffi.Char>,
+);
+typedef _TrustActionDart = ffi.Pointer<ffi.Char> Function(
+  ffi.Pointer<ffi.Char>,
+  ffi.Pointer<ffi.Char>,
+);
+
 typedef _FreeStringNative = ffi.Void Function(ffi.Pointer<ffi.Char>);
 typedef _FreeStringDart = void Function(ffi.Pointer<ffi.Char>);
+
+class KnownDevice {
+  const KnownDevice({required this.deviceId, required this.name, this.alias, required this.state, required this.fingerprint, this.lastAddress});
+  final String deviceId;
+  final String name;
+  final String? alias;
+  final String state;
+  final String fingerprint;
+  final String? lastAddress;
+  String get displayName => alias?.isNotEmpty == true ? alias! : name;
+  factory KnownDevice.fromJson(Map<String, dynamic> json) => KnownDevice(
+    deviceId: json['device_id']?.toString() ?? '', name: json['name']?.toString() ?? 'Unknown',
+    alias: json['alias']?.toString(), state: json['state']?.toString() ?? 'pending',
+    fingerprint: json['fingerprint']?.toString() ?? '', lastAddress: json['last_address']?.toString());
+}
 
 class CapsiPeer {
   const CapsiPeer({
@@ -82,6 +109,9 @@ class CapsiNative {
         _protocolVersion = _library.lookupFunction<_ProtocolVersionNative, _ProtocolVersionDart>('capsi_protocol_version'),
         _discoveryProbe = _library.lookupFunction<_DiscoveryProbeNative, _DiscoveryProbeDart>('capsi_discovery_probe'),
         _discoveryStart = _library.lookupFunction<_DiscoveryStartNative, _DiscoveryStartDart>('capsi_discovery_start'),
+        _trustList = _library.lookupFunction<_TrustListNative, _TrustListDart>('capsi_trust_list'),
+        _trustAccept = _library.lookupFunction<_TrustActionNative, _TrustActionDart>('capsi_trust_accept'),
+        _trustIgnore = _library.lookupFunction<_TrustActionNative, _TrustActionDart>('capsi_trust_ignore'),
         _discoveryPoll = _library.lookupFunction<_DiscoveryPollNative, _DiscoveryPollDart>('capsi_discovery_poll'),
         _discoveryStop = _library.lookupFunction<_DiscoveryStopNative, _DiscoveryStopDart>('capsi_discovery_stop'),
         _freeString = _library.lookupFunction<_FreeStringNative, _FreeStringDart>('capsi_free_string');
@@ -92,6 +122,9 @@ class CapsiNative {
   final _ProtocolVersionDart _protocolVersion;
   final _DiscoveryProbeDart _discoveryProbe;
   final _DiscoveryStartDart _discoveryStart;
+  final _TrustListDart _trustList;
+  final _TrustActionDart _trustAccept;
+  final _TrustActionDart _trustIgnore;
   final _DiscoveryPollDart _discoveryPoll;
   final _DiscoveryStopDart _discoveryStop;
   final _FreeStringDart _freeString;
@@ -147,12 +180,14 @@ class CapsiNative {
   }
 
 
-  int startDiscovery({required String deviceName, int tcpPort = 45893}) {
+  int startDiscovery({required String deviceName, int tcpPort = 45893, required String dataDirectory}) {
     final nativeName = deviceName.toNativeUtf8();
+    final nativeDir = dataDirectory.toNativeUtf8();
     try {
-      return _discoveryStart(nativeName.cast<ffi.Char>(), tcpPort);
+      return _discoveryStart(nativeName.cast<ffi.Char>(), tcpPort, nativeDir.cast<ffi.Char>());
     } finally {
       calloc.free(nativeName);
+      calloc.free(nativeDir);
     }
   }
 
@@ -171,7 +206,73 @@ class CapsiNative {
     }
   }
 
+  List<KnownDevice> trustList(String dataDirectory) => _decodeTrust(
+        _callTrust(_trustList, dataDirectory),
+      );
+
+  KnownDevice? acceptTrust(String dataDirectory, String deviceId, {String? alias}) {
+    final pointer = _callTrustAction(_trustAccept, dataDirectory, deviceId);
+    return _decodeKnownDevice(pointer);
+  }
+
+  KnownDevice? ignoreTrust(String dataDirectory, String deviceId) {
+    final pointer = _callTrustAction(_trustIgnore, dataDirectory, deviceId);
+    return _decodeKnownDevice(pointer);
+  }
+
   void stopDiscovery(int handle) => _discoveryStop(handle);
+
+  ffi.Pointer<ffi.Char> _callTrust(
+    _TrustListDart fn,
+    String dataDirectory,
+  ) {
+    final dir = dataDirectory.toNativeUtf8();
+    try {
+      return fn(dir.cast<ffi.Char>());
+    } finally {
+      calloc.free(dir);
+    }
+  }
+
+  ffi.Pointer<ffi.Char> _callTrustAction(
+    _TrustActionDart fn,
+    String dataDirectory,
+    String deviceId,
+  ) {
+    final dir = dataDirectory.toNativeUtf8();
+    final id = deviceId.toNativeUtf8();
+    try {
+      return fn(dir.cast<ffi.Char>(), id.cast<ffi.Char>());
+    } finally {
+      calloc.free(dir);
+      calloc.free(id);
+    }
+  }
+
+  List<KnownDevice> _decodeTrust(ffi.Pointer<ffi.Char> pointer) {
+    if (pointer == ffi.nullptr) return const [];
+    try {
+      final value = jsonDecode(_readString(pointer));
+      if (value is! List) return const [];
+      return value
+          .whereType<Map<String, dynamic>>()
+          .map(KnownDevice.fromJson)
+          .toList(growable: false);
+    } finally {
+      _freeString(pointer);
+    }
+  }
+
+  KnownDevice? _decodeKnownDevice(ffi.Pointer<ffi.Char> pointer) {
+    if (pointer == ffi.nullptr) return null;
+    try {
+      final value = jsonDecode(_readString(pointer));
+      if (value is! Map<String, dynamic>) return null;
+      return KnownDevice.fromJson(value);
+    } finally {
+      _freeString(pointer);
+    }
+  }
 
   String _readString(ffi.Pointer<ffi.Char> pointer) {
     if (pointer == ffi.nullptr) return '';
