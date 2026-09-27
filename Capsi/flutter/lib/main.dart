@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'capsi_native.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() {
   runApp(const CapsiApp());
@@ -43,18 +44,40 @@ class _CapsiHomeState extends State<CapsiHome> {
   bool scanning = false;
   int discoveryHandle = 0;
   Timer? discoveryTimer;
+  String? dataDirectory;
+  List<KnownDevice> trustedDevices = const [];
 
   @override
   void initState() {
     super.initState();
     native = CapsiNative.tryLoad();
+    _initializeRuntime();
+  }
+
+  Future<void> _initializeRuntime() async {
+    final directory = await getApplicationSupportDirectory();
+    if (!mounted) return;
+    dataDirectory = directory.path;
+    if (native == null) return;
+    _loadTrust();
     _startDiscovery();
+  }
+
+  void _loadTrust() {
+    final bridge = native;
+    final dir = dataDirectory;
+    if (bridge == null || dir == null || !mounted) return;
+    setState(() => trustedDevices = bridge.trustList(dir));
   }
 
   void _startDiscovery() {
     final bridge = native;
-    if (bridge == null) return;
-    discoveryHandle = bridge.startDiscovery(deviceName: 'Capsi device');
+    final dir = dataDirectory;
+    if (bridge == null || dir == null) return;
+    discoveryHandle = bridge.startDiscovery(
+      deviceName: 'Capsi device',
+      dataDirectory: dir,
+    );
     if (discoveryHandle == 0) return;
     _pollDiscovery();
     discoveryTimer = Timer.periodic(
@@ -130,7 +153,7 @@ class _CapsiHomeState extends State<CapsiHome> {
                     ],
                   ),
                 ),
-                Expanded(child: _PageBody(label: page.label, peers: peers, scanning: scanning, native: native, onScan: _scan)),
+                Expanded(child: _PageBody(label: page.label, peers: peers, scanning: scanning, native: native, onScan: _scan, trustedDevices: trustedDevices, onTrustChanged: _loadTrust, dataDirectory: dataDirectory)),
               ],
             ),
           ),
@@ -180,10 +203,33 @@ class _PageBody extends StatelessWidget {
   final bool scanning;
   final CapsiNative? native;
   final VoidCallback onScan;
-  const _PageBody({required this.label, required this.peers, required this.scanning, required this.native, required this.onScan});
+  final List<KnownDevice> trustedDevices;
+  final VoidCallback onTrustChanged;
+  final String? dataDirectory;
+  const _PageBody({required this.label, required this.peers, required this.scanning, required this.native, required this.onScan, required this.trustedDevices, required this.onTrustChanged, required this.dataDirectory});
 
   @override
   Widget build(BuildContext context) {
+    if (label == 'Trusted devices') {
+      return ListView(
+        padding: const EdgeInsets.all(28),
+        children: [
+          Text('Trusted devices', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          const Text('Only devices you accept are allowed to exchange messages and files.'),
+          const SizedBox(height: 20),
+          if (trustedDevices.isEmpty)
+            const Card(child: Padding(padding: EdgeInsets.all(24), child: Text('No trusted devices yet. Accept a device from Nearby to add it here.')))
+          else
+            for (final device in trustedDevices)
+              Card(child: ListTile(
+                leading: const Icon(Icons.verified_user_outlined),
+                title: Text(device.displayName),
+                subtitle: Text(device.fingerprint),
+              )),
+        ],
+      );
+    }
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 680),
