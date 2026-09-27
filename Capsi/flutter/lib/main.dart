@@ -521,180 +521,239 @@ ListView(
         ? const <Map<String, dynamic>>[]
         : messages.where((m) => m['group_id']?.toString() == groupId).toList();
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(28, 0, 28, 16),
-          child: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 820;
+
+        Widget groupList() => Card(
+          margin: EdgeInsets.only(left: compact ? 16 : 28, right: compact ? 16 : 12, bottom: compact ? 12 : 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(workspace['name']?.toString() ?? 'WorkPlace', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 4),
-                Text('${members.length} people · ${groups.length} groups · ${departments.length} departments'),
-              ])),
-              OutlinedButton.icon(
-                onPressed: widget.native == null || widget.dataDirectory == null
-                    ? null
-                    : () => _createWorkplaceName(context, 'Create group', (name) => widget.native!.createWorkplaceGroup(widget.dataDirectory!, name)),
-                icon: const Icon(Icons.group_add_outlined),
-                label: const Text('Group'),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                child: Row(children: [
+                  Text('Groups', style: Theme.of(context).textTheme.titleMedium),
+                  const Spacer(),
+                  Text(groups.length.toString(), style: Theme.of(context).textTheme.bodySmall),
+                ]),
               ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: widget.native == null || widget.dataDirectory == null ? null : () => _createBroadcast(context),
-                icon: const Icon(Icons.campaign_outlined),
-                label: const Text('Broadcast'),
+              const Divider(height: 1),
+              Expanded(
+                child: groups.isEmpty
+                    ? const Center(child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text('Create a group to start messaging.', textAlign: TextAlign.center),
+                      ))
+                    : ListView(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        children: [
+                          for (final item in groups)
+                            ListTile(
+                              selected: item['id']?.toString() == groupId,
+                              leading: const Icon(Icons.group_outlined),
+                              title: Text(item['name']?.toString() ?? 'Group', maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: Text('${(item['member_ids'] as List?)?.length ?? 0} members'),
+                              onTap: () => setState(() {
+                                selectedWorkplaceGroup = item['id']?.toString();
+                                workplaceDraft = '';
+                                workplaceController.clear();
+                              }),
+                              trailing: IconButton(
+                                tooltip: 'Add member',
+                                icon: const Icon(Icons.person_add_alt_1_outlined),
+                                onPressed: () => _addWorkplaceMember(context, item, members),
+                              ),
+                            ),
+                        ],
+                      ),
               ),
-              IconButton(onPressed: widget.onTrustChanged, tooltip: 'Refresh', icon: const Icon(Icons.refresh)),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Text('People ${members.length}', style: Theme.of(context).textTheme.bodySmall),
+              ),
             ],
           ),
-        ),
-        Expanded(
-          child: Row(
-            children: [
-              SizedBox(
-                width: 290,
-                child: Card(
-                  margin: const EdgeInsets.only(left: 28, right: 12, bottom: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                        child: Row(children: [
-                          Text('Groups', style: Theme.of(context).textTheme.titleMedium),
-                          const Spacer(),
-                          Text(groups.length.toString(), style: Theme.of(context).textTheme.bodySmall),
-                        ]),
+        );
+
+        Widget conversation() => Card(
+          margin: EdgeInsets.only(left: compact ? 16 : 0, right: compact ? 16 : 28, bottom: 20),
+          child: group == null
+              ? const Center(child: Text('Select a group to view messages.'))
+              : Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.group_outlined),
+                      title: Text(group['name']?.toString() ?? 'Group'),
+                      subtitle: Text('${(group['member_ids'] as List?)?.length ?? 0} members'),
+                      trailing: IconButton(
+                        tooltip: 'Add member',
+                        icon: const Icon(Icons.person_add_alt_1_outlined),
+                        onPressed: () => _addWorkplaceMember(context, group, members),
                       ),
-                      const Divider(height: 1),
-                      Expanded(
-                        child: groups.isEmpty
-                            ? const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('Create a group to start messaging.', textAlign: TextAlign.center)))
-                            : ListView(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                children: [
-                                  for (final item in groups)
-                                    ListTile(
-                                      selected: item['id']?.toString() == groupId,
-                                      leading: const Icon(Icons.group_outlined),
-                                      title: Text(item['name']?.toString() ?? 'Group'),
-                                      subtitle: Text('${(item['member_ids'] as List?)?.length ?? 0} members'),
-                                      onTap: () => setState(() {
-                                        selectedWorkplaceGroup = item['id']?.toString();
-                                        workplaceDraft = '';
-                                        workplaceController.clear();
-                                      }),
-                                      trailing: IconButton(
-                                        tooltip: 'Add member',
-                                        icon: const Icon(Icons.person_add_alt_1_outlined),
-                                        onPressed: () => _addWorkplaceMember(context, item, members),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: groupMessages.isEmpty
+                          ? const Center(child: Text('No messages in this group yet.'))
+                          : ListView.builder(
+                              padding: const EdgeInsets.all(20),
+                              itemCount: groupMessages.length,
+                              itemBuilder: (_, index) {
+                                final message = groupMessages[index];
+                                final senderId = message['sender_device_id']?.toString();
+                                final sender = members.cast<Map<String, dynamic>?>().firstWhere(
+                                  (m) => m?['device_id']?.toString() == senderId,
+                                  orElse: () => null,
+                                );
+                                final outgoing = senderId != null && senderId == _localWorkplaceMemberId(workspace);
+                                return Align(
+                                  alignment: outgoing ? Alignment.centerRight : Alignment.centerLeft,
+                                  child: Container(
+                                    constraints: const BoxConstraints(maxWidth: 560),
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    child: Card(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            if (!outgoing)
+                                              Text(sender?['display_name']?.toString() ?? 'Member', style: Theme.of(context).textTheme.labelSmall),
+                                            const SizedBox(height: 4),
+                                            Text(message['body']?.toString() ?? ''),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                ],
-                              ),
-                      ),
-                      const Divider(height: 1),
-                      Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Text('People ${members.length}', style: Theme.of(context).textTheme.bodySmall),
-                      ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                    const Divider(height: 1),
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(children: [
+                        Expanded(
+                          child: TextField(
+                            controller: workplaceController,
+                            minLines: 1,
+                            maxLines: 4,
+                            onChanged: (value) => workplaceDraft = value,
+                            onSubmitted: (_) => _sendWorkplaceMessage(),
+                            decoration: const InputDecoration(hintText: 'Message this group', border: OutlineInputBorder()),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        FilledButton(
+                          onPressed: _sendWorkplaceMessage,
+                          child: const Icon(Icons.send),
+                        ),
+                      ]),
+                    ),
+                  ],
+                ),
+        );
+
+        return Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(compact ? 16 : 28, 0, compact ? 16 : 28, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(workspace['name']?.toString() ?? 'WorkPlace', style: Theme.of(context).textTheme.titleLarge),
+                        const SizedBox(height: 4),
+                        Text('${members.length} people · ${groups.length} groups · ${departments.length} departments'),
+                      ],
+                    ),
+                  ),
+                  if (!compact)
+                    OutlinedButton.icon(
+                      onPressed: widget.native == null || widget.dataDirectory == null
+                          ? null
+                          : () => _createWorkplaceName(
+                              context,
+                              'Create group',
+                              (name) => widget.native!.createWorkplaceGroup(widget.dataDirectory!, name),
+                            ),
+                      icon: const Icon(Icons.group_add_outlined),
+                      label: const Text('Group'),
+                    ),
+                  if (!compact) const SizedBox(width: 8),
+                  if (!compact)
+                    OutlinedButton.icon(
+                      onPressed: widget.native == null || widget.dataDirectory == null ? null : () => _createBroadcast(context),
+                      icon: const Icon(Icons.campaign_outlined),
+                      label: const Text('Broadcast'),
+                    ),
+                  IconButton(onPressed: widget.onTrustChanged, tooltip: 'Refresh', icon: const Icon(Icons.refresh)),
+                  if (compact)
+                    PopupMenuButton<String>(
+                      tooltip: 'WorkPlace actions',
+                      onSelected: (value) {
+                        if (value == 'group') {
+                          _createWorkplaceName(
+                            context,
+                            'Create group',
+                            (name) => widget.native!.createWorkplaceGroup(widget.dataDirectory!, name),
+                          );
+                        } else {
+                          _createBroadcast(context);
+                        }
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'group', child: Text('Create group')),
+                        PopupMenuItem(value: 'broadcast', child: Text('Create broadcast')),
+                      ],
+                      icon: const Icon(Icons.more_horiz),
+                    ),
+                ],
+              ),
+            ),
+            if (departments.isNotEmpty || broadcasts.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.fromLTRB(compact ? 16 : 28, 0, compact ? 16 : 28, 12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (departments.isNotEmpty)
+                        Chip(
+                          avatar: const Icon(Icons.apartment_outlined, size: 17),
+                          label: Text('${departments.length} departments'),
+                        ),
+                      if (broadcasts.isNotEmpty)
+                        Chip(
+                          avatar: const Icon(Icons.campaign_outlined, size: 17),
+                          label: Text('${broadcasts.length} broadcasts'),
+                        ),
                     ],
                   ),
                 ),
               ),
+            if (compact) ...[
+              SizedBox(height: 92, child: groupList()),
+              Expanded(child: conversation()),
+            ] else
               Expanded(
-                child: Card(
-                  margin: const EdgeInsets.only(right: 28, bottom: 20),
-                  child: group == null
-                      ? const Center(child: Text('Select a group to view messages.'))
-                      : Column(
-                          children: [
-                            ListTile(
-                              leading: const Icon(Icons.group_outlined),
-                              title: Text(group['name']?.toString() ?? 'Group'),
-                              subtitle: Text('${(group['member_ids'] as List?)?.length ?? 0} members'),
-                              trailing: IconButton(
-                                tooltip: 'Add member',
-                                icon: const Icon(Icons.person_add_alt_1_outlined),
-                                onPressed: () => _addWorkplaceMember(context, group, members),
-                              ),
-                            ),
-                            const Divider(height: 1),
-                            Expanded(
-                              child: groupMessages.isEmpty
-                                  ? const Center(child: Text('No messages in this group yet.'))
-                                  : ListView.builder(
-                                      padding: const EdgeInsets.all(20),
-                                      itemCount: groupMessages.length,
-                                      itemBuilder: (_, index) {
-                                        final message = groupMessages[index];
-                                        final senderId = message['sender_device_id']?.toString();
-                                        final sender = members.cast<Map<String, dynamic>?>().firstWhere(
-                                          (m) => m?['device_id']?.toString() == senderId,
-                                          orElse: () => null,
-                                        );
-                                        final outgoing = senderId != null && senderId == _localWorkplaceMemberId(workspace);
-                                        return Align(
-                                          alignment: outgoing ? Alignment.centerRight : Alignment.centerLeft,
-                                          child: Container(
-                                            constraints: const BoxConstraints(maxWidth: 560),
-                                            margin: const EdgeInsets.only(bottom: 10),
-                                            child: Card(
-                                              child: Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    if (!outgoing) Text(sender?['display_name']?.toString() ?? 'Member', style: Theme.of(context).textTheme.labelSmall),
-                                                    const SizedBox(height: 4),
-                                                    Text(message['body']?.toString() ?? ''),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                            ),
-                            const Divider(height: 1),
-                            Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Row(children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: workplaceController,
-                                    onChanged: (value) => workplaceDraft = value,
-                                    onSubmitted: (_) => _sendWorkplaceMessage(),
-                                    decoration: const InputDecoration(hintText: 'Message this group', border: OutlineInputBorder()),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                FilledButton.icon(
-                                  onPressed: _sendWorkplaceMessage,
-                                  icon: const Icon(Icons.send),
-                                  label: const Text('Send'),
-                                ),
-                              ]),
-                            ),
-                          ],
-                        ),
+                child: Row(
+                  children: [
+                    SizedBox(width: 290, child: groupList()),
+                    Expanded(child: conversation()),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-        if (departments.isNotEmpty || broadcasts.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(28, 0, 28, 16),
-            child: Row(children: [
-              Text('Departments ${departments.length}', style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(width: 18),
-              Text('Broadcasts ${broadcasts.length}', style: Theme.of(context).textTheme.bodySmall),
-            ]),
-          ),
-      ],
+          ],
+        );
+      },
     );
   }
 
