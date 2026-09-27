@@ -41,18 +41,49 @@ macOS and Linux. It does not build or package the Rust library automatically.
 
 ## Windows native bridge
 
-The Windows Flutter client expects `capsi_ffi.dll` to be available beside
-the application executable (or otherwise discoverable by the Windows loader).
+The Windows Flutter client expects `capsi_ffi.dll` beside the application
+executable.
 
-Build the bridge from the repository root:
+For a complete Windows release build, run from `Capsi/flutter`:
+
+```powershell
+.\\tool\\build_windows.ps1
+```
+
+Or from a Bash-compatible shell:
+
+```bash
+./tool/build_windows.sh
+```
+
+These scripts generate the Windows runner when needed, install Flutter
+dependencies, build the Rust FFI bridge, build the Flutter Windows release,
+and copy `capsi_ffi.dll` beside `capsi.exe`.
+
+For the native bridge alone:
 
 ```powershell
 cargo build --manifest-path Capsi/flutter/native/Cargo.toml --release
-Copy-Item Capsi/flutter/native/target/release/capsi_ffi.dll Capsi/flutter/
 ```
 
-Then run the Flutter Windows target. If the DLL is absent, Flutter still opens
-the UI but native network/device features remain unavailable.
+If the DLL is absent from the application directory, Flutter can still open
+the UI but native network/device features will be unavailable.
+
+## Application surfaces
+
+The Flutter client is being built as a complete application shell, not just a
+communication screen. Current navigation includes:
+
+- Nearby — discovery and device acceptance
+- WorkPlace — local workspace, groups, departments and broadcasts
+- Messages — trusted-device conversations
+- Files — direct file transfers
+- Trusted devices — accepted-device management
+- Settings — connection, privacy, storage, appearance and runtime information
+- About Capsi — product, version, runtime and protocol information
+
+Keep settings and about information grounded in capabilities that actually
+exist in the Rust core. Do not add controls that only look functional.
 
 ## Android and Apple targets
 
