@@ -193,6 +193,42 @@ impl Workspace {
         Ok(())
     }
 
+    /// Build a local workplace from an authenticated owner's synchronized state.
+    ///
+    /// This is used when a device is joining a workplace for the first time. The
+    /// caller must already have authenticated the sender as a trusted device.
+    pub fn from_network_state(state: WorkspaceState, actor_device_id: &str, local_device_id: &str) -> Result<Self, String> {
+        if state.owner_device_id != actor_device_id {
+            return Err("workplace sync actor is not the workspace owner".into());
+        }
+        if state.id.trim().is_empty() {
+            return Err("synchronized workspace id is empty".into());
+        }
+        let owner = state.members.iter()
+            .find(|m| m.device_id == state.owner_device_id)
+            .ok_or_else(|| "synchronized workspace has no owner member".to_string())?;
+        if owner.role != Role::Owner {
+            return Err("synchronized workspace owner role is invalid".into());
+        }
+        if !state.members.iter().any(|m| m.device_id == local_device_id) {
+            return Err("this device is not a member of the workplace".into());
+        }
+        Ok(Self {
+            id: state.id,
+            name: state.name,
+            created_at: state.created_at,
+            updated_at: state.updated_at,
+            owner_device_id: state.owner_device_id,
+            members: state.members,
+            groups: state.groups,
+            departments: state.departments,
+            broadcasts: state.broadcasts,
+            messages: state.messages,
+            pending_deliveries: Vec::new(),
+            received_message_ids: Vec::new(),
+        })
+    }
+
     pub fn new(name: impl Into<String>, owner_device_id: impl Into<String>) -> Self {
         let owner = owner_device_id.into();
         Self {
