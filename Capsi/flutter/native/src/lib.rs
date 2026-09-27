@@ -1,14 +1,35 @@
 use std::ffi::{c_char, CStr, CString};
 use std::time::Duration;
-
-
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
+
+use capsi_core::discovery::Discovery;
+use capsi_core::identity::{DeviceIdentity, DeviceId};
+use capsi_core::identity::trust::{KnownDevice, TrustStore};
 
 struct DiscoverySession {
     stop: Arc<AtomicBool>,
     latest: Arc<Mutex<String>>,
+}
+
+fn c_path(value: *const c_char) -> Option<PathBuf> {
+    if value.is_null() {
+        return None;
+    }
+    unsafe { CStr::from_ptr(value).to_str().ok().map(PathBuf::from) }
+}
+
+fn load_store(dir: &Path) -> Result<TrustStore, capsi_core::CapsiError> {
+    TrustStore::load(dir)
+}
+
+fn trust_result<T: serde::Serialize>(value: T) -> *mut c_char {
+    match serde_json::to_string(&value) {
+        Ok(json) => into_c_string(json),
+        Err(error) => error_json(&error.to_string()),
+    }
 }
 
 static DISCOVERY_SESSIONS: OnceLock<Mutex<HashMap<u64, DiscoverySession>>> = OnceLock::new();
@@ -18,12 +39,13 @@ fn discovery_sessions() -> &'static Mutex<HashMap<u64, DiscoverySession>> {
     DISCOVERY_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Start a persistent discovery session. The session owns its Rust identity and
-/// keeps the peer table alive between Flutter polls.
+/// Start a persistent discovery session. The device identity is persisted
+/// in the supplied application data directory so the device id remains stable.
 #[no_mangle]
 pub extern "C" fn capsi_discovery_start(
     name: *const c_char,
     tcp_port: u16,
+    data_dir: *const c_char,
 ) -> u64 {
     let name = unsafe {
         if name.is_null() {
@@ -33,6 +55,10 @@ pub extern "C" fn capsi_discovery_start(
             Ok(value) => value.to_owned(),
             Err(_) => return 0,
         }
+    };
+    let data_dir = match c_path(data_dir) {
+        Some(path) => path,
+        None => return 0,
     };
 
     let stop = Arc::new(AtomicBool::new(false));
@@ -53,11 +79,11 @@ pub extern "C" fn capsi_discovery_start(
             };
 
             runtime.block_on(async move {
-                let identity = match DeviceIdentity::generate() {
+                let identity = match DeviceIdentity::load_or_create(&data_dir) {
                     Ok(identity) => Arc::new(identity),
                     Err(_) => return,
                 };
-                let discovery = match Discovery::bind(identity, name, tcp_port).await {
+                let discovery = match Discovery::bind(Arc::clone(&identity), name, tcp_port).await {
                     Ok(discovery) => discovery,
                     Err(_) => return,
                 };
@@ -95,6 +121,57 @@ pub extern "C" fn capsi_discovery_start(
     }
 }
 
+
+#[no_mangle]
+pub extern "C" fn capsi_trust_list(data_dir: *const c_char) -> *mut c_char {
+    let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    match load_store(&dir) {
+        Ok(store) => trust_result(store.all()),
+        Err(error) => error_json(&error.to_string()),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_trust_accept(
+    data_dir: *const c_char,
+    device_id: *const c_char,
+    alias: *const c_char,
+) -> *mut c_char {
+    let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    let id = match c_path(device_id).and_then(|p| p.to_str().and_then(|s| DeviceId::from_hex(s).ok())) {
+        Some(id) => id,
+        None => return error_json("device id is invalid"),
+    };
+    let alias = c_path(alias).and_then(|p| p.into_os_string().into_string().ok());
+    match load_store(&dir).and_then(|mut store| {
+        let device = store.accept(&id, alias)?;
+        store.save_if_dirty(&dir)?;
+        Ok(device)
+    }) {
+        Ok(device) => trust_result(device),
+        Err(error) => error_json(&error.to_string()),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_trust_ignore(
+    data_dir: *const c_char,
+    device_id: *const c_char,
+) -> *mut c_char {
+    let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    let id = match c_path(device_id).and_then(|p| p.to_str().and_then(|s| DeviceId::from_hex(s).ok())) {
+        Some(id) => id,
+        None => return error_json("device id is invalid"),
+    };
+    match load_store(&dir).and_then(|mut store| {
+        let device = store.ignore(&id)?;
+        store.save_if_dirty(&dir)?;
+        Ok(device)
+    }) {
+        Ok(device) => trust_result(device),
+        Err(error) => error_json(&error.to_string()),
+    }
+}
 /// Return the latest peer snapshot for a discovery session.
 #[no_mangle]
 pub extern "C" fn capsi_discovery_poll(handle: u64) -> *mut c_char {
