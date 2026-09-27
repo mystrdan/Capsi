@@ -12,3 +12,4 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 capsi-core = { path = "../../crates/capsi-core" }
+tokio = { version = "1", features = ["rt", "net", "time"] }
