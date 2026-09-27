@@ -1,8 +1,6 @@
+import 'dart:async';
+
 import 'capsi_native.dart';
-
-import 'package:flutter/material.dart';
-import 'dart:isolate';
-
 import 'package:flutter/material.dart';
 
 void main() {
@@ -43,24 +41,47 @@ class _CapsiHomeState extends State<CapsiHome> {
   CapsiNative? native;
   List<CapsiPeer> peers = const [];
   bool scanning = false;
+  int discoveryHandle = 0;
+  Timer? discoveryTimer;
 
   @override
   void initState() {
     super.initState();
     native = CapsiNative.tryLoad();
-    _scan();
+    _startDiscovery();
   }
 
-  Future<void> _scan() async {
+  void _startDiscovery() {
     final bridge = native;
-    if (bridge == null || scanning) return;
-    setState(() => scanning = true);
-    try {
-      final found = await Isolate.run(() => _probePeers());
-      if (mounted) setState(() => peers = found);
-    } finally {
-      if (mounted) setState(() => scanning = false);
+    if (bridge == null) return;
+    discoveryHandle = bridge.startDiscovery(deviceName: 'Capsi device');
+    if (discoveryHandle == 0) return;
+    _pollDiscovery();
+    discoveryTimer = Timer.periodic(
+      const Duration(milliseconds: 750),
+      (_) => _pollDiscovery(),
+    );
+  }
+
+  void _pollDiscovery() {
+    final bridge = native;
+    if (bridge == null || discoveryHandle == 0 || !mounted) return;
+    setState(() {
+      peers = bridge.pollDiscovery(discoveryHandle);
+      scanning = false;
+    });
+  }
+
+  void _scan() => _pollDiscovery();
+
+  @override
+  void dispose() {
+    discoveryTimer?.cancel();
+    final bridge = native;
+    if (bridge != null && discoveryHandle != 0) {
+      bridge.stopDiscovery(discoveryHandle);
     }
+    super.dispose();
   }
 
   static const pages = <({IconData icon, String label})>[
