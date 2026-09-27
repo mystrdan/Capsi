@@ -129,25 +129,25 @@ class CapsiPeer {
 /// The wrapper is intentionally optional during the migration: the Flutter UI
 /// can start before the native library is packaged for a target platform.
 class CapsiNative {
-  CapsiNative._(this._library)
-      : _runtimeVersion = _library.lookupFunction<_RuntimeVersionNative, _RuntimeVersionDart>('capsi_runtime_version'),
-        _coreLinked = _library.lookupFunction<_CoreLinkedNative, _CoreLinkedDart>('capsi_core_linked'),
-        _protocolVersion = _library.lookupFunction<_ProtocolVersionNative, _ProtocolVersionDart>('capsi_protocol_version'),
-        _discoveryProbe = _library.lookupFunction<_DiscoveryProbeNative, _DiscoveryProbeDart>('capsi_discovery_probe'),
-        _discoveryStart = _library.lookupFunction<_DiscoveryStartNative, _DiscoveryStartDart>('capsi_discovery_start'),
-        _trustList = _library.lookupFunction<_TrustListNative, _TrustListDart>('capsi_trust_list'),
-        _trustAccept = _library.lookupFunction<_TrustAcceptNative, _TrustAcceptDart>('capsi_trust_accept'),
-        _trustIgnore = _library.lookupFunction<_TrustActionNative, _TrustActionDart>('capsi_trust_ignore'),
-        _discoveryPoll = _library.lookupFunction<_DiscoveryPollNative, _DiscoveryPollDart>('capsi_discovery_poll'),
-        _discoveryStop = _library.lookupFunction<_DiscoveryStopNative, _DiscoveryStopDart>('capsi_discovery_stop'),
-        _messageStart = _library.lookupFunction<_MessageStartNative, _MessageStartDart>('capsi_message_start'),
-        _messagePoll = _library.lookupFunction<_MessagePollNative, _MessagePollDart>('capsi_message_poll'),
-        _messageStop = _library.lookupFunction<_MessageStopNative, _MessageStopDart>('capsi_message_stop'),
-        _messageSend = _library.lookupFunction<_MessageSendNative, _MessageSendDart>('capsi_message_send'),
-        _conversationList = _library.lookupFunction<_ConversationListNative, _ConversationListDart>('capsi_conversations_list'),
-        _conversationLoad = _library.lookupFunction<_ConversationLoadNative, _ConversationLoadDart>('capsi_conversation_load'),
-        _fileSend = _library.lookupFunction<_FileSendNative, _FileSendDart>('capsi_file_send'),
-        _freeString = _library.lookupFunction<_FreeStringNative, _FreeStringDart>('capsi_free_string');
+  CapsiNative._(ffi.DynamicLibrary library)
+      : _runtimeVersion = library.lookupFunction<_RuntimeVersionNative, _RuntimeVersionDart>('capsi_runtime_version'),
+        _coreLinked = library.lookupFunction<_CoreLinkedNative, _CoreLinkedDart>('capsi_core_linked'),
+        _protocolVersion = library.lookupFunction<_ProtocolVersionNative, _ProtocolVersionDart>('capsi_protocol_version'),
+        _discoveryProbe = library.lookupFunction<_DiscoveryProbeNative, _DiscoveryProbeDart>('capsi_discovery_probe'),
+        _discoveryStart = library.lookupFunction<_DiscoveryStartNative, _DiscoveryStartDart>('capsi_discovery_start'),
+        _trustList = library.lookupFunction<_TrustListNative, _TrustListDart>('capsi_trust_list'),
+        _trustAccept = library.lookupFunction<_TrustAcceptNative, _TrustAcceptDart>('capsi_trust_accept'),
+        _trustIgnore = library.lookupFunction<_TrustActionNative, _TrustActionDart>('capsi_trust_ignore'),
+        _discoveryPoll = library.lookupFunction<_DiscoveryPollNative, _DiscoveryPollDart>('capsi_discovery_poll'),
+        _discoveryStop = library.lookupFunction<_DiscoveryStopNative, _DiscoveryStopDart>('capsi_discovery_stop'),
+        _messageStart = library.lookupFunction<_MessageStartNative, _MessageStartDart>('capsi_message_start'),
+        _messagePoll = library.lookupFunction<_MessagePollNative, _MessagePollDart>('capsi_message_poll'),
+        _messageStop = library.lookupFunction<_MessageStopNative, _MessageStopDart>('capsi_message_stop'),
+        _messageSend = library.lookupFunction<_MessageSendNative, _MessageSendDart>('capsi_message_send'),
+        _conversationList = library.lookupFunction<_ConversationListNative, _ConversationListDart>('capsi_conversations_list'),
+        _conversationLoad = library.lookupFunction<_ConversationLoadNative, _ConversationLoadDart>('capsi_conversation_load'),
+        _fileSend = library.lookupFunction<_FileSendNative, _FileSendDart>('capsi_file_send'),
+        _freeString = library.lookupFunction<_FreeStringNative, _FreeStringDart>('capsi_free_string');
 
   // Library is retained by the function pointers; no direct field access is needed.
   final _RuntimeVersionDart _runtimeVersion;
