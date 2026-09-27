@@ -931,7 +931,7 @@ ListView(
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
-                      '\${item.name} · \${_formatBytes(item.file['size'])} · \${item.file['state'] ?? 'unknown'}',
+                      '${item.name} · ${_formatBytes(item.file['size'])} · ${item.file['state'] ?? 'unknown'}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1009,10 +1009,10 @@ ListView(
   String _formatBytes(dynamic value) {
     final bytes = value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '');
     if (bytes == null) return 'Size unknown';
-    if (bytes < 1024) return '\${bytes.toInt()} B';
-    if (bytes < 1024 * 1024) return '\${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '\${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    return '\${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    if (bytes < 1024) return '${bytes.toInt()} B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   Future<void> _pickAndSendFile() async {
