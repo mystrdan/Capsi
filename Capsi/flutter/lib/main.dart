@@ -380,9 +380,9 @@ class _PageBodyState extends State<_PageBody> {
         const Card(child: Padding(padding: EdgeInsets.all(20), child: Text('No groups or departments yet.')))
       else ...[
         for (final group in groups)
-          Card(child: ListTile(leading: const Icon(Icons.group_outlined), title: Text(group['name']?.toString() ?? 'Group'), subtitle: Text((group['member_ids'] as List?)?.length.toString() ?? '0' + ' members'))),
+          Card(child: ListTile(leading: const Icon(Icons.group_outlined), title: Text(group['name']?.toString() ?? 'Group'), subtitle: Text('${(group['member_ids'] as List?)?.length ?? 0} members'))),
         for (final department in departments)
-          Card(child: ListTile(leading: const Icon(Icons.apartment_outlined), title: Text(department['name']?.toString() ?? 'Department'), subtitle: Text((department['member_ids'] as List?)?.length.toString() ?? '0' + ' members'))),
+          Card(child: ListTile(leading: const Icon(Icons.apartment_outlined), title: Text(department['name']?.toString() ?? 'Department'), subtitle: Text('${(department['member_ids'] as List?)?.length ?? 0} members'))),
       ],
       const SizedBox(height: 24),
       Text('Broadcasts', style: Theme.of(context).textTheme.titleLarge),
