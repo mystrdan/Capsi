@@ -835,6 +835,79 @@ pub extern "C" fn capsi_workplace_create(
     }
 }
 
+#[no_mangle]
+pub extern "C" fn capsi_workplace_create_group(
+    data_dir: *const c_char,
+    name: *const c_char,
+) -> *mut c_char {
+    workplace_mutate(data_dir, |workspace, identity| {
+        if !workspace.permissions_for(identity.id().as_str()).contains(&capsi_core::workplace::Permission::ManageGroups) {
+            return Err("device is not allowed to manage groups".into());
+        }
+        let name = c_string(name).filter(|v| !v.trim().is_empty()).ok_or_else(|| "group name is invalid".to_string())?;
+        workspace.create_group(name, "");
+        workspace.touch();
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_workplace_create_department(
+    data_dir: *const c_char,
+    name: *const c_char,
+) -> *mut c_char {
+    workplace_mutate(data_dir, |workspace, identity| {
+        if !workspace.permissions_for(identity.id().as_str()).contains(&capsi_core::workplace::Permission::ManageDepartments) {
+            return Err("device is not allowed to manage departments".into());
+        }
+        let name = c_string(name).filter(|v| !v.trim().is_empty()).ok_or_else(|| "department name is invalid".to_string())?;
+        workspace.create_department(name);
+        workspace.touch();
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_workplace_create_broadcast(
+    data_dir: *const c_char,
+    title: *const c_char,
+    body: *const c_char,
+) -> *mut c_char {
+    workplace_mutate(data_dir, |workspace, identity| {
+        if !workspace.permissions_for(identity.id().as_str()).contains(&capsi_core::workplace::Permission::SendBroadcasts) {
+            return Err("device is not allowed to send broadcasts".into());
+        }
+        let title = c_string(title).filter(|v| !v.trim().is_empty()).ok_or_else(|| "broadcast title is invalid".to_string())?;
+        let body = c_string(body).filter(|v| !v.trim().is_empty()).ok_or_else(|| "broadcast body is invalid".to_string())?;
+        workspace.create_broadcast(title, body, identity.id().as_str().to_string(), None)
+            .ok_or_else(|| "broadcast could not be created".to_string())?;
+        workspace.touch();
+        Ok(())
+    })
+}
+
+fn workplace_mutate<F>(data_dir: *const c_char, mutate: F) -> *mut c_char
+where
+    F: FnOnce(&mut capsi_core::workplace::Workspace, &DeviceIdentity) -> Result<(), String>,
+{
+    let dir = match c_path(data_dir) {
+        Some(path) => path,
+        None => return error_json("data directory is invalid"),
+    };
+    let result = (|| -> Result<serde_json::Value, String> {
+        let identity = DeviceIdentity::load_or_create(&dir).map_err(|e| e.to_string())?;
+        let store = capsi_core::workplace::WorkspaceStore::new(&dir);
+        let mut workspace = store.load()?.ok_or_else(|| "workplace has not been created".to_string())?;
+        mutate(&mut workspace, &identity)?;
+        store.save(&workspace)?;
+        serde_json::to_value(workspace).map_err(|e| e.to_string())
+    })();
+    match result {
+        Ok(value) => trust_result(value),
+        Err(error) => error_json(&error),
+    }
+}
+
 /// Stable native boundary for the Flutter client.
 ///
 /// Keep this API C-compatible. Higher-level Capsi operations should be backed
