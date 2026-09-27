@@ -67,6 +67,10 @@ typedef _MessageStopNative = ffi.Void Function(ffi.Uint64);
 typedef _MessageStopDart = void Function(int);
 typedef _MessageSendNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 typedef _MessageSendDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+typedef _ConversationListNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>);
+typedef _ConversationListDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>);
+typedef _ConversationLoadNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+typedef _ConversationLoadDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 
 class KnownDevice {
   const KnownDevice({required this.deviceId, required this.name, this.alias, required this.state, required this.fingerprint, this.lastAddress});
@@ -138,6 +142,8 @@ class CapsiNative {
         _messagePoll = _library.lookupFunction<_MessagePollNative, _MessagePollDart>('capsi_message_poll'),
         _messageStop = _library.lookupFunction<_MessageStopNative, _MessageStopDart>('capsi_message_stop'),
         _messageSend = _library.lookupFunction<_MessageSendNative, _MessageSendDart>('capsi_message_send'),
+        _conversationList = _library.lookupFunction<_ConversationListNative, _ConversationListDart>('capsi_conversations_list'),
+        _conversationLoad = _library.lookupFunction<_ConversationLoadNative, _ConversationLoadDart>('capsi_conversation_load'),
         _freeString = _library.lookupFunction<_FreeStringNative, _FreeStringDart>('capsi_free_string');
 
   final ffi.DynamicLibrary _library;
@@ -155,6 +161,8 @@ class CapsiNative {
   final _MessagePollDart _messagePoll;
   final _MessageStopDart _messageStop;
   final _MessageSendDart _messageSend;
+  final _ConversationListDart _conversationList;
+  final _ConversationLoadDart _conversationLoad;
   final _FreeStringDart _freeString;
 
   static CapsiNative? tryLoad() {
@@ -291,6 +299,32 @@ class CapsiNative {
     } finally {
       calloc.free(dir); calloc.free(id); calloc.free(text);
     }
+  }
+
+  List<Map<String, dynamic>> conversations(String dataDirectory) {
+    final dir = dataDirectory.toNativeUtf8();
+    try {
+      final pointer = _conversationList(dir.cast<ffi.Char>());
+      if (pointer == ffi.nullptr) return const [];
+      try {
+        final value = jsonDecode(_readString(pointer));
+        if (value is! List) return const [];
+        return value.whereType<Map<String, dynamic>>().toList(growable: false);
+      } finally { _freeString(pointer); }
+    } finally { calloc.free(dir); }
+  }
+
+  Map<String, dynamic>? conversation(String dataDirectory, String deviceId) {
+    final dir = dataDirectory.toNativeUtf8();
+    final id = deviceId.toNativeUtf8();
+    try {
+      final pointer = _conversationLoad(dir.cast<ffi.Char>(), id.cast<ffi.Char>());
+      if (pointer == ffi.nullptr) return null;
+      try {
+        final value = jsonDecode(_readString(pointer));
+        return value is Map<String, dynamic> ? value : null;
+      } finally { _freeString(pointer); }
+    } finally { calloc.free(dir); calloc.free(id); }
   }
 
   ffi.Pointer<ffi.Char> _callTrust(
