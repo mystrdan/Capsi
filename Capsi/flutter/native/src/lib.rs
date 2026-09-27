@@ -1,5 +1,6 @@
 use std::ffi::{c_char, CStr, CString};
 use std::time::Duration;
+use tokio::net::TcpListener;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -7,7 +8,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use capsi_core::discovery::Discovery;
 use capsi_core::identity::{DeviceIdentity, DeviceId};
-use capsi_core::identity::trust::{KnownDevice, TrustStore};
+use capsi_core::identity::trust::TrustStore;
+use capsi_core::protocol::{Envelope, Message, TextMessage};
+use capsi_core::storage::conversation::{DeliveryState, MessageKind, MessageStore, StoredMessage};
 
 struct DiscoverySession {
     stop: Arc<AtomicBool>,
@@ -39,6 +42,24 @@ fn trust_result<T: serde::Serialize>(value: T) -> *mut c_char {
 
 static DISCOVERY_SESSIONS: OnceLock<Mutex<HashMap<u64, DiscoverySession>>> = OnceLock::new();
 static NEXT_DISCOVERY_ID: AtomicU64 = AtomicU64::new(1);
+
+struct MessageSession {
+    stop: Arc<AtomicBool>,
+    latest: Arc<Mutex<String>>,
+}
+
+static MESSAGE_SESSIONS: OnceLock<Mutex<HashMap<u64, MessageSession>>> = OnceLock::new();
+static NEXT_MESSAGE_ID: AtomicU64 = AtomicU64::new(1);
+
+fn message_sessions() -> &'static Mutex<HashMap<u64, MessageSession>> {
+    MESSAGE_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn message_event(latest: &Arc<Mutex<String>>, value: serde_json::Value) {
+    if let Ok(mut out) = latest.lock() {
+        *out = value.to_string();
+    }
+}
 
 fn discovery_sessions() -> &'static Mutex<HashMap<u64, DiscoverySession>> {
     DISCOVERY_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -104,7 +125,14 @@ pub extern "C" fn capsi_discovery_start(
 
                     let _ = discovery.prune().await;
 
-                    if let Ok(json) = serde_json::to_string(&discovery.peers().await) {
+                    let peers = discovery.peers().await;
+                    if let Ok(mut store) = TrustStore::load(&data_dir) {
+                        for peer in &peers {
+                            let _ = store.observe(&peer.device_id, &peer.name, &peer.tcp_address());
+                        }
+                        let _ = store.save_if_dirty(&data_dir);
+                    }
+                    if let Ok(json) = serde_json::to_string(&peers) {
                         if let Ok(mut current) = thread_latest.lock() {
                             *current = json;
                         }
