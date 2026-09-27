@@ -232,10 +232,6 @@ pub extern "C" fn capsi_discovery_stop(handle: u64) {
 }
 
 
-fn message_sessions() -> &'static Mutex<HashMap<u64, MessageSession>> {
-    MESSAGE_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
 #[no_mangle]
 pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) -> u64 {
     let data_dir = match c_path(data_dir) { Some(path) => path, None => return 0 };
