@@ -250,6 +250,13 @@ class _PageBodyState extends State<_PageBody> {
   String draft = '';
   String? selectedWorkplaceGroup;
   String workplaceDraft = '';
+  final TextEditingController workplaceController = TextEditingController();
+
+  @override
+  void dispose() {
+    workplaceController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -350,11 +357,13 @@ class _PageBodyState extends State<_PageBody> {
     final broadcasts = (workspace['broadcasts'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? const [];
     final messages = (workspace['messages'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? const [];
 
-    if (groups.isNotEmpty && (selectedWorkplaceGroup == null || !groups.any((g) => g['id'] == selectedWorkplaceGroup))) {
-      selectedWorkplaceGroup = groups.first['id']?.toString();
-    }
+    final effectiveGroupId = groups.isEmpty
+        ? null
+        : (selectedWorkplaceGroup != null && groups.any((g) => g['id']?.toString() == selectedWorkplaceGroup)
+            ? selectedWorkplaceGroup
+            : groups.first['id']?.toString());
     final group = groups.cast<Map<String, dynamic>?>().firstWhere(
-      (g) => g?['id']?.toString() == selectedWorkplaceGroup,
+      (g) => g?['id']?.toString() == effectiveGroupId,
       orElse: () => null,
     );
     final groupId = group?['id']?.toString();
@@ -424,6 +433,7 @@ class _PageBodyState extends State<_PageBody> {
                                       onTap: () => setState(() {
                                         selectedWorkplaceGroup = item['id']?.toString();
                                         workplaceDraft = '';
+                                        workplaceController.clear();
                                       }),
                                       trailing: IconButton(
                                         tooltip: 'Add member',
@@ -504,6 +514,7 @@ class _PageBodyState extends State<_PageBody> {
                               child: Row(children: [
                                 Expanded(
                                   child: TextField(
+                                    controller: workplaceController,
                                     onChanged: (value) => workplaceDraft = value,
                                     onSubmitted: (_) => _sendWorkplaceMessage(),
                                     decoration: const InputDecoration(hintText: 'Message this group', border: OutlineInputBorder()),
@@ -545,12 +556,19 @@ class _PageBodyState extends State<_PageBody> {
   void _sendWorkplaceMessage() {
     final data = widget.dataDirectory;
     final native = widget.native;
-    final text = workplaceDraft.trim();
-    final groupId = selectedWorkplaceGroup;
+    final text = workplaceController.text.trim();
+    final workspace = widget.workplaceData;
+    final groups = (workspace?['groups'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? const [];
+    final groupId = selectedWorkplaceGroup != null && groups.any((g) => g['id']?.toString() == selectedWorkplaceGroup)
+        ? selectedWorkplaceGroup
+        : groups.firstOrNull?['id']?.toString();
     if (data == null || native == null || groupId == null || text.isEmpty) return;
     final result = native.sendWorkplaceMessage(data, groupId, text);
     if (result != null && result['error'] == null && mounted) {
-      setState(() => workplaceDraft = '');
+      setState(() {
+        workplaceDraft = '';
+        workplaceController.clear();
+      });
       widget.onTrustChanged();
     } else if (mounted && result?['error'] != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result!['error'].toString())));
