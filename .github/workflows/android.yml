@@ -35,6 +35,15 @@ jobs:
         run: |
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
+      # Tauri's Android build requires the NDK; `setup-android` only installs the
+      # command line tools and platform packages. This mirrors the NDK setup used
+      # by Tauri's own Android CI workflow.
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r29
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -43,11 +52,23 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
 
-      - name: Initialize Android project
-        run: cargo tauri android init
+      # The Android project (including the Gradle wrapper) is committed, so
+      # `init` is only needed when it is missing. Git on Windows cannot record
+      # the executable bit, so the wrapper is made executable on the runner.
+      - name: Prepare Android project
+        run: |
+          if [ -f src-tauri/gen/android/gradlew ]; then
+            chmod +x src-tauri/gen/android/gradlew
+          else
+            cargo tauri android init
+          fi
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
 
       - name: Build Android debug APK
         run: cargo tauri android build --debug --apk
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4

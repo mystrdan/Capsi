@@ -1,6 +1,6 @@
 [package]
 name = "capsi-core"
-version = "1.0.0"
+version = "1.0.1"
 description = "Capsi by CAPSICOM - platform-independent core (identity, crypto, discovery, storage)"
 authors = ["CAPSICOM"]
 edition = "2021"

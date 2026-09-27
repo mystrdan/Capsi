@@ -54,7 +54,7 @@ fn main() -> ExitCode {
         .collect();
 
     if as_text.iter().any(|arg| arg == "--version") {
-        println!("{NAME} (Capsi resource-file preprocessor) 1.0.0");
+        println!("{NAME} (Capsi resource-file preprocessor) 1.0.1");
         return ExitCode::SUCCESS;
     }
 

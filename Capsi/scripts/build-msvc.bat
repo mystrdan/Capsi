@@ -74,6 +74,10 @@ if /i "%~1"=="debug" (
   rem Explicit dev-only mode: bare debug exe, no installer.
   cargo build -p capsi
 ) else (
+  rem Release and installer builds always ship a fresh patch version first.
+  rem Debug builds intentionally keep the version stable.
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bump-version.ps1 patch
+  if errorlevel 1 exit /b 1
   rem Default for every other argument (incl. none, release, bundle): release exe
   rem + NSIS installer into target\release\bundle\nsis. `cargo tauri` comes from
   rem `cargo install tauri-cli`; `tauri` from the npm package (@tauri-apps/cli).

@@ -72,7 +72,6 @@ Product behavior belongs in the shared core where possible. Platform-specific be
 | `Capsi/src-tauri/` | Tauri/Rust application shell and native commands |
 | `Capsi/crates/capsi-core/` | Shared platform-independent core |
 | `Capsi/scripts/` | Local build helpers |
-| `Source/` | Brand and product source material |
 | `Website/` | Static website for `capsi.win` |
 
 ## Website
@@ -106,7 +105,7 @@ cargo tauri dev
 For a debug executable:
 
 ```powershell
-.\scripts\build-msvc.bat
+.\scripts\build-msvc.bat debug
 ```
 
 For a release executable:
@@ -126,6 +125,22 @@ The release installer is generated under:
 ```text
 Capsi/target/release/bundle/nsis/
 ```
+
+## Versioning
+
+Every release build bumps the patch version first (`1.0.0` -> `1.0.1` -> `1.0.2` ...),
+so each installer carries a fresh number. Debug builds keep the version stable.
+
+- `Capsi/scripts/build-msvc.bat release` (also `bundle`, or no argument) bumps the
+  patch version before building the Windows installer.
+- `Capsi/build-android.bat release` bumps the patch version before the signed APK.
+- `build-msvc.bat debug` and `build-android.bat apk` do not bump.
+
+`Capsi/scripts/bump-version.ps1 [patch|minor|major]` is the single source of truth:
+it rewrites the version in the Cargo manifests, `tauri.conf.json` (plus the synced
+Android copy), the frontend About panel, the website fallback download name, and the
+`rc-preproc` banner. It never commits or tags - after a verified build, commit and
+`git tag v<x.y.z>`; the release workflow refuses a tag that does not match the files.
 
 ## Android development
 

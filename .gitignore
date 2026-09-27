@@ -1,6 +1,6 @@
 target/
-scripts/
-*.log
+Capsi/*.log
 *.apk
-*.bat
 .vs/
+# build outputs and scratch .bat shims stay untracked, but the Capsi/scripts
+# helpers and build-android entry point are part of the documented build.

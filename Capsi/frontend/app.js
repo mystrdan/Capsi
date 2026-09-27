@@ -528,7 +528,7 @@ async function openDevicePanel() {
         <h3>About</h3>
         <div class="about-app">Capsi</div>
         <div class="about-by">by CAPSICOM</div>
-        <div class="about-version">Version 1.0.0</div>
+        <div class="about-version">Version 1.0.1</div>
         <button class="about-link" id="btn-about-website">Website &#8599;</button>
       </div>`
     );
