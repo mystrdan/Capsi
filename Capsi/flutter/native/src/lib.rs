@@ -180,12 +180,51 @@ pub extern "C" fn capsi_trust_accept(
         None => return error_json("device id is invalid"),
     };
     let alias = c_string(alias);
-    match load_store(&dir).and_then(|mut store| {
-        let device = store.accept(&id, alias)?;
-        store.save_if_dirty(&dir)?;
-        Ok(device)
-    }) {
-        Ok(device) => trust_result(device),
+    let result = (|| -> capsi_core::Result<serde_json::Value> {
+        let mut trust = load_store(&dir)?;
+        let device = trust.accept(&id, alias)?;
+        trust.save_if_dirty(&dir)?;
+
+        // Accepting a device is also the point at which the owner can invite
+        // that trusted device into the local workplace. The invite is sent
+        // directly over the already-established Capsi encrypted transport.
+        let identity = DeviceIdentity::load_or_create(&dir)?;
+        let Some(mut workspace) = capsi_core::workplace::WorkspaceStore::new(&dir).load().map_err(|e| capsi_core::CapsiError::Storage(e))? else {
+            return Ok(serde_json::to_value(device)?);
+        };
+
+        if workspace.owner_device_id == identity.id().as_str() {
+            workspace.add_member(id.as_str(), device.display_name(), capsi_core::workplace::Role::Member);
+            workspace.touch();
+            capsi_core::workplace::WorkspaceStore::new(&dir)
+                .save(&workspace)
+                .map_err(capsi_core::CapsiError::Storage)?;
+
+            let address = device.last_address.clone()
+                .ok_or_else(|| capsi_core::CapsiError::NotFound("trusted device has no known address".into()))?;
+            let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
+            let socket = format!("{host}:45892");
+            let sync = Envelope::new(Message::WorkplaceSync(
+                capsi_core::protocol::WorkplaceSyncMessage {
+                    actor_device_id: identity.id().as_str().to_string(),
+                    state: workspace.network_state(),
+                },
+            ));
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .enable_time()
+                .build()
+                .map_err(|e| capsi_core::CapsiError::Unsupported(format!("runtime: {e}")))?;
+            runtime.block_on(async {
+                capsi_core::transport::connect_and_send(&socket, &identity, &id, &sync).await
+            })?;
+        }
+
+        Ok(serde_json::to_value(device)?)
+    })();
+
+    match result {
+        Ok(value) => trust_result(value),
         Err(error) => error_json(&error.to_string()),
     }
 }
