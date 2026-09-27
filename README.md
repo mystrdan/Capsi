@@ -89,7 +89,7 @@ python -m http.server 8080
 
 Then open `http://localhost:8080/`.
 
-The website and application intentionally share the same product identity: Capsi, its dark utility-oriented visual language, restrained green accent, terminology, and icon style. The website is the product presentation; the application is the working utility.
+The website and application intentionally share the same product identity: Capsi, its dark utility-oriented visual language, restrained green accent, terminology, and icon style. The website is a React/Vite product presentation; the application is the working utility.
 
 ## Windows development
 
