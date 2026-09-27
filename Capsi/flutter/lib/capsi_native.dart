@@ -71,6 +71,8 @@ typedef _ConversationListNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi
 typedef _ConversationListDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>);
 typedef _ConversationLoadNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 typedef _ConversationLoadDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+typedef _FileSendNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+typedef _FileSendDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 
 class KnownDevice {
   const KnownDevice({required this.deviceId, required this.name, this.alias, required this.state, required this.fingerprint, this.lastAddress});
@@ -144,6 +146,7 @@ class CapsiNative {
         _messageSend = _library.lookupFunction<_MessageSendNative, _MessageSendDart>('capsi_message_send'),
         _conversationList = _library.lookupFunction<_ConversationListNative, _ConversationListDart>('capsi_conversations_list'),
         _conversationLoad = _library.lookupFunction<_ConversationLoadNative, _ConversationLoadDart>('capsi_conversation_load'),
+        _fileSend = _library.lookupFunction<_FileSendNative, _FileSendDart>('capsi_file_send'),
         _freeString = _library.lookupFunction<_FreeStringNative, _FreeStringDart>('capsi_free_string');
 
   // Library is retained by the function pointers; no direct field access is needed.
@@ -163,6 +166,7 @@ class CapsiNative {
   final _MessageSendDart _messageSend;
   final _ConversationListDart _conversationList;
   final _ConversationLoadDart _conversationLoad;
+  final _FileSendDart _fileSend;
   final _FreeStringDart _freeString;
 
   static CapsiNative? tryLoad() {
@@ -312,6 +316,26 @@ class CapsiNative {
         return value.whereType<Map<String, dynamic>>().toList(growable: false);
       } finally { _freeString(pointer); }
     } finally { calloc.free(dir); }
+  }
+
+  String? sendFile(String dataDirectory, String deviceId, String filePath) {
+    final dir = dataDirectory.toNativeUtf8();
+    final id = deviceId.toNativeUtf8();
+    final path = filePath.toNativeUtf8();
+    try {
+      final pointer = _fileSend(dir.cast<ffi.Char>(), id.cast<ffi.Char>(), path.cast<ffi.Char>());
+      if (pointer == ffi.nullptr) return null;
+      try {
+        final value = jsonDecode(_readString(pointer));
+        return value is String ? value : null;
+      } finally {
+        _freeString(pointer);
+      }
+    } finally {
+      calloc.free(dir);
+      calloc.free(id);
+      calloc.free(path);
+    }
   }
 
   Map<String, dynamic>? conversation(String dataDirectory, String deviceId) {
