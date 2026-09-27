@@ -696,6 +696,7 @@ ListView(
                   if (compact)
                     PopupMenuButton<String>(
                       tooltip: 'WorkPlace actions',
+                      enabled: widget.native != null && widget.dataDirectory != null,
                       onSelected: (value) {
                         if (value == 'group') {
                           _createWorkplaceName(
