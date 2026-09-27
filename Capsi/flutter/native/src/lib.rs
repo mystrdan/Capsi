@@ -553,24 +553,17 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         if !workspace.members.iter().any(|m| m.device_id == peer_id.as_str()) {
                             continue;
                         }
+                                        let created_at = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or_default();
                         if workspace.receive_broadcast(
                             broadcast.broadcast_id.clone(),
                             broadcast.title.clone(),
                             broadcast.body.clone(),
                             peer_id.as_str().to_string(),
                             broadcast.department_id.clone(),
-                            capsi_core::workplace::WorkspaceState {
-                                id: workspace.id.clone(),
-                                name: workspace.name.clone(),
-                                created_at: workspace.created_at,
-                                updated_at: workspace.updated_at,
-                                owner_device_id: workspace.owner_device_id.clone(),
-                                members: workspace.members.clone(),
-                                groups: workspace.groups.clone(),
-                                departments: workspace.departments.clone(),
-                                broadcasts: Vec::new(),
-                                messages: Vec::new(),
-                            }.updated_at,
+                            created_at,
                         ) {
                             let _ = store.save(&workspace);
                             message_event(&thread_latest, serde_json::json!({
@@ -886,11 +879,16 @@ pub extern "C" fn capsi_workplace_create(
         }
 
         capsi_core::workplace::WorkspaceStore::new(&dir).save(&workspace)?;
-        Ok(workspace)
+        let sync_status = sync_workplace_to_members(&dir, &identity, &workspace);
+        let mut value = serde_json::to_value(&workspace).map_err(|e| e.to_string())?;
+        if let Some(object) = value.as_object_mut() {
+            object.insert("sync".into(), serde_json::to_value(sync_status).unwrap_or_default());
+        }
+        Ok(value)
     })();
 
     match result {
-        Ok(workspace) => trust_result(workspace),
+        Ok(value) => trust_result(value),
         Err(error) => error_json(&error),
     }
 }
@@ -944,6 +942,75 @@ pub extern "C" fn capsi_workplace_create_broadcast(
         workspace.touch();
         Ok(())
     })
+}
+
+#[derive(Debug, serde::Serialize)]
+struct WorkplaceSyncStatus {
+    attempted: usize,
+    delivered: usize,
+    failed: usize,
+}
+
+fn sync_workplace_to_members(
+    dir: &Path,
+    identity: &DeviceIdentity,
+    workspace: &capsi_core::workplace::Workspace,
+) -> WorkplaceSyncStatus {
+    let trust = match TrustStore::load(dir) {
+        Ok(value) => value,
+        Err(_) => return WorkplaceSyncStatus { attempted: 0, delivered: 0, failed: 0 },
+    };
+
+    let local_id = identity.id().as_str();
+    let members: Vec<_> = workspace.members.iter()
+        .filter(|member| member.device_id != local_id)
+        .filter_map(|member| trust.get(&DeviceId::from_hex(&member.device_id).ok()?).filter(|device| device.is_trusted()).map(|device| device.clone()))
+        .collect();
+
+    if members.is_empty() {
+        return WorkplaceSyncStatus { attempted: 0, delivered: 0, failed: 0 };
+    }
+
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .enable_time()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(_) => return WorkplaceSyncStatus { attempted: members.len(), delivered: 0, failed: members.len() },
+    };
+
+    let state = workspace.network_state();
+    let mut delivered = 0usize;
+    let mut failed = 0usize;
+
+    for device in members {
+        let Some(address) = device.last_address.clone() else {
+            failed += 1;
+            continue;
+        };
+        let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
+        let socket = format!("{host}:45892");
+        let peer_id = device.device_id;
+        let envelope = Envelope::new(Message::WorkplaceSync(
+            capsi_core::protocol::WorkplaceSyncMessage {
+                actor_device_id: local_id.to_string(),
+                state: state.clone(),
+            },
+        ));
+        match runtime.block_on(async {
+            capsi_core::transport::connect_and_send(&socket, identity, &peer_id, &envelope).await
+        }) {
+            Ok(()) => delivered += 1,
+            Err(_) => failed += 1,
+        }
+    }
+
+    WorkplaceSyncStatus {
+        attempted: delivered + failed,
+        delivered,
+        failed,
+    }
 }
 
 fn workplace_mutate<F>(data_dir: *const c_char, mutate: F) -> *mut c_char
