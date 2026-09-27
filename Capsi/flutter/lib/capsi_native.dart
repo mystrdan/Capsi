@@ -146,7 +146,7 @@ class CapsiNative {
         _conversationLoad = _library.lookupFunction<_ConversationLoadNative, _ConversationLoadDart>('capsi_conversation_load'),
         _freeString = _library.lookupFunction<_FreeStringNative, _FreeStringDart>('capsi_free_string');
 
-  final ffi.DynamicLibrary _library;
+  // Library is retained by the function pointers; no direct field access is needed.
   final _RuntimeVersionDart _runtimeVersion;
   final _CoreLinkedDart _coreLinked;
   final _ProtocolVersionDart _protocolVersion;
