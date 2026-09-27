@@ -8,24 +8,6 @@ import 'package:path_provider/path_provider.dart';
 
 void main() {
   runApp(const CapsiApp());
-
-class _WorkplaceStat extends StatelessWidget {
-  final String label;
-  final int value;
-  const _WorkplaceStat(this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('$value', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 4),
-        Text(label, style: const TextStyle(color: Colors.white70)),
-      ]),
-    ),
-  );
-}
 }
 
 class CapsiApp extends StatelessWidget {
@@ -335,32 +317,25 @@ class _PageBodyState extends State<_PageBody> {
   Widget _workplace(BuildContext context) {
     final workspace = widget.workplaceData;
     if (workspace == null) {
-      return Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 620),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(36),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.workspaces_outlined, size: 54),
-                  const SizedBox(height: 20),
-                  Text('Create your WorkPlace', style: Theme.of(context).textTheme.headlineSmall),
-                  const SizedBox(height: 10),
-                  const Text('A local workspace for your people, groups, departments and broadcasts. It lives with your Capsi installation.', textAlign: TextAlign.center),
-                  const SizedBox(height: 24),
-                  FilledButton.icon(
-                    onPressed: widget.dataDirectory == null || widget.native == null ? null : () => _createWorkplace(context),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Create WorkPlace'),
-                  ),
-                ],
-              ),
+      return Center(child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 620),
+        child: Card(child: Padding(
+          padding: const EdgeInsets.all(36),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.workspaces_outlined, size: 54),
+            const SizedBox(height: 20),
+            Text('Create your WorkPlace', style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 10),
+            const Text('A local workspace for your people, groups, departments and broadcasts. It lives with your Capsi installation.', textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: widget.dataDirectory == null || widget.native == null ? null : () => _createWorkplace(context),
+              icon: const Icon(Icons.add),
+              label: const Text('Create WorkPlace'),
             ),
-          ),
-        ),
-      );
+          ]),
+        )),
+      ));
     }
 
     final members = (workspace['members'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? const [];
@@ -369,64 +344,55 @@ class _PageBodyState extends State<_PageBody> {
     final broadcasts = (workspace['broadcasts'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? const [];
     final messages = (workspace['messages'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? const [];
 
-    return ListView(
-      padding: const EdgeInsets.all(28),
-      children: [
-        Row(
-          children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(workspace['name']?.toString() ?? 'WorkPlace', style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 6),
-              const Text('Local workplace'),
-            ])),
-            IconButton(onPressed: widget.onTrustChanged, tooltip: 'Refresh', icon: const Icon(Icons.refresh)),
-          ],
-        ),
-        const SizedBox(height: 22),
-        Wrap(
-          spacing: 14,
-          runSpacing: 14,
-          children: [
-            _WorkplaceStat('Members', members.length),
-            _WorkplaceStat('Groups', groups.length),
-            _WorkplaceStat('Departments', departments.length),
-            _WorkplaceStat('Broadcasts', broadcasts.length),
-            _WorkplaceStat('Messages', messages.length),
-          ],
-        ),
-        const SizedBox(height: 28),
-        Text('People', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 10),
-        if (members.isEmpty)
-          const Card(child: Padding(padding: EdgeInsets.all(20), child: Text('No members yet. Accept trusted devices from Nearby.')))
-        else
-          for (final member in members)
-            Card(child: ListTile(
-              leading: const Icon(Icons.person_outline),
-              title: Text(member['display_name']?.toString().isNotEmpty == true ? member['display_name'].toString() : 'Unnamed device'),
-              subtitle: Text(member['role']?.toString().split('.').last ?? 'Member'),
-            )),
-        const SizedBox(height: 24),
-        Text('Groups & departments', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 10),
-        if (groups.isEmpty && departments.isEmpty)
-          const Card(child: Padding(padding: EdgeInsets.all(20), child: Text('No groups or departments yet.')))
-        else ...[
-          for (final group in groups)
-            Card(child: ListTile(leading: const Icon(Icons.group_outlined), title: Text(group['name']?.toString() ?? 'Group'), subtitle: Text('${(group['member_ids'] as List?)?.length ?? 0} members'))),
-          for (final department in departments)
-            Card(child: ListTile(leading: const Icon(Icons.apartment_outlined), title: Text(department['name']?.toString() ?? 'Department'), subtitle: Text('${(department['member_ids'] as List?)?.length ?? 0} members'))),
-        ],
-        const SizedBox(height: 24),
-        Text('Broadcasts', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 10),
-        if (broadcasts.isEmpty)
-          const Card(child: Padding(padding: EdgeInsets.all(20), child: Text('No broadcasts yet.')))
-        else
-          for (final broadcast in broadcasts.reversed.take(10))
-            Card(child: ListTile(leading: const Icon(Icons.campaign_outlined), title: Text(broadcast['title']?.toString() ?? 'Broadcast'), subtitle: Text(broadcast['body']?.toString() ?? ''))),
+    return ListView(padding: const EdgeInsets.all(28), children: [
+      Row(children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(workspace['name']?.toString() ?? 'WorkPlace', style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 6),
+          const Text('Local workplace'),
+        ])),
+        IconButton(onPressed: widget.onTrustChanged, tooltip: 'Refresh', icon: const Icon(Icons.refresh)),
+      ]),
+      const SizedBox(height: 22),
+      Wrap(spacing: 14, runSpacing: 14, children: [
+        _WorkplaceStat('Members', members.length),
+        _WorkplaceStat('Groups', groups.length),
+        _WorkplaceStat('Departments', departments.length),
+        _WorkplaceStat('Broadcasts', broadcasts.length),
+        _WorkplaceStat('Messages', messages.length),
+      ]),
+      const SizedBox(height: 28),
+      Text('People', style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 10),
+      if (members.isEmpty)
+        const Card(child: Padding(padding: EdgeInsets.all(20), child: Text('No members yet. Accept trusted devices from Nearby.')))
+      else
+        for (final member in members)
+          Card(child: ListTile(
+            leading: const Icon(Icons.person_outline),
+            title: Text(member['display_name']?.toString().isNotEmpty == true ? member['display_name'].toString() : 'Unnamed device'),
+            subtitle: Text(member['role']?.toString().split('.').last ?? 'Member'),
+          )),
+      const SizedBox(height: 24),
+      Text('Groups & departments', style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 10),
+      if (groups.isEmpty && departments.isEmpty)
+        const Card(child: Padding(padding: EdgeInsets.all(20), child: Text('No groups or departments yet.')))
+      else ...[
+        for (final group in groups)
+          Card(child: ListTile(leading: const Icon(Icons.group_outlined), title: Text(group['name']?.toString() ?? 'Group'), subtitle: Text((group['member_ids'] as List?)?.length.toString() ?? '0' + ' members'))),
+        for (final department in departments)
+          Card(child: ListTile(leading: const Icon(Icons.apartment_outlined), title: Text(department['name']?.toString() ?? 'Department'), subtitle: Text((department['member_ids'] as List?)?.length.toString() ?? '0' + ' members'))),
       ],
-    );
+      const SizedBox(height: 24),
+      Text('Broadcasts', style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 10),
+      if (broadcasts.isEmpty)
+        const Card(child: Padding(padding: EdgeInsets.all(20), child: Text('No broadcasts yet.')))
+      else
+        for (final broadcast in broadcasts.reversed.take(10))
+          Card(child: ListTile(leading: const Icon(Icons.campaign_outlined), title: Text(broadcast['title']?.toString() ?? 'Broadcast'), subtitle: Text(broadcast['body']?.toString() ?? ''))),
+    ]);
   }
 
   Future<void> _createWorkplace(BuildContext context) async {
@@ -595,3 +561,22 @@ class _PageBodyState extends State<_PageBody> {
   }
 }
 
+
+
+class _WorkplaceStat extends StatelessWidget {
+  final String label;
+  final int value;
+  const _WorkplaceStat(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(value.toString(), style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(color: Colors.white70)),
+      ]),
+    ),
+  );
+}
