@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'capsi_native.dart';
+
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -38,6 +39,7 @@ class CapsiHome extends StatefulWidget {
 }
 
 class _CapsiHomeState extends State<CapsiHome> {
+  Map<String, dynamic>? lastMessageEvent;
   int selected = 0;
   CapsiNative? native;
   List<CapsiPeer> peers = const [];
@@ -81,8 +83,10 @@ class _CapsiHomeState extends State<CapsiHome> {
     if (messageHandle == 0) return;
     messageTimer = Timer.periodic(const Duration(milliseconds: 750), (_) {
       if (!mounted) return;
-      bridge.pollMessage(messageHandle);
-      setState(() {});
+      final event = bridge.pollMessage(messageHandle);
+      if (event != null && event['type'] != null) {
+        setState(() => lastMessageEvent = event);
+      }
     });
   }
 
