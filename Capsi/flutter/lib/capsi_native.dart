@@ -83,6 +83,8 @@ typedef _WorkplaceBroadcastNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<f
 typedef _WorkplaceBroadcastDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 typedef _WorkplaceSendNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 typedef _WorkplaceSendDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+typedef _WorkplaceAddMemberNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+typedef _WorkplaceAddMemberDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 
 class KnownDevice {
   const KnownDevice({required this.deviceId, required this.name, this.alias, required this.state, required this.fingerprint, this.lastAddress});
@@ -163,6 +165,7 @@ class CapsiNative {
         _workplaceCreateDepartment = library.lookupFunction<_WorkplaceNameActionNative, _WorkplaceNameActionDart>('capsi_workplace_create_department'),
         _workplaceCreateBroadcast = library.lookupFunction<_WorkplaceBroadcastNative, _WorkplaceBroadcastDart>('capsi_workplace_create_broadcast'),
         _workplaceSendMessage = library.lookupFunction<_WorkplaceSendNative, _WorkplaceSendDart>('capsi_workplace_send_message'),
+        _workplaceAddGroupMember = library.lookupFunction<_WorkplaceAddMemberNative, _WorkplaceAddMemberDart>('capsi_workplace_add_group_member'),
         _freeString = library.lookupFunction<_FreeStringNative, _FreeStringDart>('capsi_free_string');
 
   // Library is retained by the function pointers; no direct field access is needed.
@@ -190,6 +193,7 @@ class CapsiNative {
   final _WorkplaceNameActionDart _workplaceCreateDepartment;
   final _WorkplaceBroadcastDart _workplaceCreateBroadcast;
   final _WorkplaceSendDart _workplaceSendMessage;
+  final _WorkplaceAddMemberDart _workplaceAddGroupMember;
 
   static CapsiNative? tryLoad() {
     final candidates = <String>[
@@ -248,6 +252,17 @@ class CapsiNative {
   Map<String, dynamic>? createWorkplaceGroup(String dataDirectory, String name) => _workplaceNameAction(_workplaceCreateGroup, dataDirectory, name);
 
   Map<String, dynamic>? createWorkplaceDepartment(String dataDirectory, String name) => _workplaceNameAction(_workplaceCreateDepartment, dataDirectory, name);
+
+  Map<String, dynamic>? addWorkplaceGroupMember(String dataDirectory, String groupId, String deviceId) {
+    final d = dataDirectory.toNativeUtf8();
+    final g = groupId.toNativeUtf8();
+    final m = deviceId.toNativeUtf8();
+    try {
+      return _readJson(_workplaceAddGroupMember(d.cast(), g.cast(), m.cast()));
+    } finally {
+      malloc.free(d); malloc.free(g); malloc.free(m);
+    }
+  }
 
   Map<String, dynamic>? sendWorkplaceMessage(String dataDirectory, String groupId, String body) {
     final d = dataDirectory.toNativeUtf8();
