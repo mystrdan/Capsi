@@ -14,6 +14,11 @@ struct DiscoverySession {
     latest: Arc<Mutex<String>>,
 }
 
+fn c_string(value: *const c_char) -> Option<String> {
+    if value.is_null() { return None; }
+    unsafe { CStr::from_ptr(value).to_str().ok().map(str::to_owned) }
+}
+
 fn c_path(value: *const c_char) -> Option<PathBuf> {
     if value.is_null() {
         return None;
@@ -138,11 +143,11 @@ pub extern "C" fn capsi_trust_accept(
     alias: *const c_char,
 ) -> *mut c_char {
     let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
-    let id = match c_path(device_id).and_then(|p| p.to_str().and_then(|s| DeviceId::from_hex(s).ok())) {
+    let id = match c_string(device_id).and_then(|s| DeviceId::from_hex(&s).ok()) {
         Some(id) => id,
         None => return error_json("device id is invalid"),
     };
-    let alias = c_path(alias).and_then(|p| p.into_os_string().into_string().ok());
+    let alias = c_string(alias);
     match load_store(&dir).and_then(|mut store| {
         let device = store.accept(&id, alias)?;
         store.save_if_dirty(&dir)?;
