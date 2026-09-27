@@ -634,6 +634,32 @@ pub extern "C" fn capsi_file_send(
         let stored = StoredMessage::file(&offer, true);
         messages.append(&device_id, &peer.name, stored)?;
 
+        // The receiver acknowledges the offer before chunks are sent. Each
+        // envelope currently uses its own TCP connection, so waiting for the
+        // persisted receipt here prevents chunks from racing the offer.
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        loop {
+            let store = MessageStore::load(&data_dir)?;
+            let state = store
+                .get(&device_id)
+                .and_then(|conversation| conversation.find_transfer(&transfer_id))
+                .map(|file| file.state);
+            match state {
+                Some(TransferState::Transferring) | Some(TransferState::Complete) => break,
+                Some(TransferState::Declined) => {
+                    return Err(capsi_core::CapsiError::Network("file offer was declined".into()));
+                }
+                Some(TransferState::Failed) | Some(TransferState::Cancelled) => {
+                    return Err(capsi_core::CapsiError::Network("file transfer was rejected".into()));
+                }
+                Some(TransferState::Offered) | None => {}
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(capsi_core::CapsiError::Network("timed out waiting for file offer acceptance".into()));
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+
         let mut input = File::open(&file_path)?;
         let mut buffer = vec![0u8; capsi_core::TRANSFER_CHUNK_SIZE];
         for index in 0..chunks {
