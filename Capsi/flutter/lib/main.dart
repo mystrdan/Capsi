@@ -538,11 +538,8 @@ class _PageBodyState extends State<_PageBody> {
   }
 
   String? _localWorkplaceMemberId(Map<String, dynamic> workspace) {
-    final people = (workspace['members'] as List?)?.whereType<Map<String, dynamic>>() ?? const <Map<String, dynamic>>[];
-    for (final member in people) {
-      if (member['display_name']?.toString() == 'This device') return member['device_id']?.toString();
-    }
-    return null;
+    final id = workspace['local_device_id']?.toString();
+    return id == null || id.isEmpty ? null : id;
   }
 
   void _sendWorkplaceMessage() {
