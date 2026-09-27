@@ -1,6 +1,126 @@
 use std::ffi::{c_char, CStr, CString};
 use std::time::Duration;
 
+
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
+
+struct DiscoverySession {
+    stop: Arc<AtomicBool>,
+    latest: Arc<Mutex<String>>,
+}
+
+static DISCOVERY_SESSIONS: OnceLock<Mutex<HashMap<u64, DiscoverySession>>> = OnceLock::new();
+static NEXT_DISCOVERY_ID: AtomicU64 = AtomicU64::new(1);
+
+fn discovery_sessions() -> &'static Mutex<HashMap<u64, DiscoverySession>> {
+    DISCOVERY_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Start a persistent discovery session. The session owns its Rust identity and
+/// keeps the peer table alive between Flutter polls.
+#[no_mangle]
+pub extern "C" fn capsi_discovery_start(
+    name: *const c_char,
+    tcp_port: u16,
+) -> u64 {
+    let name = unsafe {
+        if name.is_null() {
+            return 0;
+        }
+        match CStr::from_ptr(name).to_str() {
+            Ok(value) => value.to_owned(),
+            Err(_) => return 0,
+        }
+    };
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let latest = Arc::new(Mutex::new(String::from("[]")));
+    let thread_stop = Arc::clone(&stop);
+    let thread_latest = Arc::clone(&latest);
+
+    let spawn_result = std::thread::Builder::new()
+        .name("capsi-discovery".into())
+        .spawn(move || {
+            let runtime = match tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .enable_time()
+                .build()
+            {
+                Ok(runtime) => runtime,
+                Err(_) => return,
+            };
+
+            runtime.block_on(async move {
+                let identity = match DeviceIdentity::generate() {
+                    Ok(identity) => Arc::new(identity),
+                    Err(_) => return,
+                };
+                let discovery = match Discovery::bind(identity, name, tcp_port).await {
+                    Ok(discovery) => discovery,
+                    Err(_) => return,
+                };
+
+                let _ = discovery.announce().await;
+
+                while !thread_stop.load(Ordering::Acquire) {
+                    let _ = tokio::time::timeout(
+                        Duration::from_millis(500),
+                        discovery.receive_once(),
+                    )
+                    .await;
+
+                    let _ = discovery.prune().await;
+
+                    if let Ok(json) = serde_json::to_string(&discovery.peers().await) {
+                        if let Ok(mut current) = thread_latest.lock() {
+                            *current = json;
+                        }
+                    }
+                }
+            });
+        });
+
+    if spawn_result.is_err() {
+        return 0;
+    }
+
+    let id = NEXT_DISCOVERY_ID.fetch_add(1, Ordering::Relaxed);
+    if let Ok(mut sessions) = discovery_sessions().lock() {
+        sessions.insert(id, DiscoverySession { stop, latest });
+        id
+    } else {
+        0
+    }
+}
+
+/// Return the latest peer snapshot for a discovery session.
+#[no_mangle]
+pub extern "C" fn capsi_discovery_poll(handle: u64) -> *mut c_char {
+    let json = discovery_sessions()
+        .lock()
+        .ok()
+        .and_then(|sessions| sessions.get(&handle).map(|session| {
+            session.latest.lock().ok()
+                .map(|value| value.clone())
+                .unwrap_or_else(|| "[]".into())
+        }))
+        .unwrap_or_else(|| "[]".into());
+
+    into_c_string(json)
+}
+
+/// Stop a persistent discovery session.
+#[no_mangle]
+pub extern "C" fn capsi_discovery_stop(handle: u64) {
+    if let Ok(mut sessions) = discovery_sessions().lock() {
+        if let Some(session) = sessions.remove(&handle) {
+            session.stop.store(true, Ordering::Release);
+        }
+    }
+}
+
 use capsi_core::discovery::Discovery;
 use capsi_core::identity::DeviceIdentity;
 
