@@ -40,7 +40,19 @@ typedef _TrustActionNative = ffi.Pointer<ffi.Char> Function(
   ffi.Pointer<ffi.Char>,
   ffi.Pointer<ffi.Char>,
 );
+
+typedef _TrustAcceptNative = ffi.Pointer<ffi.Char> Function(
+  ffi.Pointer<ffi.Char>,
+  ffi.Pointer<ffi.Char>,
+  ffi.Pointer<ffi.Char>,
+);
 typedef _TrustActionDart = ffi.Pointer<ffi.Char> Function(
+  ffi.Pointer<ffi.Char>,
+  ffi.Pointer<ffi.Char>,
+);
+
+typedef _TrustAcceptDart = ffi.Pointer<ffi.Char> Function(
+  ffi.Pointer<ffi.Char>,
   ffi.Pointer<ffi.Char>,
   ffi.Pointer<ffi.Char>,
 );
@@ -110,7 +122,7 @@ class CapsiNative {
         _discoveryProbe = _library.lookupFunction<_DiscoveryProbeNative, _DiscoveryProbeDart>('capsi_discovery_probe'),
         _discoveryStart = _library.lookupFunction<_DiscoveryStartNative, _DiscoveryStartDart>('capsi_discovery_start'),
         _trustList = _library.lookupFunction<_TrustListNative, _TrustListDart>('capsi_trust_list'),
-        _trustAccept = _library.lookupFunction<_TrustActionNative, _TrustActionDart>('capsi_trust_accept'),
+        _trustAccept = _library.lookupFunction<_TrustAcceptNative, _TrustAcceptDart>('capsi_trust_accept'),
         _trustIgnore = _library.lookupFunction<_TrustActionNative, _TrustActionDart>('capsi_trust_ignore'),
         _discoveryPoll = _library.lookupFunction<_DiscoveryPollNative, _DiscoveryPollDart>('capsi_discovery_poll'),
         _discoveryStop = _library.lookupFunction<_DiscoveryStopNative, _DiscoveryStopDart>('capsi_discovery_stop'),
@@ -123,7 +135,7 @@ class CapsiNative {
   final _DiscoveryProbeDart _discoveryProbe;
   final _DiscoveryStartDart _discoveryStart;
   final _TrustListDart _trustList;
-  final _TrustActionDart _trustAccept;
+  final _TrustAcceptDart _trustAccept;
   final _TrustActionDart _trustIgnore;
   final _DiscoveryPollDart _discoveryPoll;
   final _DiscoveryStopDart _discoveryStop;
@@ -211,8 +223,18 @@ class CapsiNative {
       );
 
   KnownDevice? acceptTrust(String dataDirectory, String deviceId, {String? alias}) {
-    final pointer = _callTrustAction(_trustAccept, dataDirectory, deviceId);
-    return _decodeKnownDevice(pointer);
+    final dir = dataDirectory.toNativeUtf8();
+    final id = deviceId.toNativeUtf8();
+    final nativeAlias = (alias ?? '').toNativeUtf8();
+    try {
+      return _decodeKnownDevice(_trustAccept(
+        dir.cast<ffi.Char>(), id.cast<ffi.Char>(), nativeAlias.cast<ffi.Char>(),
+      ));
+    } finally {
+      calloc.free(dir);
+      calloc.free(id);
+      calloc.free(nativeAlias);
+    }
   }
 
   KnownDevice? ignoreTrust(String dataDirectory, String deviceId) {
