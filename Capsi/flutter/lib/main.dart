@@ -176,50 +176,134 @@ class _CapsiHomeState extends State<CapsiHome> {
   @override
   Widget build(BuildContext context) {
     final page = pages[selected];
+    final body = _PageBody(
+      label: page.label,
+      peers: peers,
+      scanning: scanning,
+      native: native,
+      onScan: _scan,
+      trustedDevices: trustedDevices,
+      onTrustChanged: () { _loadTrust(); _loadWorkplace(); },
+      dataDirectory: dataDirectory,
+      workplaceData: workplaceData,
+    );
 
-    return Scaffold(
-      body: Row(
-        children: [
-          NavigationRail(
-            selectedIndex: selected,
-            onDestinationSelected: (index) => setState(() => selected = index),
-            backgroundColor: const Color(0xFF101314),
-            leading: Padding(
-              padding: const EdgeInsets.only(top: 18, bottom: 28),
-              child: _CapsiMark(),
-            ),
-            destinations: [
-              for (final item in pages)
-                NavigationRailDestination(
-                  icon: Icon(item.icon),
-                  selectedIcon: Icon(item.icon),
-                  label: Text(item.label),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 760;
+        return Scaffold(
+          body: compact
+              ? Column(
+                  children: [
+                    Expanded(child: _DesktopContent(page: page, body: body, native: native)),
+                    NavigationBar(
+                      selectedIndex: selected,
+                      onDestinationSelected: (index) => setState(() => selected = index),
+                      destinations: [
+                        for (final item in pages)
+                          NavigationDestination(icon: Icon(item.icon), selectedIcon: Icon(item.icon), label: item.label),
+                      ],
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    NavigationRail(
+                      selectedIndex: selected,
+                      onDestinationSelected: (index) => setState(() => selected = index),
+                      backgroundColor: const Color(0xFF0E1112),
+                      labelType: NavigationRailLabelType.all,
+                      leading: const Padding(
+                        padding: EdgeInsets.only(top: 18, bottom: 28),
+                        child: _CapsiMark(),
+                      ),
+                      destinations: [
+                        for (final item in pages)
+                          NavigationRailDestination(
+                            icon: Icon(item.icon),
+                            selectedIcon: Icon(item.icon),
+                            label: Text(item.label),
+                          ),
+                      ],
+                    ),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: _DesktopContent(page: page, body: body, native: native)),
+                  ],
                 ),
-            ],
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        );
+      },
+    );
+  }
+}
+
+class _DesktopContent extends StatelessWidget {
+  final ({IconData icon, String label}) page;
+  final Widget body;
+  final CapsiNative? native;
+
+  const _DesktopContent({required this.page, required this.body, required this.native});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(28, 22, 28, 18),
+            child: Row(
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
+                Expanded(
                   child: Row(
                     children: [
-                      Text(page.label, style: Theme.of(context).textTheme.headlineSmall),
-                      const Spacer(),
-                      _NetworkStatus(available: native != null),
+                      Icon(page.icon, size: 20, color: const Color(0xFFB8F36B)),
+                      const SizedBox(width: 10),
+                      Text(page.label, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w750)),
                     ],
                   ),
                 ),
-                Expanded(child: _PageBody(label: page.label, peers: peers, scanning: scanning, native: native, onScan: _scan, trustedDevices: trustedDevices, onTrustChanged: () { _loadTrust(); _loadWorkplace(); }, dataDirectory: dataDirectory, workplaceData: workplaceData)),
+                _NetworkStatus(available: native != null),
               ],
             ),
           ),
-        ],
-      ),
+        ),
+        const Divider(height: 1),
+        Expanded(child: body),
+      ],
     );
   }
+}
+
+class _EmptyPanel extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+  const _EmptyPanel({required this.icon, required this.title, required this.message});
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(34),
+      child: Column(children: [
+        Icon(icon, size: 34, color: const Color(0xFFB8F36B)),
+        const SizedBox(height: 14),
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w750)),
+        const SizedBox(height: 7),
+        Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF858D88), height: 1.5)),
+      ]),
+    ),
+  );
+}
+
+class _DeviceIcon extends StatelessWidget {
+  final IconData icon;
+  const _DeviceIcon({required this.icon});
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 42, height: 42,
+    decoration: BoxDecoration(color: const Color(0x18B8F36B), border: Border.all(color: const Color(0x30B8F36B)), borderRadius: BorderRadius.circular(11)),
+    child: Icon(icon, size: 21, color: const Color(0xFFB8F36B)),
+  );
 }
 
 class _CapsiMark extends StatelessWidget {
@@ -243,9 +327,21 @@ class _NetworkStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Chip(
-      avatar: Icon(Icons.circle, size: 9, color: available ? const Color(0xFF7AC943) : Colors.orange),
-      label: Text(available ? 'Local network' : 'Native core unavailable'),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111516),
+        border: Border.all(color: const Color(0x18FFFFFF)),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.circle, size: 7, color: available ? const Color(0xFFB8F36B) : Colors.orange),
+          const SizedBox(width: 7),
+          Text(available ? 'Local network' : 'Core unavailable', style: const TextStyle(fontSize: 12)),
+        ],
+      ),
     );
   }
 }
@@ -303,48 +399,81 @@ class _PageBodyState extends State<_PageBody> {
     if (widget.label == 'Messages') return _messages(context);
     if (widget.label == 'Files') return _files(context);
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 680),
-        child: Card(
-          color: const Color(0xFF111516),
-          child: Padding(
-            padding: const EdgeInsets.all(36),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.devices_outlined, size: 54, color: Theme.of(context).colorScheme.primary),
-                const SizedBox(height: 20),
-                Text(widget.peers.isEmpty ? 'No Nearby devices yet' : '${widget.peers.length} device${widget.peers.length == 1 ? '' : 's'} found', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 10),
-                const Text('Capsi finds devices directly on the local network. No cloud service or account is involved.', textAlign: TextAlign.center),
-                if (widget.peers.isNotEmpty) ...[
-                  const SizedBox(height: 18),
-                  for (final peer in widget.peers.take(8))
-                    ListTile(
-                      leading: const Icon(Icons.computer_outlined),
-                      title: Text(peer.name),
-                      subtitle: Text(peer.fingerprint.isEmpty ? peer.tcpAddress : peer.fingerprint),
-                      trailing: widget.dataDirectory == null ? null : FilledButton(
-                        onPressed: () {
-                          final accepted = widget.native?.acceptTrust(widget.dataDirectory!, peer.deviceId);
-                          if (accepted != null) widget.onTrustChanged();
-                        },
-                        child: const Text('Accept'),
-                      ),
-                    ),
-                ],
-                const SizedBox(height: 20),
-                OutlinedButton.icon(onPressed: widget.scanning ? null : widget.onScan, icon: Icon(widget.scanning ? Icons.sync : Icons.refresh), label: Text(widget.scanning ? 'Scanning…' : 'Scan again')),
-                const SizedBox(height: 12),
-                Text(widget.native == null ? 'Rust core not packaged for this build yet.' : 'Rust ${widget.native!.runtimeVersion} · ${widget.native!.protocolVersion}', style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: 12),
-                const Text('Run it. Find devices. Send.', style: TextStyle(fontWeight: FontWeight.w600)),
-              ],
+ListView(
+      padding: const EdgeInsets.fromLTRB(28, 26, 28, 40),
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Devices around you', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w750)),
+              const SizedBox(height: 6),
+              Text('Find devices directly. Accept a device to start sending messages and files.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: const Color(0xFF9AA19C))),
+            ])),
+            const SizedBox(width: 16),
+            OutlinedButton.icon(
+              onPressed: widget.scanning ? null : widget.onScan,
+              icon: Icon(widget.scanning ? Icons.sync : Icons.radar_outlined),
+              label: Text(widget.scanning ? 'Scanning…' : 'Scan'),
             ),
-          ),
+          ],
         ),
-      ),
+        const SizedBox(height: 22),
+        if (widget.peers.isEmpty)
+          const _EmptyPanel(
+            icon: Icons.radar_outlined,
+            title: 'No devices found',
+            message: 'Make sure the other device is running Capsi and both devices can communicate directly.',
+          )
+        else
+          LayoutBuilder(builder: (context, constraints) {
+            final columns = constraints.maxWidth > 1050 ? 2 : 1;
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                mainAxisExtent: 112,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: widget.peers.length,
+              itemBuilder: (_, index) {
+                final peer = widget.peers[index];
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(children: [
+                      _DeviceIcon(icon: Icons.computer_outlined),
+                      const SizedBox(width: 13),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Text(peer.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 5),
+                        Text(peer.fingerprint.isEmpty ? peer.tcpAddress : peer.fingerprint, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Color(0xFF747C77))),
+                      ])),
+                      if (widget.dataDirectory != null)
+                        FilledButton(
+                          onPressed: () {
+                            final accepted = widget.native?.acceptTrust(widget.dataDirectory!, peer.deviceId);
+                            if (accepted != null) widget.onTrustChanged();
+                          },
+                          child: const Text('Accept'),
+                        ),
+                    ]),
+                  ),
+                );
+              },
+            );
+          }),
+        const SizedBox(height: 28),
+        Row(children: [
+          const Icon(Icons.security_outlined, size: 18, color: Color(0xFFB8F36B)),
+          const SizedBox(width: 9),
+          Text('Trusted devices control who Capsi can exchange with.', style: Theme.of(context).textTheme.bodySmall),
+        ]),
+        const SizedBox(height: 8),
+        Text(widget.native == null ? 'Rust core not packaged for this build yet.' : 'Rust ${widget.native!.runtimeVersion} · protocol ${widget.native!.protocolVersion}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: const Color(0xFF606863))),
+      ],
     );
   }
 
