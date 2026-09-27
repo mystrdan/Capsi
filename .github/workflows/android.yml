@@ -10,17 +10,42 @@ on:
       - "Capsi/Cargo.toml"
       - "Capsi/Cargo.lock"
       - ".github/workflows/android.yml"
+  # When release.yml publishes a GitHub Release from a v* tag, rebuild the
+  # APK for that same commit and attach it to the release. Triggering on
+  # workflow_run (instead of the tag directly) serializes the two asset
+  # uploaders, so they never race on creating/updating the release.
+  workflow_run:
+    workflows: ["Capsi Windows release"]
+    types: [completed]
 
 jobs:
   build-android:
     runs-on: ubuntu-latest
+    # Skip if this run was triggered by a release workflow that failed.
+    if: >
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    # contents:write is required by softprops/action-gh-release to publish
+    # assets into the GitHub Release.
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: Capsi
 
     steps:
       - name: Checkout
+        if: github.event_name != 'workflow_run'
         uses: actions/checkout@v4
+
+      # On workflow_run, build the exact commit the release was cut from
+      # (the v* tag commit), not the default branch.
+      - name: Checkout release commit
+        if: github.event_name == 'workflow_run'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.workflow_run.head_repository.full_name }}
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -75,3 +100,14 @@ jobs:
         with:
           name: Capsi-Android-debug
           path: Capsi/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+
+      # When this run was triggered by a published v* GitHub Release, attach
+      # the APK to that release as well (workflow_run guarantees release.yml
+      # already created the release, so no race; the body is left untouched).
+      - name: Publish APK to GitHub Release
+        if: github.event_name == 'workflow_run' && startsWith(github.event.workflow_run.head_branch, 'v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.workflow_run.head_branch }}
+          files: Capsi/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+
