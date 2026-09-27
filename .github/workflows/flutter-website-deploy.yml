@@ -1,0 +1,53 @@
+name: Build Flutter website
+
+on:
+  push:
+    branches: [flutter-migration]
+    paths:
+      - "Website/flutter/**"
+      - ".github/workflows/flutter-website-deploy.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.4"
+          channel: stable
+          cache: true
+
+      - name: Build Flutter web
+        working-directory: Website/flutter
+        run: |
+          flutter pub get
+          flutter build web --release --base-href /
+
+      - name: Publish built site into Vercel project root
+        run: |
+          rm -rf Website/_flutter_build
+          mkdir -p Website/_flutter_build
+          cp -R Website/flutter/build/web/. Website/_flutter_build/
+          rm -rf Website/assets Website/*.html Website/*.js Website/*.json
+          cp -R Website/_flutter_build/. Website/
+          rm -rf Website/_flutter_build
+          rm -rf Website/flutter/build
+
+      - name: Commit generated website
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Website
+          if git diff --cached --quiet; then
+            echo "No generated website changes to commit."
+            exit 0
+          fi
+          git commit -m "build: publish Flutter website"
+          git push
