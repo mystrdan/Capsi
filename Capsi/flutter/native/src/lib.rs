@@ -1,5 +1,4 @@
 use std::ffi::{c_char, CStr, CString};
-use std::ptr;
 use std::time::Duration;
 
 use capsi_core::discovery::Discovery;
@@ -54,12 +53,12 @@ pub extern "C" fn capsi_discovery_probe(
             .enable_io()
             .enable_time()
             .build()
-            .map_err(|e| capsi_core::CapsiError::Other(format!("runtime: {e}")))?;
+            .map_err(|e| capsi_core::CapsiError::Unsupported(format!("runtime: {e}")))?;
 
         runtime.block_on(async move {
             let identity = std::sync::Arc::new(
                 DeviceIdentity::generate()
-                    .map_err(|e| capsi_core::CapsiError::Other(format!("identity: {e}")))?,
+                    .map_err(|e| capsi_core::CapsiError::Crypto(format!("identity: {e}")))?,
             );
             let discovery = Discovery::bind(identity, name, tcp_port).await?;
             let _ = discovery.announce().await?;
@@ -96,7 +95,9 @@ pub unsafe extern "C" fn capsi_free_string(value: *mut c_char) {
 }
 
 fn into_c_string(value: String) -> *mut c_char {
-    CString::new(value).unwrap_or_else(|_| CString::new("null").unwrap()).into_raw()
+    CString::new(value)
+        .unwrap_or_else(|_| CString::new("null").unwrap())
+        .into_raw()
 }
 
 fn error_json(message: &str) -> *mut c_char {
