@@ -482,6 +482,16 @@ class CapsiNative {
     }
   }
 
+  Map<String, dynamic>? _readJson(ffi.Pointer<ffi.Char> pointer) {
+    if (pointer == ffi.nullptr) return null;
+    try {
+      final value = jsonDecode(_readString(pointer));
+      return value is Map<String, dynamic> ? value : null;
+    } finally {
+      _freeString(pointer);
+    }
+  }
+
   String _readString(ffi.Pointer<ffi.Char> pointer) {
     if (pointer == ffi.nullptr) return '';
     return pointer.cast<Utf8>().toDartString();
