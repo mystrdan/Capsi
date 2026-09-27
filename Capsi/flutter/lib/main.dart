@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'capsi_native.dart';
+import 'package:file_picker/file_picker.dart';
 
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -253,9 +254,7 @@ class _PageBodyState extends State<_PageBody> {
     }
 
     if (widget.label == 'Messages') return _messages(context);
-    if (widget.label == 'Files') {
-      return const Center(child: Text('File transfer UI is next; the Rust protocol already defines encrypted offers, receipts and chunks.'));
-    }
+    if (widget.label == 'Files') return _files(context);
 
     return Center(
       child: ConstrainedBox(
@@ -300,6 +299,71 @@ class _PageBodyState extends State<_PageBody> {
         ),
       ),
     );
+  }
+
+  Widget _files(BuildContext context) {
+    final data = widget.dataDirectory;
+    final native = widget.native;
+    final conversations = data == null || native == null ? const <Map<String, dynamic>>[] : native.conversations(data);
+    final files = <({String deviceId, String name, Map<String, dynamic> file})>[];
+    for (final conversation in conversations) {
+      final deviceId = conversation['device_id']?.toString() ?? '';
+      final name = conversation['name']?.toString() ?? 'Device';
+      final messages = (conversation['messages'] as List?)?.whereType<Map<String, dynamic>>() ?? const <Map<String, dynamic>>[];
+      for (final message in messages) {
+        final file = message['file'];
+        if (message['kind'] == 'file' && file is Map<String, dynamic>) {
+          files.add((deviceId: deviceId, name: name, file: file));
+        }
+      }
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(28),
+      children: [
+        Row(
+          children: [
+            Text('Files', style: Theme.of(context).textTheme.titleLarge),
+            const Spacer(),
+            FilledButton.icon(
+              onPressed: widget.trustedDevices.isEmpty ? null : _pickAndSendFile,
+              icon: const Icon(Icons.attach_file),
+              label: const Text('Send file'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const Text('Files move directly between trusted devices. Nothing is uploaded to a cloud service.'),
+        const SizedBox(height: 20),
+        if (files.isEmpty)
+          const Card(child: Padding(padding: EdgeInsets.all(24), child: Text('No file transfers yet.')))
+        else
+          for (final item in files.reversed)
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.insert_drive_file_outlined),
+                title: Text(item.file['file_name']?.toString() ?? 'File'),
+                subtitle: Text(item.name + ' · ' + (item.file['size']?.toString() ?? '0') + ' bytes · ' + (item.file['state']?.toString() ?? 'unknown')),
+              ),
+            ),
+      ],
+    );
+  }
+
+  Future<void> _pickAndSendFile() async {
+    final data = widget.dataDirectory;
+    final native = widget.native;
+    if (data == null || native == null || widget.trustedDevices.isEmpty || !mounted) return;
+    final selectedId = selectedDevice ?? widget.trustedDevices.first.deviceId;
+    final result = await FilePicker.platform.pickFiles(withData: false);
+    if (!mounted || result == null || result.files.single.path == null) return;
+    final transferId = native.sendFile(data, selectedId, result.files.single.path!);
+    if (transferId == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File transfer failed.')));
+    } else if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File transfer started.')));
+    }
   }
 
   Widget _messages(BuildContext context) {
@@ -358,6 +422,7 @@ class _PageBodyState extends State<_PageBody> {
                 child: Row(
                   children: [
                     Expanded(child: TextField(onChanged: (value) => draft = value, onSubmitted: (_) => _send(), decoration: const InputDecoration(hintText: 'Message', border: OutlineInputBorder()))),
+                    IconButton(onPressed: widget.trustedDevices.isEmpty ? null : _pickAndSendFile, tooltip: 'Send file', icon: const Icon(Icons.attach_file)),
                     const SizedBox(width: 10),
                     FilledButton.icon(onPressed: _send, icon: const Icon(Icons.send), label: const Text('Send')),
                   ],
