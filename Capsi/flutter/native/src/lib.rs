@@ -741,7 +741,7 @@ pub extern "C" fn capsi_workplace_create(
 
     let result = (|| -> Result<_, String> {
         let identity = DeviceIdentity::load_or_create(&dir).map_err(|e| e.to_string())?;
-        let device_id = identity.device_id().as_str().to_string();
+        let device_id = identity.id().as_str().to_string();
         let workspace = capsi_core::workplace::Workspace::new(name, device_id);
         capsi_core::workplace::WorkspaceStore::new(&dir).save(&workspace)?;
         Ok(workspace)
