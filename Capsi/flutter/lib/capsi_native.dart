@@ -73,6 +73,10 @@ typedef _ConversationLoadNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi
 typedef _ConversationLoadDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 typedef _FileSendNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 typedef _FileSendDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+typedef _WorkplaceLoadNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>);
+typedef _WorkplaceLoadDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>);
+typedef _WorkplaceCreateNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+typedef _WorkplaceCreateDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 
 class KnownDevice {
   const KnownDevice({required this.deviceId, required this.name, this.alias, required this.state, required this.fingerprint, this.lastAddress});
@@ -147,6 +151,8 @@ class CapsiNative {
         _conversationList = library.lookupFunction<_ConversationListNative, _ConversationListDart>('capsi_conversations_list'),
         _conversationLoad = library.lookupFunction<_ConversationLoadNative, _ConversationLoadDart>('capsi_conversation_load'),
         _fileSend = library.lookupFunction<_FileSendNative, _FileSendDart>('capsi_file_send'),
+        _workplaceLoad = library.lookupFunction<_WorkplaceLoadNative, _WorkplaceLoadDart>('capsi_workplace_load'),
+        _workplaceCreate = library.lookupFunction<_WorkplaceCreateNative, _WorkplaceCreateDart>('capsi_workplace_create'),
         _freeString = library.lookupFunction<_FreeStringNative, _FreeStringDart>('capsi_free_string');
 
   // Library is retained by the function pointers; no direct field access is needed.
@@ -168,23 +174,61 @@ class CapsiNative {
   final _ConversationLoadDart _conversationLoad;
   final _FileSendDart _fileSend;
   final _FreeStringDart _freeString;
+  final _WorkplaceLoadDart _workplaceLoad;
+  final _WorkplaceCreateDart _workplaceCreate;
 
   static CapsiNative? tryLoad() {
     final candidates = <String>[
       if (Platform.isWindows) 'capsi_ffi.dll',
       if (Platform.isAndroid) 'libcapsi_ffi.so',
+      if (Platform.isIOS) 'process',
       if (Platform.isMacOS) 'libcapsi_ffi.dylib',
       if (Platform.isLinux) 'libcapsi_ffi.so',
     ];
 
     for (final candidate in candidates) {
       try {
-        return CapsiNative._(ffi.DynamicLibrary.open(candidate));
+        final library = candidate == 'process' ? ffi.DynamicLibrary.process() : ffi.DynamicLibrary.open(candidate);
+        return CapsiNative._(library);
       } catch (_) {
         // The native artifact is packaged separately by the platform build.
       }
     }
     return null;
+  }
+
+  Map<String, dynamic>? workplace(String dataDirectory) {
+    final dir = dataDirectory.toNativeUtf8();
+    try {
+      final pointer = _workplaceLoad(dir.cast<ffi.Char>());
+      if (pointer == ffi.nullptr) return null;
+      try {
+        final value = jsonDecode(_readString(pointer));
+        return value is Map<String, dynamic> ? value : null;
+      } finally {
+        _freeString(pointer);
+      }
+    } finally {
+      calloc.free(dir);
+    }
+  }
+
+  Map<String, dynamic>? createWorkplace(String dataDirectory, String name) {
+    final dir = dataDirectory.toNativeUtf8();
+    final workplaceName = name.toNativeUtf8();
+    try {
+      final pointer = _workplaceCreate(dir.cast<ffi.Char>(), workplaceName.cast<ffi.Char>());
+      if (pointer == ffi.nullptr) return null;
+      try {
+        final value = jsonDecode(_readString(pointer));
+        return value is Map<String, dynamic> ? value : null;
+      } finally {
+        _freeString(pointer);
+      }
+    } finally {
+      calloc.free(dir);
+      calloc.free(workplaceName);
+    }
   }
 
   String get runtimeVersion => _readString(_runtimeVersion());
