@@ -192,7 +192,7 @@ pub extern "C" fn capsi_trust_ignore(
     device_id: *const c_char,
 ) -> *mut c_char {
     let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
-    let id = match c_path(device_id).and_then(|p| p.to_str().and_then(|s| DeviceId::from_hex(s).ok())) {
+    let id = match c_string(device_id).and_then(|s| DeviceId::from_hex(&s).ok()) {
         Some(id) => id,
         None => return error_json("device id is invalid"),
     };
@@ -230,9 +230,6 @@ pub extern "C" fn capsi_discovery_stop(handle: u64) {
         }
     }
 }
-
-use capsi_core::discovery::Discovery;
-use capsi_core::identity::DeviceIdentity;
 
 /// Stable native boundary for the Flutter client.
 ///
