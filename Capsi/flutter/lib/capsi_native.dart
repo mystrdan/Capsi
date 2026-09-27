@@ -23,6 +23,16 @@ typedef _DiscoveryProbeDart = ffi.Pointer<ffi.Char> Function(
   int,
 );
 
+
+typedef _DiscoveryStartNative = ffi.Uint64 Function(ffi.Pointer<ffi.Char>, ffi.Uint16);
+typedef _DiscoveryStartDart = int Function(ffi.Pointer<ffi.Char>, int);
+
+typedef _DiscoveryPollNative = ffi.Pointer<ffi.Char> Function(ffi.Uint64);
+typedef _DiscoveryPollDart = ffi.Pointer<ffi.Char> Function(int);
+
+typedef _DiscoveryStopNative = ffi.Void Function(ffi.Uint64);
+typedef _DiscoveryStopDart = void Function(int);
+
 typedef _FreeStringNative = ffi.Void Function(ffi.Pointer<ffi.Char>);
 typedef _FreeStringDart = void Function(ffi.Pointer<ffi.Char>);
 
@@ -71,6 +81,9 @@ class CapsiNative {
         _coreLinked = _library.lookupFunction<_CoreLinkedNative, _CoreLinkedDart>('capsi_core_linked'),
         _protocolVersion = _library.lookupFunction<_ProtocolVersionNative, _ProtocolVersionDart>('capsi_protocol_version'),
         _discoveryProbe = _library.lookupFunction<_DiscoveryProbeNative, _DiscoveryProbeDart>('capsi_discovery_probe'),
+        _discoveryStart = _library.lookupFunction<_DiscoveryStartNative, _DiscoveryStartDart>('capsi_discovery_start'),
+        _discoveryPoll = _library.lookupFunction<_DiscoveryPollNative, _DiscoveryPollDart>('capsi_discovery_poll'),
+        _discoveryStop = _library.lookupFunction<_DiscoveryStopNative, _DiscoveryStopDart>('capsi_discovery_stop'),
         _freeString = _library.lookupFunction<_FreeStringNative, _FreeStringDart>('capsi_free_string');
 
   final ffi.DynamicLibrary _library;
@@ -78,6 +91,9 @@ class CapsiNative {
   final _CoreLinkedDart _coreLinked;
   final _ProtocolVersionDart _protocolVersion;
   final _DiscoveryProbeDart _discoveryProbe;
+  final _DiscoveryStartDart _discoveryStart;
+  final _DiscoveryPollDart _discoveryPoll;
+  final _DiscoveryStopDart _discoveryStop;
   final _FreeStringDart _freeString;
 
   static CapsiNative? tryLoad() {
@@ -129,6 +145,33 @@ class CapsiNative {
       calloc.free(nativeName);
     }
   }
+
+
+  int startDiscovery({required String deviceName, int tcpPort = 45893}) {
+    final nativeName = deviceName.toNativeUtf8();
+    try {
+      return _discoveryStart(nativeName.cast<ffi.Char>(), tcpPort);
+    } finally {
+      calloc.free(nativeName);
+    }
+  }
+
+  List<CapsiPeer> pollDiscovery(int handle) {
+    final pointer = _discoveryPoll(handle);
+    if (pointer == ffi.nullptr) return const [];
+    try {
+      final value = jsonDecode(_readString(pointer));
+      if (value is! List) return const [];
+      return value
+          .whereType<Map<String, dynamic>>()
+          .map(CapsiPeer.fromJson)
+          .toList(growable: false);
+    } finally {
+      _freeString(pointer);
+    }
+  }
+
+  void stopDiscovery(int handle) => _discoveryStop(handle);
 
   String _readString(ffi.Pointer<ffi.Char> pointer) {
     if (pointer == ffi.nullptr) return '';
