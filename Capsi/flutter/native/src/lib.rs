@@ -189,7 +189,7 @@ pub extern "C" fn capsi_trust_accept(
         // that trusted device into the local workplace. The invite is sent
         // directly over the already-established Capsi encrypted transport.
         let identity = DeviceIdentity::load_or_create(&dir)?;
-        let Some(mut workspace) = capsi_core::workplace::WorkspaceStore::new(&dir).load().map_err(|e| capsi_core::CapsiError::Storage(e))? else {
+        let Some(mut workspace) = capsi_core::workplace::WorkspaceStore::new(&dir).load().map_err(capsi_core::CapsiError::Io)? else {
             return Ok(serde_json::to_value(device)?);
         };
 
@@ -198,7 +198,7 @@ pub extern "C" fn capsi_trust_accept(
             workspace.touch();
             capsi_core::workplace::WorkspaceStore::new(&dir)
                 .save(&workspace)
-                .map_err(capsi_core::CapsiError::Storage)?;
+                .map_err(capsi_core::CapsiError::Io)?;
 
             let address = device.last_address.clone()
                 .ok_or_else(|| capsi_core::CapsiError::NotFound("trusted device has no known address".into()))?;
@@ -492,6 +492,49 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                             "transfer_id":transfer_id,
                             "state":format!("{:?}", state)
                         }));
+                    }
+                    Message::WorkplaceSync(sync) => {
+                        if sync.actor_device_id != peer_id.as_str() {
+                            message_event(&thread_latest, serde_json::json!({
+                                "error":"workplace sync actor does not match authenticated peer",
+                                "device_id":peer_id.as_str()
+                            }));
+                            continue;
+                        }
+
+                        let store = capsi_core::workplace::WorkspaceStore::new(&data_dir);
+                        let existing = match store.load() {
+                            Ok(value) => value,
+                            Err(error) => {
+                                message_event(&thread_latest, serde_json::json!({"error":error}));
+                                continue;
+                            }
+                        };
+                        let local_id = identity.id().as_str().to_string();
+                        let result = match existing {
+                            Some(mut workspace) => workspace.apply_network_state(sync.state, peer_id.as_str()).map(|_| workspace),
+                            None => capsi_core::workplace::Workspace::from_network_state(sync.state, peer_id.as_str(), &local_id),
+                        };
+                        match result {
+                            Ok(workspace) => {
+                                if let Err(error) = store.save(&workspace) {
+                                    message_event(&thread_latest, serde_json::json!({"error":error}));
+                                    continue;
+                                }
+                                message_event(&thread_latest, serde_json::json!({
+                                    "type":"workplace_sync",
+                                    "device_id":peer_id.as_str(),
+                                    "workspace_id":workspace.id,
+                                    "name":workspace.name
+                                }));
+                            }
+                            Err(error) => {
+                                message_event(&thread_latest, serde_json::json!({
+                                    "error":format!("workplace sync rejected: {error}"),
+                                    "device_id":peer_id.as_str()
+                                }));
+                            }
+                        }
                     }
                     Message::Text(text) => {
                         let mut stored = match StoredMessage::text(&text.body, false) {
