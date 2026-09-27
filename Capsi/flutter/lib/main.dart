@@ -267,7 +267,7 @@ class _CapsiHomeState extends State<CapsiHome> {
                       ],
                     ),
                     const VerticalDivider(width: 1),
-                    Expanded(child: _DesktopContent(page: page, body: body, native: native)),
+                    Expanded(child: _DesktopContent(page: page, body: body, native: native, initializing: initializing, initializationError: initializationError, onRetry: _retryInitialization)),
                   ],
                 ),
         );
