@@ -106,16 +106,8 @@ jobs:
 
       - name: Build Rust Android native bridge
         run: |
-          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 build --release --manifest-path native/Cargo.toml
+          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o android/app/src/main/jniLibs build --release --manifest-path native/Cargo.toml
 
-      - name: Package Rust native bridge
-        run: |
-          mkdir -p android/app/src/main/jniLibs
-          cp -R native/target/aarch64-linux-android/release/. android/app/src/main/jniLibs/arm64-v8a/ 2>/dev/null || true
-          mkdir -p android/app/src/main/jniLibs/arm64-v8a
-          mkdir -p android/app/src/main/jniLibs/armeabi-v7a
-          mkdir -p android/app/src/main/jniLibs/x86_64
-          find native/target -name "libcapsi_ffi.so" -exec sh -c 'case "$1" in *aarch64-linux-android*) cp "$1" android/app/src/main/jniLibs/arm64-v8a/libcapsi_ffi.so ;; *armv7-linux-androideabi*) cp "$1" android/app/src/main/jniLibs/armeabi-v7a/libcapsi_ffi.so ;; *x86_64-linux-android*) cp "$1" android/app/src/main/jniLibs/x86_64/libcapsi_ffi.so ;; esac' _ {} \;
 
       - name: Build Android APK
         run: flutter build apk --release
