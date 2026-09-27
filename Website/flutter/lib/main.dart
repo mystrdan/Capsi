@@ -48,7 +48,6 @@ class _LandingState extends State<Landing> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        pinned: true,
         backgroundColor: const Color(0xFF090B0C),
         surfaceTintColor: Colors.transparent,
         title: const _Brand(),
