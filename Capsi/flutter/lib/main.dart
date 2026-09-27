@@ -1,5 +1,4 @@
-import 'dart:ffi' as ffi;
-import 'dart:io' show Platform;
+import 'capsi_native.dart';
 
 import 'package:flutter/material.dart';
 
@@ -38,6 +37,28 @@ class CapsiHome extends StatefulWidget {
 
 class _CapsiHomeState extends State<CapsiHome> {
   int selected = 0;
+  CapsiNative? native;
+  List<CapsiPeer> peers = const [];
+  bool scanning = false;
+
+  @override
+  void initState() {
+    super.initState();
+    native = CapsiNative.tryLoad();
+    _scan();
+  }
+
+  Future<void> _scan() async {
+    final bridge = native;
+    if (bridge == null || scanning) return;
+    setState(() => scanning = true);
+    try {
+      final found = await Future<List<CapsiPeer>>.sync(() => bridge.discoveryProbe(deviceName: 'Capsi device'));
+      if (mounted) setState(() => peers = found);
+    } finally {
+      if (mounted) setState(() => scanning = false);
+    }
+  }
 
   static const pages = <({IconData icon, String label})>[
     (icon: Icons.near_me_outlined, label: 'Nearby'),
@@ -85,7 +106,7 @@ class _CapsiHomeState extends State<CapsiHome> {
                     ],
                   ),
                 ),
-                Expanded(child: _PageBody(label: page.label)),
+                Expanded(child: _PageBody(label: page.label, peers: peers, scanning: scanning, native: native, onScan: _scan)),
               ],
             ),
           ),
@@ -125,7 +146,11 @@ class _NetworkStatus extends StatelessWidget {
 
 class _PageBody extends StatelessWidget {
   final String label;
-  const _PageBody({required this.label});
+  final List<CapsiPeer> peers;
+  final bool scanning;
+  final CapsiNative? native;
+  final VoidCallback onScan;
+  const _PageBody({required this.label, required this.peers, required this.scanning, required this.native, required this.onScan});
 
   @override
   Widget build(BuildContext context) {
@@ -141,13 +166,22 @@ class _PageBody extends StatelessWidget {
               children: [
                 Icon(Icons.devices_outlined, size: 54, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(height: 20),
-                Text('No $label yet', style: Theme.of(context).textTheme.titleLarge),
+                Text(peers.isEmpty ? 'No $label yet' : '${peers.length} device${peers.length == 1 ? '' : 's'} found', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 10),
                 const Text(
                   'Capsi is ready for the Rust core. The Flutter interface is now the shared UI foundation for Windows, Android, macOS and iOS.',
                   textAlign: TextAlign.center,
                 ),
+                if (label == 'Nearby' && peers.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  for (final peer in peers.take(8))
+                    ListTile(leading: const Icon(Icons.computer_outlined), title: Text(peer.name), subtitle: Text(peer.fingerprint.isEmpty ? peer.tcpAddress : peer.fingerprint)),
+                ],
                 const SizedBox(height: 20),
+                if (label == 'Nearby') OutlinedButton.icon(onPressed: scanning ? null : onScan, icon: Icon(scanning ? Icons.sync : Icons.refresh), label: Text(scanning ? 'Scanning…' : 'Scan again')),
+                const SizedBox(height: 12),
+                Text(native == null ? 'Rust core not packaged for this build yet.' : 'Rust ${native!.runtimeVersion} · ${native!.protocolVersion}', style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 12),
                 const Text('Run it. Find devices. Send.', style: TextStyle(fontWeight: FontWeight.w600)),
               ],
             ),
@@ -156,13 +190,4 @@ class _PageBody extends StatelessWidget {
       ),
     );
   }
-}
-
-// Kept deliberately tiny for the first migration step. The real Capsi
-// operations will be exposed from the shared Rust core through this boundary.
-ffi.DynamicLibrary? loadCapsiLibrary() {
-  if (Platform.isWindows) return ffi.DynamicLibrary.open('capsi_ffi.dll');
-  if (Platform.isAndroid) return ffi.DynamicLibrary.open('libcapsi_ffi.so');
-  if (Platform.isMacOS) return ffi.DynamicLibrary.open('libcapsi_ffi.dylib');
-  return null;
 }
