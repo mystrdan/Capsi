@@ -1,7 +1,9 @@
 import 'capsi_native.dart';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'dart:isolate';
+
+import 'package:flutter/material.dart';
 
 void main() {
   runApp(const CapsiApp());
@@ -54,7 +56,7 @@ class _CapsiHomeState extends State<CapsiHome> {
     if (bridge == null || scanning) return;
     setState(() => scanning = true);
     try {
-      final found = await compute(_probePeers, bridge);
+      final found = await Isolate.run(() => _probePeers());
       if (mounted) setState(() => peers = found);
     } finally {
       if (mounted) setState(() => scanning = false);
@@ -117,8 +119,11 @@ class _CapsiHomeState extends State<CapsiHome> {
   }
 }
 
-List<CapsiPeer> _probePeers(CapsiNative bridge) =>
-    bridge.discoveryProbe(deviceName: 'Capsi device');
+List<CapsiPeer> _probePeers() {
+  final bridge = CapsiNative.tryLoad();
+  if (bridge == null) return const [];
+  return bridge.discoveryProbe(deviceName: 'Capsi device');
+}
 
 class _CapsiMark extends StatelessWidget {
   @override
