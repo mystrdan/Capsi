@@ -41,3 +41,10 @@ python -m http.server 8080
 Serve the contents of `Website/` as a static site. Asset paths are relative so the site can be hosted directly at `capsi.win`.
 
 Keep website changes inside this folder unless a change outside it is explicitly required.
+
+
+## Flutter web version
+
+A new Flutter web implementation is being developed under `Website/flutter/`. It is intentionally separate from the existing static site while the new design is audited and prepared for deployment. The static files remain available as the production fallback during this migration.
+
+The Flutter version keeps the same product language and philosophy: simple, product-first, local communication, no cloud account, and no unnecessary UI.
