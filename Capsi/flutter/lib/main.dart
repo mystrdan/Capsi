@@ -4,6 +4,7 @@ import 'capsi_native.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 void main() {
@@ -173,7 +174,6 @@ class _CapsiHomeState extends State<CapsiHome> {
     (icon: Icons.verified_user_outlined, label: 'Trusted devices'),
   ];
 
-  @override
   void _showSettings(BuildContext context) {
     showDialog<void>(
       context: context,
@@ -270,7 +270,7 @@ class _DesktopContent extends StatelessWidget {
                     children: [
                       Icon(page.icon, size: 20, color: const Color(0xFFB8F36B)),
                       const SizedBox(width: 10),
-                      Text(page.label, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w750)),
+                      Text(page.label, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                     ],
                   ),
                 ),
@@ -309,7 +309,7 @@ class _EmptyPanel extends StatelessWidget {
       child: Column(children: [
         Icon(icon, size: 34, color: const Color(0xFFB8F36B)),
         const SizedBox(height: 14),
-        Text(title, style: const TextStyle(fontWeight: FontWeight.w750)),
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(height: 7),
         Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF858D88), height: 1.5)),
       ]),
@@ -697,7 +697,7 @@ ListView(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Devices around you', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w750)),
+              Text('Devices around you', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
               Text('Find devices directly. Accept a device to start sending messages and files.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: const Color(0xFF9AA19C))),
             ])),
