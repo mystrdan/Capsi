@@ -1,14 +1,7 @@
 import 'dart:convert';
 import 'dart:ffi' as ffi;
 import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:ffi/ffi.dart';
-
-final class _NativeCapsi extends ffi.Struct {
-  @ffi.Int32()
-  external int unused;
-}
 
 typedef _RuntimeVersionNative = ffi.Pointer<ffi.Char> Function();
 typedef _RuntimeVersionDart = ffi.Pointer<ffi.Char> Function();
@@ -53,12 +46,13 @@ class CapsiPeer {
   String get tcpAddress => '$address:$port';
 
   factory CapsiPeer.fromJson(Map<String, dynamic> json) {
-    final deviceId = json['device_id'] as Map<String, dynamic>?;
+    final rawDeviceId = json['device_id'];
+    final deviceId = rawDeviceId is Map<String, dynamic> ? rawDeviceId['0']?.toString() : rawDeviceId?.toString();
     final fingerprint = json['fingerprint'] as String?;
     final address = json['address'] as String?;
     return CapsiPeer(
       name: json['name'] as String? ?? 'Unknown device',
-      deviceId: deviceId?['0'] as String? ?? json['device_id'].toString(),
+      deviceId: deviceId ?? 'unknown',
       address: address ?? 'unknown',
       port: json['port'] as int? ?? 0,
       fingerprint: fingerprint ?? '',
