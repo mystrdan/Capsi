@@ -1,0 +1,14 @@
+[workspace]
+
+[package]
+name = "capsi-ffi"
+version = "1.0.2"
+edition = "2021"
+license = "MIT"
+authors = ["CAPSICOM"]
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+capsi-core = { path = "../../crates/capsi-core" }
