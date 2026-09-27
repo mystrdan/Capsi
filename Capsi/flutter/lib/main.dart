@@ -365,6 +365,28 @@ class _PageBodyState extends State<_PageBody> {
         _WorkplaceStat('Broadcasts', broadcasts.length),
         _WorkplaceStat('Messages', messages.length),
       ]),
+      const SizedBox(height: 22),
+      Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          OutlinedButton.icon(
+            onPressed: widget.native == null || widget.dataDirectory == null ? null : () => _createWorkplaceName(context, 'Create group', (name) => widget.native!.createWorkplaceGroup(widget.dataDirectory!, name)),
+            icon: const Icon(Icons.group_add_outlined),
+            label: const Text('Group'),
+          ),
+          OutlinedButton.icon(
+            onPressed: widget.native == null || widget.dataDirectory == null ? null : () => _createWorkplaceName(context, 'Create department', (name) => widget.native!.createWorkplaceDepartment(widget.dataDirectory!, name)),
+            icon: const Icon(Icons.apartment_outlined),
+            label: const Text('Department'),
+          ),
+          OutlinedButton.icon(
+            onPressed: widget.native == null || widget.dataDirectory == null ? null : () => _createBroadcast(context),
+            icon: const Icon(Icons.campaign_outlined),
+            label: const Text('Broadcast'),
+          ),
+        ],
+      ),
       const SizedBox(height: 28),
       Text('People', style: Theme.of(context).textTheme.titleLarge),
       const SizedBox(height: 10),
@@ -397,6 +419,69 @@ class _PageBodyState extends State<_PageBody> {
         for (final broadcast in broadcasts.reversed.take(10))
           Card(child: ListTile(leading: const Icon(Icons.campaign_outlined), title: Text(broadcast['title']?.toString() ?? 'Broadcast'), subtitle: Text(broadcast['body']?.toString() ?? ''))),
     ]);
+  }
+
+  Future<void> _createWorkplaceName(
+    BuildContext context,
+    String title,
+    Map<String, dynamic>? Function(String name) action,
+  ) async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(labelText: 'Name'),
+          onSubmitted: (value) => Navigator.pop(context, value.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Create')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || name == null || name.isEmpty) return;
+    final result = action(name);
+    if (result != null) widget.onTrustChanged();
+  }
+
+  Future<void> _createBroadcast(BuildContext context) async {
+    final titleController = TextEditingController();
+    final bodyController = TextEditingController();
+    final values = await showDialog<({String title, String body})>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create broadcast'),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: titleController, autofocus: true, decoration: const InputDecoration(labelText: 'Title')),
+              const SizedBox(height: 12),
+              TextField(controller: bodyController, maxLines: 4, decoration: const InputDecoration(labelText: 'Message')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, (title: titleController.text.trim(), body: bodyController.text.trim())),
+            child: const Text('Broadcast'),
+          ),
+        ],
+      ),
+    );
+    titleController.dispose();
+    bodyController.dispose();
+    if (!mounted || values == null || values.title.isEmpty || values.body.isEmpty || widget.native == null || widget.dataDirectory == null) return;
+    final result = widget.native!.createWorkplaceBroadcast(widget.dataDirectory!, values.title, values.body);
+    if (result != null) widget.onTrustChanged();
   }
 
   Future<void> _createWorkplace(BuildContext context) async {
