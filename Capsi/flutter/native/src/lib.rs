@@ -460,13 +460,6 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                             "received":new_len,
                             "size":file.size
                         }));
-                        message_event(&thread_events, serde_json::json!({
-                            "type":"file_progress",
-                            "device_id":peer_id.as_str(),
-                            "transfer_id":transfer_id,
-                            "received":new_len,
-                            "size":file.size
-                        }));
 
                         if new_len >= file.size {
                             if new_len != file.size || capsi_core::util::digest_file(&temp_path).ok().as_deref() != Some(file.digest.as_str()) {
