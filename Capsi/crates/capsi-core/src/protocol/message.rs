@@ -326,7 +326,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn a_workplace_sync_round_trips() {
         let workspace = crate::workplace::Workspace::new("Office", "owner");
         let message = WorkplaceSyncMessage {
@@ -365,6 +364,7 @@ mod tests {
         assert!(!Message::DeliveryReceipt(DeliveryReceipt { message_id: "m".into() }).is_conversation_item());
     }
 
+    #[test]
     fn an_unknown_protocol_version_is_refused() {
         let mut envelope = Envelope::new(Message::Goodbye);
         envelope.version = "capsi/99".into();
