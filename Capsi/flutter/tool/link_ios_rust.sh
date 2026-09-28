@@ -2,7 +2,7 @@
 set -euo pipefail
 
 project="ios/Runner.xcodeproj/project.pbxproj"
-library="$(SRCROOT)/../native/target/aarch64-apple-ios/release/libcapsi_ffi.a"
+library='$(SRCROOT)/../native/target/aarch64-apple-ios/release/libcapsi_ffi.a'
 
 if [ ! -f "$project" ]; then
   echo "iOS Runner project not found: $project"
