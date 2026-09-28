@@ -360,35 +360,6 @@ class _CapsiHomeState extends State<CapsiHome> {
     (icon: Icons.verified_user_outlined, label: 'Trusted devices'),
   ];
 
-  Future<void> _showIncomingFileOffer(Map<String, dynamic> event) async {
-    final transferId = event['transfer_id']?.toString();
-    final deviceId = event['device_id']?.toString();
-    if (transferId == null || deviceId == null || transferId.isEmpty || deviceId.isEmpty) return;
-    if (_incomingOfferDialogs.contains(transferId) || !mounted) return;
-    _incomingOfferDialogs.add(transferId);
-    try {
-      final fileName = event['file_name']?.toString() ?? 'Incoming file';
-      final size = event['size'] is num ? (event['size'] as num).toInt() : 0;
-      final accepted = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Incoming file'),
-          content: Text(fileName + '\n' + _formatBytes(size) + '\n\nAccept this file transfer?'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Decline')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Accept')),
-          ],
-        ),
-      );
-      final dir = dataDirectory;
-      if (dir == null) return;
-      final operation = accepted == true ? 'file_accept' : 'file_decline';
-      await _nativeJsonInIsolate(dir, operation, [deviceId, transferId]);
-    } finally {
-      _incomingOfferDialogs.remove(transferId);
-    }
-  }
-
   String _formatBytes(int bytes) {
     if (bytes < 1024) return bytes.toString() + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toStringAsFixed(1) + ' KB';
@@ -1012,7 +983,7 @@ class _PageBodyState extends State<_PageBody> {
     if (widget.label == 'Messages') return _messages(context);
     if (widget.label == 'Files') return _files(context);
 
-ListView(
+    return ListView(
       padding: const EdgeInsets.fromLTRB(28, 26, 28, 40),
       children: [
         Row(
@@ -1376,7 +1347,7 @@ ListView(
     return id == null || id.isEmpty ? null : id;
   }
 
-  void _sendWorkplaceMessage() {
+  Future<void> _sendWorkplaceMessage() async {
     final data = widget.dataDirectory;
     final native = widget.native;
     final text = workplaceController.text.trim();
@@ -1655,7 +1626,7 @@ ListView(
     final transferId = file['transfer_id']?.toString() ?? '';
     final size = file['size'];
     final total = size is num ? size.toInt() : int.tryParse(size?.toString() ?? '');
-    int? received = _transferReceived[transferId];
+    int? received;
     final localPath = file['local_path']?.toString();
     // For incoming transfers the .part file is real progress. For outgoing
     // transfers, the selected source file is already complete, so never use
@@ -1752,153 +1723,6 @@ ListView(
         ),
       ),
     );
-  }
-
-  Future<void> _showIncomingFileOffer(Map<String, dynamic> event) async {
-    final transferId = event['transfer_id']?.toString();
-    final deviceId = event['device_id']?.toString();
-    if (transferId == null ||
-        deviceId == null ||
-        transferId.isEmpty ||
-        deviceId.isEmpty ||
-        _incomingOfferDialogs.contains(transferId) ||
-        !mounted) {
-      return;
-    }
-
-    _incomingOfferDialogs.add(transferId);
-    final fileName = event['file_name']?.toString() ?? 'File';
-    final size = event['size'];
-    final accepted = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Incoming file'),
-        content: Text(
-          '${fileName}\n${_formatBytes(size)}\n\nThis file is being offered by a trusted device.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Decline'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Accept'),
-          ),
-        ],
-      ),
-    );
-    _incomingOfferDialogs.remove(transferId);
-    if (!mounted || accepted == null) return;
-    await _decideIncomingFile(deviceId, transferId, accept: accepted);
-  }
-
-  Future<void> _cancelFileTransfer(String deviceId, String transferId) async {
-    final data = dataDirectory;
-    if (data == null) return;
-    final result = await _nativeJsonInIsolate(
-      data,
-      'file_cancel',
-      [deviceId, transferId],
-    );
-    if (!mounted) return;
-    if (result?['ok'] == true) {
-      setState(() {});
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('The file could not be cancelled.')),
-      );
-    }
-  }
-
-  Future<void> _decideIncomingFile(
-    String deviceId,
-    String transferId, {
-    required bool accept,
-  }) async {
-    final data = dataDirectory;
-    if (data == null) return;
-    final result = await _nativeJsonInIsolate(
-      data,
-      accept ? 'file_accept' : 'file_decline',
-      [deviceId, transferId],
-    );
-    if (!mounted) return;
-    if (result?['ok'] == true) {
-      setState(() {});
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            accept
-                ? 'The file could not be accepted.'
-                : 'The file could not be declined.',
-          ),
-        ),
-      );
-    }
-  }
-
-  Widget _fileTransferSubtitle(({String deviceId, String name, bool outgoing, Map<String, dynamic> file}) item) {
-    final state = item.file['state']?.toString() ?? 'unknown';
-    final size = item.file['size'];
-    final received = _transferReceived[item.file['transfer_id']?.toString() ?? ''];
-    final progress = received != null && size is num && size > 0
-        ? ' · ${(received / size * 100).clamp(0, 100).toStringAsFixed(0)}%'
-        : '';
-    return Text(
-      '${item.name} · ${_formatBytes(size)} · $state$progress',
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-    );
-  }
-
-  Widget _fileTransferActions(({String deviceId, String name, bool outgoing, Map<String, dynamic> file}) item) {
-    final state = item.file['state']?.toString().toLowerCase();
-    final transferId = item.file['transfer_id']?.toString();
-    if (transferId == null) {
-      return Icon(_fileStateIcon(state), color: _fileStateColor(state));
-    }
-    if (!item.outgoing && state == 'offered') {
-      return Wrap(
-        spacing: 2,
-        children: [
-          IconButton(
-            tooltip: 'Decline',
-            onPressed: () => _respondToFile(item.deviceId, transferId, false),
-            icon: const Icon(Icons.close_outlined),
-          ),
-          IconButton(
-            tooltip: 'Accept',
-            onPressed: () => _respondToFile(item.deviceId, transferId, true),
-            icon: const Icon(Icons.check_outlined),
-          ),
-        ],
-      );
-    }
-    if (state == 'transferring') {
-      return IconButton(
-        tooltip: 'Cancel',
-        onPressed: () => _cancelFile(item.deviceId, transferId),
-        icon: const Icon(Icons.close_outlined),
-      );
-    }
-    return Icon(_fileStateIcon(state), color: _fileStateColor(state));
-  }
-
-  Future<void> _respondToFile(String deviceId, String transferId, bool accept) async {
-    final data = dataDirectory;
-    if (data == null) return;
-    await _nativeJsonInIsolate(data, accept ? 'file_accept' : 'file_decline', [deviceId, transferId]);
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _cancelFile(String deviceId, String transferId) async {
-    final data = dataDirectory;
-    if (data == null) return;
-    await _nativeJsonInIsolate(data, 'file_cancel', [deviceId, transferId]);
-    if (mounted) setState(() {});
   }
 
   IconData _fileIcon(String name) {
@@ -2002,6 +1826,23 @@ ListView(
         const SnackBar(content: Text('File transfer started.')),
       );
     }
+  }
+
+  Future<void> _confirmRemoveTrustedDevice(BuildContext context, KnownDevice device) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove trusted device?'),
+        content: Text('Remove ' + device.displayName + ' from trusted devices?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Keep')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (confirmed != true || widget.dataDirectory == null || widget.native == null) return;
+    final result = widget.native!.ignoreTrust(widget.dataDirectory!, device.deviceId);
+    if (result != null && mounted) widget.onTrustChanged();
   }
 
   Widget _messages(BuildContext context) {
