@@ -111,6 +111,33 @@ flutter build apk --release
 The Android build uses the same Flutter UI and Rust FFI architecture. Real-device
 validation is still required before treating Android support as production-ready.
 
+## macOS and iOS development
+
+Generate the Apple platform runners when needed:
+
+```powershell
+cd Capsi/flutter
+flutter create --platforms=macos,ios .
+flutter pub get
+```
+
+Build macOS locally:
+
+```powershell
+flutter build macos --release
+```
+
+Build iOS without code signing:
+
+```powershell
+flutter build ios --release --no-codesign
+```
+
+GitHub Actions verifies both Apple Flutter runners in clean macOS environments.
+The Apple builds currently validate the shared Flutter application shell; native
+Rust packaging and real-device communication still require platform-specific
+integration and validation before release.
+
 ## Cross-platform interface principles
 
 Capsi uses one product identity across platforms, but the layout should respect the device.
