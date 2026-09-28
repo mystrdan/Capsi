@@ -1035,10 +1035,10 @@ class _PageBodyState extends State<_PageBody> {
             );
           }),
         const SizedBox(height: 28),
-        Row(children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Icon(Icons.security_outlined, size: 18, color: Color(0xFF7ED957)),
           const SizedBox(width: 9),
-          Text('Trusted devices let you choose who can communicate with you.', style: Theme.of(context).textTheme.bodySmall),
+          Expanded(child: Text('Trusted devices let you choose who can communicate with you.', style: Theme.of(context).textTheme.bodySmall)),
         ]),
         const SizedBox(height: 8),
         Text(widget.native == null ? 'Capsi is not ready on this device yet.' : 'Capsi is ready to connect and communicate.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: const Color(0xFF606863))),
