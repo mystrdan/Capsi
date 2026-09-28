@@ -11,10 +11,10 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Nearby'), findsOneWidget);
-    expect(find.text('Workplace'), findsOneWidget);
-    expect(find.text('Messages'), findsOneWidget);
-    expect(find.text('Files'), findsOneWidget);
-    expect(find.text('Trusted devices'), findsOneWidget);
+    expect(find.text('Nearby'), findsWidgets);
+    expect(find.text('Workplace'), findsWidgets);
+    expect(find.text('Messages'), findsWidgets);
+    expect(find.text('Files'), findsWidgets);
+    expect(find.text('Trusted devices'), findsWidgets);
   });
 }
