@@ -188,19 +188,21 @@ jobs:
           cargo build --release --target x86_64-apple-ios
       - name: Link Rust FFI into iOS Runner
         run: ./tool/link_ios_rust.sh
-      - name: Upload Rust iOS libraries
-        uses: actions/upload-artifact@v4
-        with:
-          name: capsi-rust-ios
-          path: |
-            Capsi/flutter/native/target/aarch64-apple-ios/release/libcapsi_ffi.a
-            Capsi/flutter/native/target/aarch64-apple-ios-sim/release/libcapsi_ffi.a
-            Capsi/flutter/native/target/x86_64-apple-ios/release/libcapsi_ffi.a
-          if-no-files-found: error
+      - name: Prepare iOS Rust FFI integration
+        run: ./tool/prepare_ios.sh
       - name: Install dependencies
         run: flutter pub get
       - name: Build iOS application
         run: flutter build ios --release --no-codesign
+      - name: Verify iOS Rust symbols are linked
+        shell: bash
+        run: |
+          app="build/ios/iphoneos/Runner.app/Runner"
+          test -f "$app"
+          nm -u "$app" | grep -E "capsi_(runtime|discovery|message|file|workplace|trust)" >/dev/null && {
+            echo "Expected Capsi Rust symbols remain unresolved."
+            exit 1
+          } || true
 
   windows:
     name: Windows release build
