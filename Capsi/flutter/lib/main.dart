@@ -231,7 +231,11 @@ class _CapsiHomeState extends State<CapsiHome> {
       if (!mounted) return;
       final event = bridge.pollMessage(messageHandle);
       if (event != null && event['type'] != null) {
-        setState(() => lastMessageEvent = event);
+        _loadTrust();
+        _loadWorkplace();
+        if (mounted) {
+          setState(() => lastMessageEvent = event);
+        }
       }
     });
   }
