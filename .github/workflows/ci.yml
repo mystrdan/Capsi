@@ -44,6 +44,40 @@ jobs:
       - name: Widget tests
         run: flutter test
 
+
+  android:
+    name: Android release build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Capsi/flutter
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Generate Android runner
+        run: flutter create --platforms=android .
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - name: Build Rust Android libraries
+        run: |
+          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o android/app/src/main/jniLibs build --release
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Build Android APK
+        run: flutter build apk --release
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: capsi-android-apk
+          path: Capsi/flutter/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
   windows:
     name: Windows release build
     runs-on: windows-latest
