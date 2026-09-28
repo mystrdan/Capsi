@@ -1057,14 +1057,14 @@ class _PageBodyState extends State<_PageBody> {
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const Icon(Icons.workspaces_outlined, size: 54),
             const SizedBox(height: 20),
-            Text('Create your WorkPlace', style: Theme.of(context).textTheme.headlineSmall),
+            Text('Create your Workplace', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 10),
             const Text('A shared space for your people and groups. Create groups, organize people, share messages and send announcements locally.', textAlign: TextAlign.center),
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: widget.dataDirectory == null || widget.native == null ? null : () => _createWorkplace(context),
               icon: const Icon(Icons.add),
-              label: const Text('Create WorkPlace'),
+              label: const Text('Create Workplace'),
             ),
           ]),
         )),
@@ -1446,7 +1446,7 @@ class _PageBodyState extends State<_PageBody> {
       widget.onTrustChanged();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result?['error']?.toString() ?? 'WorkPlace change could not be completed.')),
+        SnackBar(content: Text(result?['error']?.toString() ?? 'Workplace change could not be completed.')),
       );
     }
   }
@@ -1497,11 +1497,11 @@ class _PageBodyState extends State<_PageBody> {
   }
 
   Future<void> _createWorkplace(BuildContext context) async {
-    final controller = TextEditingController(text: 'My WorkPlace');
+    final controller = TextEditingController(text: 'My Workplace');
     final name = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Create WorkPlace'),
+        title: const Text('Create Workplace'),
         content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'Name')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
@@ -1522,7 +1522,7 @@ class _PageBodyState extends State<_PageBody> {
       setState(() {});
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(created?['error']?.toString() ?? 'WorkPlace could not be created.')),
+        SnackBar(content: Text(created?['error']?.toString() ?? 'Workplace could not be created.')),
       );
     }
   }
