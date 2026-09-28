@@ -164,7 +164,7 @@ class _CapsiHomeState extends State<CapsiHome> {
       if (native == null) {
         setState(() {
           runtimeLoading = false;
-          runtimeError = 'The Capsi native core could not be loaded on this platform.';
+          runtimeError = 'Capsi could not start on this device. Try again.';
         });
         return;
       }
@@ -186,7 +186,7 @@ class _CapsiHomeState extends State<CapsiHome> {
       if (!mounted) return;
       setState(() {
         runtimeLoading = false;
-        runtimeError = 'Capsi could not finish starting: $error';
+        runtimeError = 'Capsi could not finish starting. Try again.';
       });
     }
   }
@@ -354,7 +354,7 @@ class _CapsiHomeState extends State<CapsiHome> {
 
   static const pages = <({IconData icon, String label})>[
     (icon: Icons.radar_outlined, label: 'Nearby'),
-    (icon: Icons.workspaces_outlined, label: 'WorkPlace'),
+    (icon: Icons.workspaces_outlined, label: 'Workplace'),
     (icon: Icons.chat_bubble_outline, label: 'Messages'),
     (icon: Icons.folder_outlined, label: 'Files'),
     (icon: Icons.verified_user_outlined, label: 'Trusted devices'),
@@ -491,7 +491,7 @@ class _RuntimeGate extends StatelessWidget {
                   ),
                   const SizedBox(height: 7),
                   const Text(
-                    'Loading the local Capsi runtime…',
+                    'Getting things ready…',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Color(0xFF858D88)),
                   ),
@@ -504,7 +504,7 @@ class _RuntimeGate extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    error ?? 'The local runtime is unavailable.',
+                    error ?? 'Capsi is not ready yet.',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Color(0xFF858D88),
@@ -610,6 +610,8 @@ class _DeviceIcon extends StatelessWidget {
 }
 
 class _CapsiMark extends StatelessWidget {
+  const _CapsiMark();
+
   @override
   Widget build(BuildContext context) {
     return Tooltip(
@@ -665,13 +667,13 @@ class _SettingsDialog extends StatelessWidget {
                   _SettingsRow(
                     icon: Icons.wifi_outlined,
                     title: 'Direct communication',
-                    subtitle: 'Capsi communicates device to device. No Capsi cloud is required.',
+                    subtitle: 'Capsi connects devices directly. No Capsi account or cloud service is required.',
                     trailing: _NetworkStatus(available: native != null),
                   ),
                   _SettingsRow(
                     icon: Icons.radar_outlined,
                     title: 'Discovery',
-                    subtitle: 'Discovery is used to find nearby Capsi devices.',
+                    subtitle: 'Find Capsi devices that are available on your local connection.',
                     trailing: Icon(
                       native == null ? Icons.error_outline : Icons.check_circle_outline,
                       color: native == null ? Colors.orange : const Color(0xFFB8F36B),
@@ -680,7 +682,7 @@ class _SettingsDialog extends StatelessWidget {
                   _SettingsRow(
                     icon: Icons.message_outlined,
                     title: 'Messages',
-                    subtitle: 'Messages use Capsi direct device-to-device transport.',
+                    subtitle: 'Messages are sent directly between your devices.',
                     trailing: Icon(
                       native == null ? Icons.error_outline : Icons.check_circle_outline,
                       color: native == null ? Colors.orange : const Color(0xFFB8F36B),
@@ -701,7 +703,7 @@ class _SettingsDialog extends StatelessWidget {
                   const _SettingsRow(
                     icon: Icons.lock_outline,
                     title: 'Trust model',
-                    subtitle: 'Only devices you accept can exchange messages and files.',
+                    subtitle: 'Choose which devices can communicate with you.',
                   ),
                 ],
               ),
@@ -712,7 +714,7 @@ class _SettingsDialog extends StatelessWidget {
                   _SettingsRow(
                     icon: Icons.folder_outlined,
                     title: 'Capsi data',
-                    subtitle: dataDirectory ?? 'Application data directory unavailable',
+                    subtitle: dataDirectory ?? 'Data folder is unavailable.',
                     trailing: dataDirectory == null
                         ? const Icon(Icons.error_outline)
                         : IconButton(
@@ -721,7 +723,7 @@ class _SettingsDialog extends StatelessWidget {
                               await Clipboard.setData(ClipboardData(text: dataDirectory!));
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Data path copied.')),
+                                  const SnackBar(content: Text('Data folder path copied.')),
                                 );
                               }
                             },
@@ -752,17 +754,11 @@ class _SettingsDialog extends StatelessWidget {
                     subtitle: 'Messages and files, device to device.',
                     trailing: Text('v$version'),
                   ),
-                  _SettingsRow(
-                    icon: Icons.memory_outlined,
-                    title: 'Runtime',
-                    subtitle: native == null ? 'Rust core is not loaded.' : 'Rust core linked',
-                    trailing: Text(protocol),
-                  ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.open_in_new_outlined),
                     title: const Text('About Capsi'),
-                    subtitle: const Text('Product, version and architecture information'),
+                    subtitle: const Text('Version and app information'),
                     onTap: () => showDialog<void>(
                       context: context,
                       builder: (_) => _AboutDialog(native: native),
@@ -949,7 +945,7 @@ class _PageBodyState extends State<_PageBody> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.label == 'WorkPlace') return _workplace(context);
+    if (widget.label == 'Workplace') return _workplace(context);
 
     if (widget.label == 'Trusted devices') {
       return ListView(
@@ -960,7 +956,7 @@ class _PageBodyState extends State<_PageBody> {
           const Text('Only devices you accept are allowed to exchange messages and files.'),
           const SizedBox(height: 20),
           if (widget.trustedDevices.isEmpty)
-            const Card(child: Padding(padding: EdgeInsets.all(24), child: Text('No trusted devices yet. Accept a device from Nearby to add it here.')))
+            const Card(child: Padding(padding: EdgeInsets.all(24), child: Text('Accept a device from Nearby to allow messages and file sharing.')))
           else
             for (final device in widget.trustedDevices)
               Card(
@@ -990,9 +986,9 @@ class _PageBodyState extends State<_PageBody> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Devices around you', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+              Text('Nearby devices', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
-              Text('Find devices directly. Accept a device to start sending messages and files.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: const Color(0xFF9AA19C))),
+              Text('Find nearby Capsi devices and choose who you want to communicate with.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: const Color(0xFF9AA19C))),
             ])),
             const SizedBox(width: 16),
             OutlinedButton.icon(
@@ -1053,10 +1049,10 @@ class _PageBodyState extends State<_PageBody> {
         Row(children: [
           const Icon(Icons.security_outlined, size: 18, color: Color(0xFFB8F36B)),
           const SizedBox(width: 9),
-          Text('Trusted devices control who Capsi can exchange with.', style: Theme.of(context).textTheme.bodySmall),
+          Text('Trusted devices let you choose who can communicate with you.', style: Theme.of(context).textTheme.bodySmall),
         ]),
         const SizedBox(height: 8),
-        Text(widget.native == null ? 'Rust core not packaged for this build yet.' : 'Rust ${widget.native!.runtimeVersion} · protocol ${widget.native!.protocolVersion}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: const Color(0xFF606863))),
+        Text(widget.native == null ? 'Rust core not packaged for this build yet.' : 'Capsi is ready to connect and communicate.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: const Color(0xFF606863))),
       ],
     );
   }
@@ -1073,7 +1069,7 @@ class _PageBodyState extends State<_PageBody> {
             const SizedBox(height: 20),
             Text('Create your WorkPlace', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 10),
-            const Text('A local workspace for your people, groups, departments and broadcasts. It lives with your Capsi installation.', textAlign: TextAlign.center),
+            const Text('A shared space for your people and groups. Create groups, organize people, share messages and send announcements locally.', textAlign: TextAlign.center),
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: widget.dataDirectory == null || widget.native == null ? null : () => _createWorkplace(context),
@@ -1127,7 +1123,7 @@ class _PageBodyState extends State<_PageBody> {
                 child: groups.isEmpty
                     ? const Center(child: Padding(
                         padding: EdgeInsets.all(20),
-                        child: Text('Create a group to start messaging.', textAlign: TextAlign.center),
+                        child: Text('Create a group to start communicating.', textAlign: TextAlign.center),
                       ))
                     : ListView(
                         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1164,7 +1160,7 @@ class _PageBodyState extends State<_PageBody> {
         Widget conversation() => Card(
           margin: EdgeInsets.only(left: compact ? 16 : 0, right: compact ? 16 : 28, bottom: 20),
           child: group == null
-              ? const Center(child: Text('Select a group to view messages.'))
+              ? const Center(child: Text('Select a group to view the conversation.'))
               : Column(
                   children: [
                     ListTile(
@@ -1180,7 +1176,7 @@ class _PageBodyState extends State<_PageBody> {
                     const Divider(height: 1),
                     Expanded(
                       child: groupMessages.isEmpty
-                          ? const Center(child: Text('No messages in this group yet.'))
+                          ? const Center(child: Text('No messages here yet.'))
                           : ListView.builder(
                               padding: const EdgeInsets.all(20),
                               itemCount: groupMessages.length,
@@ -1227,7 +1223,7 @@ class _PageBodyState extends State<_PageBody> {
                             maxLines: 4,
                             onChanged: (value) => workplaceDraft = value,
                             onSubmitted: (_) => _sendWorkplaceMessage(),
-                            decoration: const InputDecoration(hintText: 'Message this group', border: OutlineInputBorder()),
+                            decoration: const InputDecoration(hintText: 'Write a message to this group', border: OutlineInputBorder()),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -1251,7 +1247,7 @@ class _PageBodyState extends State<_PageBody> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(workspace['name']?.toString() ?? 'WorkPlace', style: Theme.of(context).textTheme.titleLarge),
+                        Text(workspace['name']?.toString() ?? 'Workplace', style: Theme.of(context).textTheme.titleLarge),
                         const SizedBox(height: 4),
                         Text('${members.length} people · ${groups.length} groups · ${departments.length} departments'),
                       ],
@@ -1279,7 +1275,7 @@ class _PageBodyState extends State<_PageBody> {
                   IconButton(onPressed: widget.onTrustChanged, tooltip: 'Refresh', icon: const Icon(Icons.refresh)),
                   if (compact)
                     PopupMenuButton<String>(
-                      tooltip: 'WorkPlace actions',
+                      tooltip: 'Workplace actions',
                       enabled: widget.native != null && widget.dataDirectory != null,
                       onSelected: (value) {
                         if (value == 'group') {
@@ -1367,7 +1363,7 @@ class _PageBodyState extends State<_PageBody> {
       widget.onTrustChanged();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result?['error']?.toString() ?? 'WorkPlace message could not be sent.')),
+        SnackBar(content: Text(result?['error']?.toString() ?? 'Message could not be sent.')),
       );
     }
   }
@@ -1380,7 +1376,7 @@ class _PageBodyState extends State<_PageBody> {
     final current = (group['member_ids'] as List?)?.map((e) => e.toString()).toSet() ?? <String>{};
     final available = members.where((member) => !current.contains(member['device_id']?.toString())).toList();
     if (available.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All WorkPlace members are already in this group.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All Workplace members are already in this group.')));
       return;
     }
     Map<String, dynamic>? chosen;
@@ -1583,7 +1579,7 @@ class _PageBodyState extends State<_PageBody> {
                       Text('Files', style: Theme.of(context).textTheme.titleLarge),
                       const SizedBox(height: 5),
                       Text(
-                        'Send files directly to trusted devices.',
+                        'Send files directly to your trusted devices.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: const Color(0xFF8E9691),
                             ),
@@ -1604,7 +1600,7 @@ class _PageBodyState extends State<_PageBody> {
               const _EmptyPanel(
                 icon: Icons.folder_open_outlined,
                 title: 'No file transfers yet',
-                message: 'Choose a trusted device and send a file. Transfers stay device to device.',
+                message: 'Choose a trusted device to send a file directly.',
               )
             else
               for (final item in files.reversed)
@@ -1656,7 +1652,7 @@ class _PageBodyState extends State<_PageBody> {
                 overflow: TextOverflow.ellipsis,
               ),
               subtitle: Text(
-                '${deviceName} · ${_formatBytes(size)} · ${state}',
+                '${deviceName} · ${_formatBytes(size)} · ${_fileStateLabel(state)}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1723,6 +1719,73 @@ class _PageBodyState extends State<_PageBody> {
         ),
       ),
     );
+  }
+
+  Future<void> _cancelFileTransfer(String deviceId, String transferId) async {
+    final data = widget.dataDirectory;
+    if (data == null || widget.native == null) return;
+    final result = await _nativeJsonInIsolate(data, 'file_cancel', [deviceId, transferId]);
+    if (!mounted) return;
+    if (result?['ok'] == true) {
+      setState(() {});
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('The file could not be cancelled. Try again.')),
+      );
+    }
+  }
+
+  Future<void> _decideIncomingFile(
+    String deviceId,
+    String transferId, {
+    required bool accept,
+  }) async {
+    final data = widget.dataDirectory;
+    if (data == null || widget.native == null) return;
+    final result = await _nativeJsonInIsolate(
+      data,
+      accept ? 'file_accept' : 'file_decline',
+      [deviceId, transferId],
+    );
+    if (!mounted) return;
+    if (result?['ok'] == true) {
+      setState(() {});
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            accept
+                ? 'The file could not be accepted. Try again.'
+                : 'The file could not be declined. Try again.',
+          ),
+        ),
+      );
+    }
+  }
+
+  String _fileStateLabel(String state) {
+    switch (state) {
+      case 'complete':
+      case 'completed':
+      case 'delivered':
+        return 'Complete';
+      case 'failed':
+      case 'error':
+        return 'Failed';
+      case 'queued':
+      case 'pending':
+        return 'Waiting';
+      case 'offered':
+        return 'Waiting for response';
+      case 'declined':
+        return 'Declined';
+      case 'cancelled':
+        return 'Cancelled';
+      case 'transferring':
+        return 'In progress';
+      default:
+        return 'Preparing';
+    }
   }
 
   IconData _fileIcon(String name) {
@@ -1818,7 +1881,7 @@ class _PageBodyState extends State<_PageBody> {
     final transferId = await _sendFileInIsolate(data, selectedId, result.files.single.path!);
     if (transferId == null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('File transfer failed.')),
+        const SnackBar(content: Text('File transfer could not be started.')),
       );
     } else if (mounted) {
       setState(() {});
@@ -1975,7 +2038,7 @@ class _PageBodyState extends State<_PageBody> {
               ? const _EmptyPanel(
                   icon: Icons.chat_bubble_outline,
                   title: 'No messages yet',
-                  message: 'Send the first message to this device.',
+                  message: 'Start the conversation by sending a message.',
                 )
               : ListView.builder(
                   padding: const EdgeInsets.all(20),
@@ -2065,21 +2128,3 @@ class _PageBodyState extends State<_PageBody> {
 }
 
 
-
-class _WorkplaceStat extends StatelessWidget {
-  final String label;
-  final int value;
-  const _WorkplaceStat(this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(value.toString(), style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 4),
-        Text(label, style: const TextStyle(color: Colors.white70)),
-      ]),
-    ),
-  );
-}
