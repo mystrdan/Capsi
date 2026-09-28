@@ -863,6 +863,14 @@ pub extern "C" fn capsi_file_send(
         let mut input = File::open(&file_path)?;
         let mut buffer = vec![0u8; capsi_core::TRANSFER_CHUNK_SIZE];
         for index in 0..chunks {
+            let state = MessageStore::load(&data_dir)?
+                .get(&device_id)
+                .and_then(|conversation| conversation.find_transfer(&transfer_id))
+                .map(|file| file.state);
+            if matches!(state, Some(TransferState::Cancelled | TransferState::Declined | TransferState::Failed)) {
+                return Err(capsi_core::CapsiError::Network("file transfer was cancelled or rejected".into()));
+            }
+
             let read = input.read(&mut buffer)?;
             if read == 0 { break; }
             let raw = &buffer[..read];
@@ -967,6 +975,57 @@ fn file_transfer_action(
     }
 
     Ok(true)
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_file_cancel(
+    data_dir: *const c_char,
+    device_id: *const c_char,
+    transfer_id: *const c_char,
+) -> *mut c_char {
+    let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    let device_id = match c_string(device_id).and_then(|value| DeviceId::from_hex(&value).ok()) {
+        Some(id) => id,
+        None => return error_json("device id is invalid"),
+    };
+    let transfer_id = match c_string(transfer_id).filter(|value| !value.trim().is_empty()) {
+        Some(value) => value,
+        None => return error_json("transfer id is invalid"),
+    };
+
+    let result = (|| -> capsi_core::Result<bool> {
+        let mut messages = MessageStore::load(&dir)?;
+        let conversation = messages
+            .get(&device_id)
+            .ok_or_else(|| capsi_core::CapsiError::NotFound("conversation not found".into()))?;
+        let (outgoing, local_path, state) = conversation
+            .messages
+            .iter()
+            .find_map(|message| {
+                message.file.as_ref().filter(|file| file.transfer_id == transfer_id).map(|file| {
+                    (message.outgoing, file.local_path.clone(), file.state)
+                })
+            })
+            .ok_or_else(|| capsi_core::CapsiError::NotFound("file transfer not found".into()))?;
+
+        if matches!(state, TransferState::Complete | TransferState::Cancelled | TransferState::Declined) {
+            return Err(capsi_core::CapsiError::Invalid("file transfer is no longer active".into()));
+        }
+
+        messages.update_transfer(&device_id, &transfer_id, TransferState::Cancelled, None)?;
+        if !outgoing {
+            if let Some(path) = local_path {
+                let _ = std::fs::remove_file(path);
+            }
+        }
+        send_file_receipt_action(&dir, &device_id, &transfer_id, FileReceipt::Cancelled)?;
+        Ok(true)
+    })();
+
+    match result {
+        Ok(value) => trust_result(value),
+        Err(error) => error_json(&error.to_string()),
+    }
 }
 
 #[no_mangle]
