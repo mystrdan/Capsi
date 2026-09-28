@@ -270,6 +270,33 @@ async function openConversation(deviceId, fallbackName) {
   }
 }
 
+async function sendFile() {
+  if (!state.activeConv) return;
+  const dialog = window.__TAURI__?.dialog;
+  if (!dialog?.open) {
+    showToast('File picker is unavailable in this build', true);
+    return;
+  }
+  try {
+    const path = await dialog.open({
+      multiple: false,
+      directory: false,
+      title: 'Choose a file to send',
+    });
+    if (!path || Array.isArray(path)) return;
+    const transferId = await invoke('offer_file', {
+      deviceId: state.activeConv,
+      path,
+    });
+    showToast('File offer sent');
+    await loadTransfers();
+    await openConversation(state.activeConv);
+    return transferId;
+  } catch (e) {
+    showToast(`Could not send file: ${e}`, true);
+  }
+}
+
 async function sendMessage() {
   if (state.activeWorkplaceGroup) return sendWorkplaceMessage();
   const input = $('message-input');
@@ -296,6 +323,7 @@ async function deleteActiveConversation() {
     $('chat-header').innerHTML = '<div class="chat-status">Select a conversation</div>';
     $('message-input').disabled = true;
     $('btn-send').disabled = true;
+    $('btn-attach').disabled = true;
     showToast(`Deleted the conversation with ${name}`);
     await loadConversations();
   } catch (e) {
@@ -467,6 +495,7 @@ function renderMessages(conv, fallbackName) {
   }
   $('message-input').disabled = false;
   $('btn-send').disabled = false;
+  $('btn-attach').disabled = false;
 }
 
 /* ---------- detail panel ---------- */
@@ -710,6 +739,8 @@ function wireEvents() {
     );
 
   $('btn-settings').addEventListener('click', openDevicePanel);
+
+  $('btn-attach').addEventListener('click', sendFile);
 
   $('composer').addEventListener('submit', (e) => {
     e.preventDefault();
