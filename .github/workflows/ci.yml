@@ -140,6 +140,16 @@ jobs:
         run: flutter pub get
       - name: Build macOS application
         run: flutter build macos --release
+      - name: Bundle Rust macOS library
+        shell: bash
+        run: |
+          app="build/macos/Build/Products/Release/Capsi.app"
+          framework_dir="$app/Contents/Frameworks"
+          mkdir -p "$framework_dir"
+          lipo -create             native/target/aarch64-apple-darwin/release/libcapsi_ffi.dylib             native/target/x86_64-apple-darwin/release/libcapsi_ffi.dylib             -output "$framework_dir/libcapsi_ffi.dylib"
+          codesign --force --sign - "$framework_dir/libcapsi_ffi.dylib"
+          codesign --deep --force --sign - "$app"
+          test -f "$framework_dir/libcapsi_ffi.dylib"
 
   ios:
     name: iOS release build
