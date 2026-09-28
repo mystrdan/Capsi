@@ -2,6 +2,11 @@
 //!
 //! Platform-independent core: identity, crypto, LAN discovery, storage,
 //! transfers, and the local workplace model.
+//!
+//! File transfers are chunked and use a 64-bit file size in the protocol. There
+//! is deliberately no application-level total file-size cap; practical limits
+//! are the source filesystem, destination storage, and platform APIs. The
+//! transport still keeps an individual network frame bounded for safety.
 
 pub mod crypto;
 pub mod discovery;
