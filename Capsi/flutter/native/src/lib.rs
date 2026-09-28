@@ -99,7 +99,7 @@ pub extern "C" fn capsi_discovery_start(
     let stop = Arc::new(AtomicBool::new(false));
     let latest = Arc::new(Mutex::new(String::from("[]")));
     let thread_stop = Arc::clone(&stop);
-    let thread_events = Arc::clone(&events);
+    let thread_latest = Arc::clone(&latest);
 
     let spawn_result = std::thread::Builder::new()
         .name("capsi-discovery".into())
@@ -142,7 +142,7 @@ pub extern "C" fn capsi_discovery_start(
                         let _ = store.save_if_dirty(&data_dir);
                     }
                     if let Ok(json) = serde_json::to_string(&peers) {
-                        if let Ok(mut current) = thread_events.lock() {
+                        if let Ok(mut current) = thread_latest.lock() {
                             *current = json;
                         }
                     }
