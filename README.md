@@ -134,12 +134,13 @@ flutter build ios --release --no-codesign
 ```
 
 GitHub Actions verifies both Apple Flutter runners in clean macOS environments.
-The macOS release pipeline now bundles the Rust FFI library inside the app's
+The macOS release pipeline bundles the Rust FFI library inside the app's
 Contents/Frameworks directory and publishes the packaged app as a CI artifact.
-The iOS pipeline currently compiles the Rust static library for device and
-simulator targets; linking that static library into the generated iOS Runner and
-real-device communication still require platform-specific validation before
-release.
+
+The iOS pipeline now links the Rust device library into the generated Runner
+during CI using `tool/link_ios_rust.sh`. The build verifies the native bridge
+is linked into the iOS application; real-device communication and simulator
+runtime behavior still require platform-specific validation before release.
 
 ## Cross-platform interface principles
 
@@ -186,6 +187,7 @@ The goal is **one Capsi, adapted to the device**, not four unrelated application
 - Flutter startup/runtime handling.
 - Android CI build path.
 - macOS Rust FFI bundle path and packaged release artifact.
+- iOS Rust FFI linkage in the CI-generated Runner.
 
 ### Automated verification
 
@@ -193,9 +195,12 @@ GitHub Actions now checks every push and pull request to `main` with:
 
 - Rust core tests (`cargo test -p capsi-core`).
 - Flutter dependency resolution, static analysis, and widget tests.
-- A Windows release build using the checked-in PowerShell build script, with the resulting release directory uploaded as a CI artifact.
+- Android release APK build with Rust libraries for arm64-v8a, armeabi-v7a, and x86_64.
+- Windows release build using the checked-in PowerShell build script.
+- macOS release build with a bundled universal Rust FFI library.
+- iOS release build with the Rust FFI static library linked into the generated Runner.
 
-The CI build verifies that the source can compile in a clean environment and packages a portable Windows x64 ZIP containing the release files. It does not replace real-device network and installation testing.
+The CI build verifies that the source can compile in a clean environment and packages release artifacts. It does not replace real-device network and installation testing.
 
 ### Still requires real-device validation
 
