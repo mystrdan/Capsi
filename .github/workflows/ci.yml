@@ -64,6 +64,20 @@ jobs:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
       - name: Generate Android runner
         run: flutter create --platforms=android .
+      - name: Configure Android compile SDK
+        shell: bash
+        run: |
+          if [ -f android/app/build.gradle.kts ]; then
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
+          elif [ -f android/app/build.gradle ]; then
+            sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 36/' android/app/build.gradle
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/' android/app/build.gradle
+          else
+            echo "Android app Gradle file not found."
+            exit 1
+          fi
+          grep -R "compileSdk" android/app/build.gradle* || true
+
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
       - name: Build Rust Android libraries
