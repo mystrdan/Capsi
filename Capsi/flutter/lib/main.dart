@@ -107,7 +107,12 @@ class CapsiApp extends StatelessWidget {
 }
 
 class CapsiHome extends StatefulWidget {
-  const CapsiHome({super.key});
+  const CapsiHome({
+    super.key,
+    this.autoInitialize = true,
+  });
+
+  final bool autoInitialize;
 
   @override
   State<CapsiHome> createState() => _CapsiHomeState();
@@ -136,7 +141,11 @@ class _CapsiHomeState extends State<CapsiHome> {
   void initState() {
     super.initState();
     native = CapsiNative.tryLoad();
-    _initializeRuntime();
+    if (widget.autoInitialize) {
+      _initializeRuntime();
+    } else {
+      runtimeLoading = false;
+    }
   }
 
   Future<void> _initializeRuntime() async {
