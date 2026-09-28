@@ -1,5 +1,5 @@
 use std::ffi::{c_char, CStr, CString};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use base64::Engine as _;
@@ -14,7 +14,14 @@ use capsi_core::identity::{DeviceIdentity, DeviceId};
 use capsi_core::identity::trust::TrustStore;
 use capsi_core::protocol::{Envelope, FileOffer, FileReceipt, Message, TextMessage};
 use capsi_core::storage::conversation::TransferState;
-use capsi_core::storage::conversation::{DeliveryState, MessageKind, MessageStore, StoredMessage};
+use capsi_core::storage::conversation::{DeliveryState, MessageStore, StoredMessage};
+
+fn now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
 
 struct DiscoverySession {
     stop: Arc<AtomicBool>,
