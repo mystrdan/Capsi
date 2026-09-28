@@ -423,7 +423,9 @@ function renderTransfers() {
             t.state === 'offered'
               ? `<button class="btn btn-sm btn-primary" data-act="accept" data-id="${escapeHtml(t.device_id)}" data-tid="${escapeHtml(t.transfer_id)}">Accept</button>
                  <button class="btn btn-sm btn-danger" data-act="decline" data-id="${escapeHtml(t.device_id)}" data-tid="${escapeHtml(t.transfer_id)}">Decline</button>`
-              : `<span class="muted">${escapeHtml(t.state)}</span>`
+              : t.state === 'transferring'
+                ? `<button class="btn btn-sm btn-danger" data-act="cancel" data-id="${escapeHtml(t.device_id)}" data-tid="${escapeHtml(t.transfer_id)}">Cancel</button>`
+                : `<span class="muted">${escapeHtml(t.state)}</span>`
           }
         </div>
       </div>`
@@ -440,9 +442,12 @@ async function handleTransferAction(btn) {
     if (act === 'accept') {
       await invoke('accept_file', { deviceId: id, transferId: tid, saveTo: null });
       showToast('Transfer accepted');
-    } else {
+    } else if (act === 'decline') {
       await invoke('decline_file', { deviceId: id, transferId: tid });
       showToast('Transfer declined');
+    } else if (act === 'cancel') {
+      await invoke('cancel_file', { deviceId: id, transferId: tid });
+      showToast('Transfer cancelled');
     }
     await loadTransfers();
   } catch (e) {
