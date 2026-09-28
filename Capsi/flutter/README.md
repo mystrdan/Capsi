@@ -104,6 +104,11 @@ The Dart FFI layer selects the native library for each target:
 - Linux: `libcapsi_ffi.so`
 - iOS: the process image
 
+The iOS build now creates a universal simulator archive plus a device archive,
+packages them as an XCFramework, installs that bridge through CocoaPods, and
+verifies that exported Capsi FFI symbols are present in the release Runner
+executable. Real-device iOS communication testing is still required.
+
 Packaging/linking these artifacts into each Flutter runner is a platform
 integration step. Keep the Rust ABI shared across platforms rather than
 creating platform-specific application logic.
