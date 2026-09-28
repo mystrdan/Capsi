@@ -16,7 +16,7 @@ use capsi_core::protocol::{Envelope, FileOffer, FileReceipt, Message, TextMessag
 use capsi_core::storage::conversation::TransferState;
 use capsi_core::storage::conversation::{DeliveryState, MessageStore, StoredMessage};
 
-fn now_millis() -> u64 {
+fn (now_millis() as i64) -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis() as u64)
@@ -1284,7 +1284,7 @@ pub extern "C" fn capsi_workplace_send_message(
                 continue;
             };
             let Some(address) = device.last_address.clone() else {
-                workspace.queue_delivery(envelope.clone(), recipient.clone(), now_millis());
+                workspace.queue_delivery(envelope.clone(), recipient.clone(), (now_millis() as i64));
                 queued += 1;
                 continue;
             };
@@ -1295,7 +1295,7 @@ pub extern "C" fn capsi_workplace_send_message(
             }) {
                 Ok(()) => delivered += 1,
                 Err(error) => {
-                    workspace.queue_delivery(envelope.clone(), recipient.clone(), now_millis());
+                    workspace.queue_delivery(envelope.clone(), recipient.clone(), (now_millis() as i64));
                     let _ = error;
                     queued += 1;
                 }
