@@ -204,20 +204,33 @@ class CapsiNative {
   final _WorkplaceAddMemberDart _workplaceAddGroupMember;
 
   static CapsiNative? tryLoad() {
-    final candidates = <String>[
-      if (Platform.isWindows) 'capsi_ffi.dll',
-      if (Platform.isAndroid) 'libcapsi_ffi.so',
-      if (Platform.isIOS) 'process',
-      if (Platform.isMacOS) 'libcapsi_ffi.dylib',
-      if (Platform.isLinux) 'libcapsi_ffi.so',
-    ];
+    final candidates = <String>[];
+    if (Platform.isWindows) {
+      candidates.add('capsi_ffi.dll');
+    } else if (Platform.isAndroid) {
+      candidates.add('libcapsi_ffi.so');
+    } else if (Platform.isIOS) {
+      // iOS Rust is statically linked into the Runner executable.
+      candidates.add('process');
+    } else if (Platform.isMacOS) {
+      // A release macOS app keeps bundled dynamic libraries in Contents/Frameworks.
+      // Keep the bare name as a development fallback.
+      final executable = File(Platform.resolvedExecutable);
+      final contents = executable.parent.parent;
+      candidates.add('${contents.path}${Platform.pathSeparator}Frameworks${Platform.pathSeparator}libcapsi_ffi.dylib');
+      candidates.add('libcapsi_ffi.dylib');
+    } else if (Platform.isLinux) {
+      candidates.add('libcapsi_ffi.so');
+    }
 
     for (final candidate in candidates) {
       try {
-        final library = candidate == 'process' ? ffi.DynamicLibrary.process() : ffi.DynamicLibrary.open(candidate);
+        final library = candidate == 'process'
+            ? ffi.DynamicLibrary.process()
+            : ffi.DynamicLibrary.open(candidate);
         return CapsiNative._(library);
       } catch (_) {
-        // The native artifact is packaged separately by the platform build.
+        // The native artifact may not be present on a development machine yet.
       }
     }
     return null;
