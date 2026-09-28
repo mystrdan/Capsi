@@ -1784,7 +1784,7 @@ ListView(
     }
   }
 
-  Widget _fileTransferSubtitle(({String deviceId, String name, Map<String, dynamic> file}) item) {
+  Widget _fileTransferSubtitle(({String deviceId, String name, bool outgoing, Map<String, dynamic> file}) item) {
     final state = item.file['state']?.toString() ?? 'unknown';
     final size = item.file['size'];
     final received = _transferReceived[item.file['transfer_id']?.toString() ?? ''];
@@ -1798,13 +1798,13 @@ ListView(
     );
   }
 
-  Widget _fileTransferActions(({String deviceId, String name, Map<String, dynamic> file}) item) {
+  Widget _fileTransferActions(({String deviceId, String name, bool outgoing, Map<String, dynamic> file}) item) {
     final state = item.file['state']?.toString().toLowerCase();
     final transferId = item.file['transfer_id']?.toString();
     if (transferId == null) {
       return Icon(_fileStateIcon(state), color: _fileStateColor(state));
     }
-    if (state == 'offered') {
+    if (!item.outgoing && state == 'offered') {
       return Wrap(
         spacing: 2,
         children: [
