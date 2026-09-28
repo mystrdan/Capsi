@@ -45,6 +45,10 @@ Future<Map<String, dynamic>?> _nativeJsonInIsolate(
         return bridge.sendWorkplaceMessage(dataDirectory, args[0], args[1]);
       case 'workplace_add_member':
         return bridge.addWorkplaceGroupMember(dataDirectory, args[0], args[1]);
+      case 'file_accept':
+        return {'ok': bridge.acceptFile(dataDirectory, args[0], args[1])};
+      case 'file_decline':
+        return {'ok': bridge.declineFile(dataDirectory, args[0], args[1])};
       default:
         return null;
     }
@@ -122,6 +126,8 @@ class _CapsiHomeState extends State<CapsiHome> {
   int messageHandle = 0;
   Timer? messageTimer;
   Timer? workplaceTimer;
+  final Set<String> _incomingOfferDialogs = <String>{};
+  final Map<String, int> _transferReceived = <String, int>{};
 
   @override
   void initState() {
@@ -234,7 +240,17 @@ class _CapsiHomeState extends State<CapsiHome> {
         _loadTrust();
         _loadWorkplace();
         if (mounted) {
-          setState(() => lastMessageEvent = event);
+          setState(() {
+            lastMessageEvent = event;
+            final transferId = event['transfer_id']?.toString();
+            final received = event['received'];
+            if (transferId != null && received is num) {
+              _transferReceived[transferId] = received.toInt();
+            }
+          });
+          if (event['type'] == 'file_offer') {
+            _showIncomingFileOffer(event);
+          }
         }
       }
     });
@@ -1526,30 +1542,172 @@ ListView(
               )
             else
               for (final item in files.reversed)
-                Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: _DeviceIcon(icon: _fileIcon(item.file['file_name']?.toString() ?? '')),
-                    title: Text(
-                      item.file['file_name']?.toString() ?? 'File',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      '${item.name} · ${_formatBytes(item.file['size'])} · ${item.file['state'] ?? 'unknown'}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: Icon(
-                      _fileStateIcon(item.file['state']?.toString()),
-                      color: _fileStateColor(item.file['state']?.toString()),
-                    ),
-                  ),
-                ),
+                _fileTransferCard(context, item.deviceId, item.name, item.file),
           ],
         );
       },
     );
+  }
+
+  Widget _fileTransferCard(
+    BuildContext context,
+    String deviceId,
+    String deviceName,
+    Map<String, dynamic> file,
+  ) {
+    final state = file['state']?.toString().toLowerCase() ?? 'unknown';
+    final transferId = file['transfer_id']?.toString() ?? '';
+    final size = file['size'];
+    final total = size is num ? size.toInt() : int.tryParse(size?.toString() ?? '');
+    int? received = _transferReceived[transferId];
+    final localPath = file['local_path']?.toString();
+    if (received == null && localPath != null && total != null && total > 0) {
+      try {
+        final length = File(localPath).lengthSync();
+        if (length >= 0) received = length;
+      } catch (_) {}
+    }
+    final progress = total != null && total > 0 && received != null
+        ? (received / total).clamp(0.0, 1.0)
+        : null;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+        child: Column(
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: _DeviceIcon(icon: _fileIcon(file['file_name']?.toString() ?? '')),
+              title: Text(
+                file['file_name']?.toString() ?? 'File',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                '${deviceName} · ${_formatBytes(size)} · ${state}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: Icon(
+                _fileStateIcon(state),
+                color: _fileStateColor(state),
+              ),
+            ),
+            if (progress != null && state == 'transferring') ...[
+              const SizedBox(height: 4),
+              LinearProgressIndicator(value: progress),
+              const SizedBox(height: 5),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${_formatBytes(received)} of ${_formatBytes(total)}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF858D88),
+                  ),
+                ),
+              ),
+            ],
+            if (state == 'offered')
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: transferId.isEmpty
+                        ? null
+                        : () => _decideIncomingFile(
+                              deviceId,
+                              transferId,
+                              accept: false,
+                            ),
+                    child: const Text('Decline'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: transferId.isEmpty
+                        ? null
+                        : () => _decideIncomingFile(
+                              deviceId,
+                              transferId,
+                              accept: true,
+                            ),
+                    child: const Text('Accept'),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showIncomingFileOffer(Map<String, dynamic> event) async {
+    final transferId = event['transfer_id']?.toString();
+    final deviceId = event['device_id']?.toString();
+    if (transferId == null ||
+        deviceId == null ||
+        transferId.isEmpty ||
+        deviceId.isEmpty ||
+        _incomingOfferDialogs.contains(transferId) ||
+        !mounted) {
+      return;
+    }
+
+    _incomingOfferDialogs.add(transferId);
+    final fileName = event['file_name']?.toString() ?? 'File';
+    final size = event['size'];
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Incoming file'),
+        content: Text(
+          '${fileName}\n${_formatBytes(size)}\n\nThis file is being offered by a trusted device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Decline'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Accept'),
+          ),
+        ],
+      ),
+    );
+    _incomingOfferDialogs.remove(transferId);
+    if (!mounted || accepted == null) return;
+    await _decideIncomingFile(deviceId, transferId, accept: accepted);
+  }
+
+  Future<void> _decideIncomingFile(
+    String deviceId,
+    String transferId, {
+    required bool accept,
+  }) async {
+    final data = dataDirectory;
+    if (data == null) return;
+    final result = await _nativeJsonInIsolate(
+      data,
+      accept ? 'file_accept' : 'file_decline',
+      [deviceId, transferId],
+    );
+    if (!mounted) return;
+    if (result?['ok'] == true) {
+      setState(() {});
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            accept
+                ? 'The file could not be accepted.'
+                : 'The file could not be declined.',
+          ),
+        ),
+      );
+    }
   }
 
   IconData _fileIcon(String name) {
@@ -1591,7 +1749,14 @@ ListView(
         return Icons.error_outline;
       case 'queued':
       case 'pending':
+      case 'offered':
         return Icons.schedule_outlined;
+      case 'declined':
+        return Icons.block_outlined;
+      case 'cancelled':
+        return Icons.cancel_outlined;
+      case 'transferring':
+        return Icons.sync_outlined;
       default:
         return Icons.sync_outlined;
     }
@@ -1606,6 +1771,11 @@ ListView(
       case 'failed':
       case 'error':
         return Colors.orange;
+      case 'offered':
+        return Colors.amber;
+      case 'declined':
+      case 'cancelled':
+        return const Color(0xFF777E79);
       default:
         return const Color(0xFF858D88);
     }
