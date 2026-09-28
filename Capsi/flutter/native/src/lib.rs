@@ -950,12 +950,22 @@ fn file_transfer_action(
             .and_then(|path| std::fs::metadata(path).ok())
             .map(|metadata| metadata.len() / capsi_core::TRANSFER_CHUNK_SIZE as u64)
             .unwrap_or(0);
-        let next_state = if file.size == 0 {
-            TransferState::Complete
+        if file.size == 0 {
+            let download_dir = data_dir.join("files").join("downloads");
+            std::fs::create_dir_all(&download_dir)?;
+            let final_path = download_dir.join(&file.file_name);
+            if let Some(temp_path) = file.local_path.as_deref() {
+                std::fs::rename(temp_path, &final_path)?;
+            }
+            messages.update_transfer(
+                device_id,
+                transfer_id,
+                TransferState::Complete,
+                Some(final_path.to_string_lossy().to_string()),
+            )?;
         } else {
-            TransferState::Transferring
-        };
-        messages.update_transfer(device_id, transfer_id, next_state, None)?;
+            messages.update_transfer(device_id, transfer_id, TransferState::Transferring, None)?;
+        }
         send_file_receipt_action(
             data_dir,
             device_id,
