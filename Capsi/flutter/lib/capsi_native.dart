@@ -75,8 +75,6 @@ typedef _FileSendNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, 
 typedef _FileSendDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 typedef _FileActionNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 typedef _FileActionDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
-typedef _FileActionNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
-typedef _FileActionDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 typedef _WorkplaceLoadNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>);
 typedef _WorkplaceLoadDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>);
 typedef _WorkplaceCreateNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
@@ -166,9 +164,6 @@ class CapsiNative {
         _fileAccept = library.lookupFunction<_FileActionNative, _FileActionDart>('capsi_file_accept'),
         _fileDecline = library.lookupFunction<_FileActionNative, _FileActionDart>('capsi_file_decline'),
         _fileCancel = library.lookupFunction<_FileActionNative, _FileActionDart>('capsi_file_cancel'),
-        _fileAccept = library.lookupFunction<_FileActionNative, _FileActionDart>('capsi_file_accept'),
-        _fileDecline = library.lookupFunction<_FileActionNative, _FileActionDart>('capsi_file_decline'),
-        _fileCancel = library.lookupFunction<_FileActionNative, _FileActionDart>('capsi_file_cancel'),
         _workplaceLoad = library.lookupFunction<_WorkplaceLoadNative, _WorkplaceLoadDart>('capsi_workplace_load'),
         _workplaceCreate = library.lookupFunction<_WorkplaceCreateNative, _WorkplaceCreateDart>('capsi_workplace_create'),
         _workplaceCreateGroup = library.lookupFunction<_WorkplaceNameActionNative, _WorkplaceNameActionDart>('capsi_workplace_create_group'),
@@ -196,9 +191,6 @@ class CapsiNative {
   final _ConversationListDart _conversationList;
   final _ConversationLoadDart _conversationLoad;
   final _FileSendDart _fileSend;
-  final _FileActionDart _fileAccept;
-  final _FileActionDart _fileDecline;
-  final _FileActionDart _fileCancel;
   final _FileActionDart _fileAccept;
   final _FileActionDart _fileDecline;
   final _FileActionDart _fileCancel;
@@ -472,25 +464,6 @@ class CapsiNative {
   bool cancelFile(String dataDirectory, String deviceId, String transferId) =>
       _fileAction(_fileCancel, dataDirectory, deviceId, transferId);
 
-  bool _fileAction(
-    _FileActionDart action,
-    String dataDirectory,
-    String deviceId,
-    String transferId,
-  ) {
-    final d = dataDirectory.toNativeUtf8();
-    final id = deviceId.toNativeUtf8();
-    final t = transferId.toNativeUtf8();
-    try {
-      final value = _readJson(action(d.cast(), id.cast(), t.cast()));
-      return value == true;
-    } finally {
-      calloc.free(d);
-      calloc.free(id);
-      calloc.free(t);
-    }
-  }
-
   bool _fileAction(_FileActionDart action, String dataDirectory, String deviceId, String transferId) {
     final d = dataDirectory.toNativeUtf8();
     final id = deviceId.toNativeUtf8();
@@ -504,15 +477,6 @@ class CapsiNative {
       calloc.free(t);
     }
   }
-
-  bool acceptFile(String dataDirectory, String deviceId, String transferId) =>
-      _fileAction(_fileAccept, dataDirectory, deviceId, transferId);
-
-  bool declineFile(String dataDirectory, String deviceId, String transferId) =>
-      _fileAction(_fileDecline, dataDirectory, deviceId, transferId);
-
-  bool cancelFile(String dataDirectory, String deviceId, String transferId) =>
-      _fileAction(_fileCancel, dataDirectory, deviceId, transferId);
 
   Map<String, dynamic>? conversation(String dataDirectory, String deviceId) {
     final dir = dataDirectory.toNativeUtf8();
