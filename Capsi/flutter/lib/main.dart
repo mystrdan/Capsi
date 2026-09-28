@@ -1489,7 +1489,7 @@ ListView(
     final conversations = data == null || native == null
         ? const <Map<String, dynamic>>[]
         : native.conversations(data);
-    final files = <({String deviceId, String name, Map<String, dynamic> file})>[];
+    final files = <({String deviceId, String name, bool outgoing, Map<String, dynamic> file})>[];
 
     for (final conversation in conversations) {
       final deviceId = conversation['device_id']?.toString() ?? '';
@@ -1500,7 +1500,12 @@ ListView(
       for (final message in messages) {
         final file = message['file'];
         if (message['kind'] == 'file' && file is Map<String, dynamic>) {
-          files.add((deviceId: deviceId, name: name, file: file));
+          files.add((
+            deviceId: deviceId,
+            name: name,
+            outgoing: message['outgoing'] == true,
+            file: file,
+          ));
         }
       }
     }
@@ -1545,7 +1550,7 @@ ListView(
               )
             else
               for (final item in files.reversed)
-                _fileTransferCard(context, item.deviceId, item.name, item.file),
+                _fileTransferCard(context, item.deviceId, item.name, item.outgoing, item.file),
           ],
         );
       },
@@ -1556,6 +1561,7 @@ ListView(
     BuildContext context,
     String deviceId,
     String deviceName,
+    bool outgoing,
     Map<String, dynamic> file,
   ) {
     final state = file['state']?.toString().toLowerCase() ?? 'unknown';
@@ -1612,7 +1618,7 @@ ListView(
                 ),
               ),
             ],
-            if (state == 'offered')
+            if (state == 'offered' && !outgoing)
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -1639,7 +1645,7 @@ ListView(
                   ),
                 ],
               ),
-            if (state == 'transferring' || state == 'offered')
+            if (state == 'transferring' || (state == 'offered' && outgoing))
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
