@@ -202,7 +202,17 @@ class _CapsiHomeState extends State<CapsiHome> {
     });
   }
 
-  void _scan() => _pollDiscovery();
+  void _scan() {
+    if (!mounted || native == null || dataDirectory == null) return;
+
+    if (discoveryHandle == 0) {
+      _startDiscovery();
+      return;
+    }
+
+    setState(() => scanning = true);
+    _pollDiscovery();
+  }
 
   @override
   void dispose() {
