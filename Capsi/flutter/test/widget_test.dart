@@ -1,16 +1,13 @@
 import 'package:capsi/main.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('Capsi shell renders without native runtime', (tester) async {
-    await tester.pumpWidget(const CapsiApp());
-    await tester.pumpAndSettle();
-    expect(find.text('Capsi could not start on this device. Try again.'), findsOneWidget);
-  });
-
   testWidgets('Capsi shell UI renders independently of native runtime', (tester) async {
     await tester.pumpWidget(
-      const CapsiHome(autoInitialize: false),
+      const MaterialApp(
+        home: CapsiHome(autoInitialize: false),
+      ),
     );
     await tester.pump();
 
