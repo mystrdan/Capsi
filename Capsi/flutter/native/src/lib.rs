@@ -4,7 +4,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use base64::Engine as _;
 use tokio::net::TcpListener;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -49,7 +49,7 @@ static NEXT_DISCOVERY_ID: AtomicU64 = AtomicU64::new(1);
 
 struct MessageSession {
     stop: Arc<AtomicBool>,
-    latest: Arc<Mutex<String>>,
+    events: Arc<Mutex<VecDeque<String>>>,
 }
 
 static MESSAGE_SESSIONS: OnceLock<Mutex<HashMap<u64, MessageSession>>> = OnceLock::new();
@@ -59,9 +59,14 @@ fn message_sessions() -> &'static Mutex<HashMap<u64, MessageSession>> {
     MESSAGE_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn message_event(latest: &Arc<Mutex<String>>, value: serde_json::Value) {
-    if let Ok(mut out) = latest.lock() {
-        *out = value.to_string();
+fn message_event(events: &Arc<Mutex<VecDeque<String>>>, value: serde_json::Value) {
+    if let Ok(mut queue) = events.lock() {
+        // Keep a bounded queue so a busy peer cannot grow native memory without
+        // limit while Flutter is paused or rendering another screen.
+        if queue.len() >= 128 {
+            queue.pop_front();
+        }
+        queue.push_back(value.to_string());
     }
 }
 
@@ -94,7 +99,7 @@ pub extern "C" fn capsi_discovery_start(
     let stop = Arc::new(AtomicBool::new(false));
     let latest = Arc::new(Mutex::new(String::from("[]")));
     let thread_stop = Arc::clone(&stop);
-    let thread_latest = Arc::clone(&latest);
+    let thread_events = Arc::clone(&events);
 
     let spawn_result = std::thread::Builder::new()
         .name("capsi-discovery".into())
@@ -284,7 +289,7 @@ pub extern "C" fn capsi_discovery_stop(handle: u64) {
 pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) -> u64 {
     let data_dir = match c_path(data_dir) { Some(path) => path, None => return 0 };
     let stop = Arc::new(AtomicBool::new(false));
-    let latest = Arc::new(Mutex::new(String::from("null")));
+    let events = Arc::new(Mutex::new(VecDeque::new()));
     let thread_stop = Arc::clone(&stop);
     let thread_latest = Arc::clone(&latest);
 
@@ -301,7 +306,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
             let listener = match TcpListener::bind(("0.0.0.0", tcp_port)).await {
                 Ok(listener) => listener,
                 Err(error) => {
-                    message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                    message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                     return;
                 }
             };
@@ -699,7 +704,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
 
     let id = NEXT_MESSAGE_ID.fetch_add(1, Ordering::Relaxed);
     if let Ok(mut sessions) = message_sessions().lock() {
-        sessions.insert(id, MessageSession { stop, latest });
+        sessions.insert(id, MessageSession { stop, events });
         id
     } else {
         0
@@ -709,7 +714,11 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
 #[no_mangle]
 pub extern "C" fn capsi_message_poll(handle: u64) -> *mut c_char {
     let json = message_sessions().lock().ok()
-        .and_then(|sessions| sessions.get(&handle).and_then(|session| session.latest.lock().ok().map(|value| value.clone())))
+        .and_then(|sessions| {
+            sessions.get(&handle).and_then(|session| {
+                session.events.lock().ok().and_then(|mut queue| queue.pop_front())
+            })
+        })
         .unwrap_or_else(|| "null".into());
     into_c_string(json)
 }
