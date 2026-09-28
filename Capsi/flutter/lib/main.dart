@@ -16,6 +16,41 @@ Future<String?> _sendFileInIsolate(String dataDirectory, String deviceId, String
   });
 }
 
+Future<String?> _sendMessageInIsolate(String dataDirectory, String deviceId, String body) async {
+  return Isolate.run(() {
+    final bridge = CapsiNative.tryLoad();
+    if (bridge == null) return null;
+    return bridge.sendMessage(dataDirectory, deviceId, body);
+  });
+}
+
+Future<Map<String, dynamic>?> _nativeJsonInIsolate(
+  String dataDirectory,
+  String operation,
+  List<String> args,
+) async {
+  return Isolate.run(() {
+    final bridge = CapsiNative.tryLoad();
+    if (bridge == null) return null;
+    switch (operation) {
+      case 'workplace_create':
+        return bridge.createWorkplace(dataDirectory, args[0]);
+      case 'workplace_group':
+        return bridge.createWorkplaceGroup(dataDirectory, args[0]);
+      case 'workplace_department':
+        return bridge.createWorkplaceDepartment(dataDirectory, args[0]);
+      case 'workplace_broadcast':
+        return bridge.createWorkplaceBroadcast(dataDirectory, args[0], args[1]);
+      case 'workplace_send':
+        return bridge.sendWorkplaceMessage(dataDirectory, args[0], args[1]);
+      case 'workplace_add_member':
+        return bridge.addWorkplaceGroupMember(dataDirectory, args[0], args[1]);
+      default:
+        return null;
+    }
+  });
+}
+
 void main() {
   runApp(const CapsiApp());
 }
@@ -1241,15 +1276,18 @@ ListView(
         ? selectedWorkplaceGroup
         : (groups.isEmpty ? null : groups.first['id']?.toString());
     if (data == null || native == null || groupId == null || text.isEmpty) return;
-    final result = native.sendWorkplaceMessage(data, groupId, text);
-    if (result != null && result['error'] == null && mounted) {
+    final result = await _nativeJsonInIsolate(data, 'workplace_send', [groupId, text]);
+    if (!mounted) return;
+    if (result != null && result['error'] == null) {
       setState(() {
         workplaceDraft = '';
         workplaceController.clear();
       });
       widget.onTrustChanged();
-    } else if (mounted && result?['error'] != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result!['error'].toString())));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result?['error']?.toString() ?? 'WorkPlace message could not be sent.')),
+      );
     }
   }
 
@@ -1290,15 +1328,21 @@ ListView(
       ),
     );
     if (!mounted || chosen == null || widget.native == null || widget.dataDirectory == null) return;
-    final result = widget.native!.addWorkplaceGroupMember(
+    final result = await _nativeJsonInIsolate(
       widget.dataDirectory!,
-      group['id']?.toString() ?? '',
-      chosen!['device_id']?.toString() ?? '',
+      'workplace_add_member',
+      [
+        group['id']?.toString() ?? '',
+        chosen!['device_id']?.toString() ?? '',
+      ],
     );
+    if (!mounted) return;
     if (result != null && result['error'] == null) {
       widget.onTrustChanged();
-    } else if (mounted && result?['error'] != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result!['error'].toString())));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result?['error']?.toString() ?? 'Member could not be added.')),
+      );
     }
   }
 
@@ -1327,8 +1371,20 @@ ListView(
     );
     controller.dispose();
     if (!mounted || name == null || name.isEmpty) return;
-    final result = action(name);
-    if (result != null) widget.onTrustChanged();
+    final data = widget.dataDirectory;
+    if (data == null) return;
+    final operation = title.toLowerCase().contains('department')
+        ? 'workplace_department'
+        : 'workplace_group';
+    final result = await _nativeJsonInIsolate(data, operation, [name]);
+    if (!mounted) return;
+    if (result != null && result['error'] == null) {
+      widget.onTrustChanged();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result?['error']?.toString() ?? 'WorkPlace change could not be completed.')),
+      );
+    }
   }
 
   Future<void> _createBroadcast(BuildContext context) async {
@@ -1361,8 +1417,19 @@ ListView(
     titleController.dispose();
     bodyController.dispose();
     if (!mounted || values == null || values.title.isEmpty || values.body.isEmpty || widget.native == null || widget.dataDirectory == null) return;
-    final result = widget.native!.createWorkplaceBroadcast(widget.dataDirectory!, values.title, values.body);
-    if (result != null) widget.onTrustChanged();
+    final result = await _nativeJsonInIsolate(
+      widget.dataDirectory!,
+      'workplace_broadcast',
+      [values.title, values.body],
+    );
+    if (!mounted) return;
+    if (result != null && result['error'] == null) {
+      widget.onTrustChanged();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result?['error']?.toString() ?? 'Broadcast could not be created.')),
+      );
+    }
   }
 
   Future<void> _createWorkplace(BuildContext context) async {
@@ -1380,10 +1447,19 @@ ListView(
     );
     controller.dispose();
     if (!mounted || name == null || name.isEmpty || widget.dataDirectory == null || widget.native == null) return;
-    final created = widget.native!.createWorkplace(widget.dataDirectory!, name);
-    if (created != null) {
+    final created = await _nativeJsonInIsolate(
+      widget.dataDirectory!,
+      'workplace_create',
+      [name],
+    );
+    if (!mounted) return;
+    if (created != null && created['error'] == null) {
       widget.onTrustChanged();
       setState(() {});
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(created?['error']?.toString() ?? 'WorkPlace could not be created.')),
+      );
     }
   }
 
@@ -1767,13 +1843,21 @@ ListView(
     return widget.trustedDevices.any((device) => device.deviceId == id) ? id : null;
   }
 
-  void _send() {
+  Future<void> _send() async {
     final text = draft.trim();
     final data = widget.dataDirectory;
     final native = widget.native;
-    if (text.isEmpty || data == null || native == null || selectedDevice == null) return;
-    final id = native.sendMessage(data, selectedDevice!, text);
-    if (id != null && mounted) setState(() => draft = '');
+    final deviceId = selectedDevice;
+    if (text.isEmpty || data == null || native == null || deviceId == null) return;
+    final id = await _sendMessageInIsolate(data, deviceId, text);
+    if (!mounted) return;
+    if (id != null) {
+      setState(() => draft = '');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Message could not be sent.')),
+      );
+    }
   }
 }
 
