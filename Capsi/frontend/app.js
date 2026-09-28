@@ -237,6 +237,7 @@ function renderWorkplaceMessages(group) {
   $('message-input').disabled = false;
   $('message-input').placeholder = `Message #${group.name}`;
   $('btn-send').disabled = false;
+  $('btn-attach').disabled = true;
 }
 
 async function sendWorkplaceMessage() {
