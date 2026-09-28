@@ -50,6 +50,8 @@ Future<Map<String, dynamic>?> _nativeJsonInIsolate(
         return {'ok': bridge.acceptFile(dataDirectory, args[0], args[1])};
       case 'file_decline':
         return {'ok': bridge.declineFile(dataDirectory, args[0], args[1])};
+      case 'file_cancel':
+        return {'ok': bridge.cancelFile(dataDirectory, args[0], args[1])};
       default:
         return null;
     }
@@ -1637,6 +1639,17 @@ ListView(
                   ),
                 ],
               ),
+            if (state == 'transferring' || state == 'offered')
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: transferId.isEmpty
+                      ? null
+                      : () => _cancelFileTransfer(deviceId, transferId),
+                  icon: const Icon(Icons.close),
+                  label: const Text('Cancel'),
+                ),
+              ),
           ],
         ),
       ),
@@ -1681,6 +1694,24 @@ ListView(
     _incomingOfferDialogs.remove(transferId);
     if (!mounted || accepted == null) return;
     await _decideIncomingFile(deviceId, transferId, accept: accepted);
+  }
+
+  Future<void> _cancelFileTransfer(String deviceId, String transferId) async {
+    final data = dataDirectory;
+    if (data == null) return;
+    final result = await _nativeJsonInIsolate(
+      data,
+      'file_cancel',
+      [deviceId, transferId],
+    );
+    if (!mounted) return;
+    if (result?['ok'] == true) {
+      setState(() {});
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('The file could not be cancelled.')),
+      );
+    }
   }
 
   Future<void> _decideIncomingFile(
