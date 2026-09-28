@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:isolate';
+import 'dart:io';
 
 import 'capsi_native.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1568,7 +1569,7 @@ ListView(
       } catch (_) {}
     }
     final progress = total != null && total > 0 && received != null
-        ? (received / total).clamp(0.0, 1.0)
+        ? (received / total).clamp(0.0, 1.0).toDouble()
         : null;
 
     return Card(
