@@ -164,7 +164,7 @@ GitHub Actions now checks every push and pull request to `main` with:
 - Flutter dependency resolution, static analysis, and widget tests.
 - A Windows release build using the checked-in PowerShell build script, with the resulting release directory uploaded as a CI artifact.
 
-The CI build verifies that the source can compile in a clean environment; it does not replace real-device network and installation testing.
+The CI build verifies that the source can compile in a clean environment and packages a portable Windows x64 ZIP containing the release files. It does not replace real-device network and installation testing.
 
 ### Still requires real-device validation
 
