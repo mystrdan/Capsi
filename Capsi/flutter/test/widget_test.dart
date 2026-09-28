@@ -5,8 +5,7 @@ void main() {
   testWidgets('Capsi shell renders without native runtime', (tester) async {
     await tester.pumpWidget(const CapsiApp());
     await tester.pumpAndSettle();
-    expect(find.text('Capsi could not start'), findsOneWidget);
-    expect(find.text('Try again'), findsOneWidget);
+    expect(find.text('Capsi could not start on this device. Try again.'), findsOneWidget);
   });
 
   testWidgets('Capsi shell UI renders independently of native runtime', (tester) async {
