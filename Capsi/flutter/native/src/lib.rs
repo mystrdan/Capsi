@@ -500,7 +500,15 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                             FileReceipt::Cancelled => TransferState::Cancelled,
                         };
                         if let Ok(mut messages) = MessageStore::load(&data_dir) {
+                            let local_path = messages.get(&peer_id)
+                                .and_then(|conversation| conversation.find_transfer(&transfer_id))
+                                .and_then(|file| file.local_path.clone());
                             let _ = messages.update_transfer(&peer_id, &transfer_id, state_name, None);
+                            if matches!(state, FileReceipt::Cancelled | FileReceipt::Declined) {
+                                if let Some(path) = local_path {
+                                    let _ = std::fs::remove_file(path);
+                                }
+                            }
                         }
                         message_event(&thread_events, serde_json::json!({
                             "type":"file_receipt",
