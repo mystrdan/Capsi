@@ -2,7 +2,7 @@
 //
 // The supplied logo is authoritative, so this script never redraws it: it only
 // removes empty margins, scales it with a box filter and re-encodes it as the
-// PNG sizes + multi-resolution Windows `.ico` that Tauri bundles.
+// PNG sizes + multi-resolution Windows `.ico` used by the Flutter Windows runner.
 //
 // Pure Node (zlib only) so it runs anywhere without native dependencies.
 //
