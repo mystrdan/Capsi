@@ -70,6 +70,16 @@ fn message_event(events: &Arc<Mutex<VecDeque<String>>>, value: serde_json::Value
     }
 }
 
+fn broadcast_message_event(value: serde_json::Value) {
+    let sessions = match message_sessions().lock() {
+        Ok(sessions) => sessions,
+        Err(_) => return,
+    };
+    for session in sessions.values() {
+        message_event(&session.events, value.clone());
+    }
+}
+
 fn discovery_sessions() -> &'static Mutex<HashMap<u64, DiscoverySession>> {
     DISCOVERY_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
@@ -894,6 +904,15 @@ pub extern "C" fn capsi_file_send(
             runtime.block_on(async {
                 capsi_core::transport::connect_and_send(&socket, &identity, &device_id, &envelope).await
             })?;
+
+            let sent = ((index + 1) * chunk_size).min(size);
+            broadcast_message_event(serde_json::json!({
+                "type": "file_progress",
+                "device_id": device_id.as_str(),
+                "transfer_id": transfer_id,
+                "sent": sent,
+                "size": size
+            }));
         }
         Ok(transfer_id)
     })();
