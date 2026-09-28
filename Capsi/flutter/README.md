@@ -1,6 +1,6 @@
 # Capsi Flutter client
 
-This directory contains the shared cross-platform application UI for Capsi.
+This directory contains the Capsi application UI for all supported platforms.
 
 ## Architecture
 
@@ -8,8 +8,11 @@ This directory contains the shared cross-platform application UI for Capsi.
 - **Rust** remains the source of truth for networking, identity, discovery,
   encryption, storage, messaging and file transfer.
 - `native/` is the C-compatible FFI bridge between Flutter and `capsi-core`.
-- The existing Tauri client remains intact while the Flutter client is brought
-  to feature parity.
+- `crates/capsi-core/` contains the platform-independent Capsi behavior.
+
+The former HTML/CSS/JavaScript + Tauri client has been retired. New application
+UI belongs in Flutter. Do not add product UI to a legacy web frontend or Tauri
+shell.
 
 New product operations belong in `capsi-core` first, then should be exposed
 through `native/` to Flutter. Do not reimplement Capsi networking in Dart.
@@ -37,7 +40,7 @@ On Windows PowerShell:
 ```
 
 The bootstrap creates the standard Flutter runners for Windows, Android, iOS,
-macOS and Linux. It does not build or package the Rust library automatically.
+macOS and Linux.
 
 ## Windows native bridge
 
@@ -47,7 +50,7 @@ executable.
 For a complete Windows release build, run from `Capsi/flutter`:
 
 ```powershell
-.\\tool\\build_windows.ps1
+.\tool\build_windows.ps1
 ```
 
 Or from a Bash-compatible shell:
@@ -56,9 +59,8 @@ Or from a Bash-compatible shell:
 ./tool/build_windows.sh
 ```
 
-These scripts generate the Windows runner when needed, install Flutter
-dependencies, build the Rust FFI bridge, build the Flutter Windows release,
-and copy `capsi_ffi.dll` beside `capsi.exe`.
+These scripts install Flutter dependencies, build the Rust FFI bridge, build
+the Flutter Windows release, and copy `capsi_ffi.dll` beside `capsi.exe`.
 
 For the native bridge alone:
 
@@ -66,13 +68,9 @@ For the native bridge alone:
 cargo build --manifest-path Capsi/flutter/native/Cargo.toml --release
 ```
 
-If the DLL is absent from the application directory, Flutter can still open
-the UI but native network/device features will be unavailable.
-
 ## Application surfaces
 
-The Flutter client is being built as a complete application shell, not just a
-communication screen. Current navigation includes:
+The Flutter client is the product application. Current navigation includes:
 
 - Nearby — discovery and device acceptance
 - WorkPlace — local workspace, groups, departments and broadcasts
@@ -80,26 +78,25 @@ communication screen. Current navigation includes:
 - Files — direct file transfers
 - Trusted devices — accepted-device management
 - Settings — connection, privacy, storage, appearance and runtime information
-- About Capsi — product, version, runtime and protocol information
 
 Keep settings and about information grounded in capabilities that actually
 exist in the Rust core. Do not add controls that only look functional.
 
-## Android and Apple targets
+## Platform targets
 
-The Dart FFI layer already selects the platform library name:
+The Dart FFI layer selects the native library for each target:
 
+- Windows: `capsi_ffi.dll`
 - Android: `libcapsi_ffi.so`
 - macOS: `libcapsi_ffi.dylib`
 - Linux: `libcapsi_ffi.so`
 - iOS: the process image
 
-Packaging/linking these artifacts into each Flutter runner is a separate
-platform integration step. Keep the Rust ABI shared across platforms rather
-than creating platform-specific application logic.
+Packaging/linking these artifacts into each Flutter runner is a platform
+integration step. Keep the Rust ABI shared across platforms rather than
+creating platform-specific application logic.
 
 ## Versioning
 
 The Flutter client currently tracks Capsi `1.0.2`. Keep the Flutter version
 and native bridge version aligned with the product release when publishing.
-
