@@ -2,9 +2,9 @@
 
 **CAPSI — Messages and files, device to device.**
 
-> **Run it. Find the computers. Send.**
+> **Run it. Find devices. Send.**
 
-Capsi is a lightweight device-to-device communication utility. It is designed to let connected devices discover one another, exchange messages, and transfer files directly over a supported local communication network.
+Capsi is a lightweight device-to-device communication utility. It lets connected devices discover one another, exchange messages, and transfer files directly over a supported local communication network — with no Internet required for local communication.
 
 Capsi is local-first: local communication does not require a Capsi cloud service, account system, or central workplace server.
 
