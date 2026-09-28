@@ -150,6 +150,16 @@ jobs:
           codesign --force --sign - "$framework_dir/libcapsi_ffi.dylib"
           codesign --deep --force --sign - "$app"
           test -f "$framework_dir/libcapsi_ffi.dylib"
+      - name: Package macOS release
+        shell: bash
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent             "build/macos/Build/Products/Release/Capsi.app"             "build/Capsi-macOS.zip"
+      - name: Upload macOS release
+        uses: actions/upload-artifact@v4
+        with:
+          name: capsi-macos
+          path: Capsi/flutter/build/Capsi-macOS.zip
+          if-no-files-found: error
 
   ios:
     name: iOS release build
