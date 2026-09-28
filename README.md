@@ -156,6 +156,16 @@ The goal is **one Capsi, adapted to the device**, not four unrelated application
 - Flutter startup/runtime handling.
 - Android CI build path.
 
+### Automated verification
+
+GitHub Actions now checks every push and pull request to `main` with:
+
+- Rust core tests (`cargo test -p capsi-core`).
+- Flutter dependency resolution, static analysis, and widget tests.
+- A Windows release build using the checked-in PowerShell build script, with the resulting release directory uploaded as a CI artifact.
+
+The CI build verifies that the source can compile in a clean environment; it does not replace real-device network and installation testing.
+
 ### Still requires real-device validation
 
 Source implementation is not the same as production validation. The following must be tested with actual installations:
