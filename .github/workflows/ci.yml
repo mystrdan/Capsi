@@ -92,6 +92,50 @@ jobs:
           path: Capsi/flutter/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
 
+  macos:
+    name: macOS release build
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: Capsi/flutter
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Generate macOS runner
+        run: flutter create --platforms=macos .
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Build macOS application
+        run: flutter build macos --release
+
+  ios:
+    name: iOS release build
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: Capsi/flutter
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Generate iOS runner
+        run: flutter create --platforms=ios .
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Build iOS application
+        run: flutter build ios --release --no-codesign
+
   windows:
     name: Windows release build
     runs-on: windows-latest
