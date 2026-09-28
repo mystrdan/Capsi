@@ -206,7 +206,7 @@ class _CapsiHomeState extends State<CapsiHome> {
           body: compact
               ? Column(
                   children: [
-                    Expanded(child: _DesktopContent(page: page, body: body, native: native)),
+                    Expanded(child: _DesktopContent(page: page, body: body, native: native, onSettings: () => _showSettings(context))),
                     NavigationBar(
                       selectedIndex: selected,
                       onDestinationSelected: (index) => setState(() => selected = index),
@@ -238,7 +238,7 @@ class _CapsiHomeState extends State<CapsiHome> {
                       ],
                     ),
                     const VerticalDivider(width: 1),
-                    Expanded(child: _DesktopContent(page: page, body: body, native: native)),
+                    Expanded(child: _DesktopContent(page: page, body: body, native: native, onSettings: () => _showSettings(context))),
                   ],
                 ),
         );
@@ -251,8 +251,9 @@ class _DesktopContent extends StatelessWidget {
   final ({IconData icon, String label}) page;
   final Widget body;
   final CapsiNative? native;
+  final VoidCallback? onSettings;
 
-  const _DesktopContent({required this.page, required this.body, required this.native});
+  const _DesktopContent({required this.page, required this.body, required this.native, this.onSettings});
 
   @override
   Widget build(BuildContext context) {
@@ -281,7 +282,7 @@ class _DesktopContent extends StatelessWidget {
                     const SizedBox(width: 8),
                     IconButton(
                       tooltip: 'Settings',
-                      onPressed: () => _showSettings(context),
+                      onPressed: onSettings == null ? null : () => onSettings!(),
                       icon: const Icon(Icons.settings_outlined),
                     ),
                   ],
