@@ -839,8 +839,7 @@ class _AboutDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final runtime = native?.runtimeVersion ?? 'Unavailable';
-    final protocol = native?.protocolVersion ?? 'Unavailable';
+    final version = native?.runtimeVersion ?? '1.0.2';
 
     return AlertDialog(
       title: Row(
@@ -866,20 +865,11 @@ class _AboutDialog extends StatelessWidget {
               style: TextStyle(height: 1.5, color: Color(0xFF9AA19C)),
             ),
             SizedBox(height: 18),
-            Text('CAPSICOM', style: TextStyle(fontWeight: FontWeight.w700)),
-            SizedBox(height: 4),
-            Text('Capsi 1.0.2', style: TextStyle(color: Color(0xFF858D88))),
+            Text('Version $version', style: TextStyle(color: Color(0xFF858D88))),
           ],
         ),
       ),
       actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 8, bottom: 6),
-          child: Text(
-            'Runtime $runtime · Protocol $protocol',
-            style: const TextStyle(fontSize: 11, color: Color(0xFF666E69)),
-          ),
-        ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Close'),
@@ -907,7 +897,7 @@ class _NetworkStatus extends StatelessWidget {
         children: [
           Icon(Icons.circle, size: 7, color: available ? const Color(0xFFB8F36B) : Colors.orange),
           const SizedBox(width: 7),
-          Text(available ? 'Local network' : 'Core unavailable', style: const TextStyle(fontSize: 12)),
+          Text(available ? 'Ready' : 'Unavailable', style: const TextStyle(fontSize: 12)),
         ],
       ),
     );
@@ -1627,7 +1617,7 @@ class _PageBodyState extends State<_PageBody> {
     // For incoming transfers the .part file is real progress. For outgoing
     // transfers, the selected source file is already complete, so never use
     // its size as a fake "sent" byte count.
-    if (!outgoing && received == null && localPath != null && total != null && total > 0) {
+    if (!outgoing && localPath != null && total != null && total > 0) {
       try {
         final length = File(localPath).lengthSync();
         if (length >= 0) received = length;
