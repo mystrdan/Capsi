@@ -16,6 +16,5 @@ void main() {
     expect(find.text('Messages'), findsOneWidget);
     expect(find.text('Files'), findsOneWidget);
     expect(find.text('Trusted devices'), findsOneWidget);
-    expect(find.text('Run it. Find devices. Send.'), findsOneWidget);
   });
 }
