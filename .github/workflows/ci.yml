@@ -199,10 +199,10 @@ jobs:
         run: |
           app="build/ios/iphoneos/Runner.app/Runner"
           test -f "$app"
-          nm -u "$app" | grep -E "capsi_(runtime|discovery|message|file|workplace|trust)" >/dev/null && {
-            echo "Expected Capsi Rust symbols remain unresolved."
-            exit 1
-          } || true
+          echo "Checking exported Capsi FFI symbols in the iOS executable..."
+          nm -gU "$app" | grep "_capsi_runtime_version"
+          nm -gU "$app" | grep "_capsi_discovery_start"
+          nm -gU "$app" | grep "_capsi_message_send"
 
   windows:
     name: Windows release build
