@@ -134,9 +134,12 @@ flutter build ios --release --no-codesign
 ```
 
 GitHub Actions verifies both Apple Flutter runners in clean macOS environments.
-The Apple builds currently validate the shared Flutter application shell; native
-Rust packaging and real-device communication still require platform-specific
-integration and validation before release.
+The macOS release pipeline now bundles the Rust FFI library inside the app's
+Contents/Frameworks directory and publishes the packaged app as a CI artifact.
+The iOS pipeline currently compiles the Rust static library for device and
+simulator targets; linking that static library into the generated iOS Runner and
+real-device communication still require platform-specific validation before
+release.
 
 ## Cross-platform interface principles
 
@@ -182,6 +185,7 @@ The goal is **one Capsi, adapted to the device**, not four unrelated application
 - Shared responsive Flutter application UI.
 - Flutter startup/runtime handling.
 - Android CI build path.
+- macOS Rust FFI bundle path and packaged release artifact.
 
 ### Automated verification
 
