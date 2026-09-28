@@ -1864,10 +1864,10 @@ class _PageBodyState extends State<_PageBody> {
     if (data == null || native == null || widget.trustedDevices.isEmpty || !mounted) return;
 
     final selectedId = _validSelectedDevice() ?? widget.trustedDevices.first.deviceId;
-    final result = await FilePicker.platform.pickFiles(withData: false);
-    if (!mounted || result == null || result.files.single.path == null) return;
+    final file = await FilePicker.platform.pickFile();
+    if (!mounted || file == null || file.path == null) return;
 
-    final transferId = await _sendFileInIsolate(data, selectedId, result.files.single.path!);
+    final transferId = await _sendFileInIsolate(data, selectedId, file.path!);
     if (transferId == null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('File transfer could not be started.')),
