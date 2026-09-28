@@ -839,7 +839,28 @@ class _PageBodyState extends State<_PageBody> {
             const Card(child: Padding(padding: EdgeInsets.all(24), child: Text('No trusted devices yet. Accept a device from Nearby to add it here.')))
           else
             for (final device in widget.trustedDevices)
-              Card(child: ListTile(leading: const Icon(Icons.verified_user_outlined), title: Text(device.displayName), subtitle: Text(device.fingerprint))),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.verified_user_outlined),
+                  title: Text(device.displayName),
+                  subtitle: Text(
+                    device.fingerprint.isEmpty ? 'Fingerprint unavailable' : device.fingerprint,
+                  ),
+                  trailing: widget.native == null || widget.dataDirectory == null
+                      ? null
+                      : IconButton(
+                          tooltip: 'Remove trusted device',
+                          icon: const Icon(Icons.remove_circle_outline),
+                          onPressed: () {
+                            final removed = widget.native!.ignoreTrust(
+                              widget.dataDirectory!,
+                              device.deviceId,
+                            );
+                            if (removed != null) widget.onTrustChanged();
+                          },
+                        ),
+                ),
+              ),
         ],
       );
     }
