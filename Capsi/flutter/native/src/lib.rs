@@ -379,6 +379,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         message_event(&thread_events, serde_json::json!({
                             "type":"file_offer",
                             "device_id":peer_id.as_str(),
+                            "device_name":known.name,
                             "transfer_id":offer.transfer_id,
                             "file_name":offer.file_name,
                             "size":offer.size,
