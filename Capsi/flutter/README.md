@@ -42,6 +42,18 @@ On Windows PowerShell:
 The bootstrap creates the standard Flutter runners for Windows, Android, iOS,
 macOS and Linux.
 
+## Android release build
+
+The Android release build generates the standard Flutter Android runner in CI, builds the Rust FFI bridge for `arm64-v8a`, `armeabi-v7a` and `x86_64`, packages those libraries under `android/app/src/main/jniLibs/`, and produces a release APK.
+
+For local Android setup, generate the runner first:
+
+```bash
+flutter create --platforms=android .
+```
+
+Then build the Rust bridge for Android with `cargo-ndk` and package the resulting `.so` libraries into the Android runner before running `flutter build apk --release`.
+
 ## Windows native bridge
 
 The Windows Flutter client expects `capsi_ffi.dll` beside the application
@@ -73,7 +85,7 @@ cargo build --manifest-path Capsi/flutter/native/Cargo.toml --release
 The Flutter client is the product application. Current navigation includes:
 
 - Nearby — discovery and device acceptance
-- WorkPlace — local workspace, groups, departments and broadcasts
+- Workplace — local workspace, groups, departments and broadcasts
 - Messages — trusted-device conversations
 - Files — direct file transfers
 - Trusted devices — accepted-device management
