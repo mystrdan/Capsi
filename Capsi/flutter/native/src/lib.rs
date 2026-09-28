@@ -142,7 +142,7 @@ pub extern "C" fn capsi_discovery_start(
                         let _ = store.save_if_dirty(&data_dir);
                     }
                     if let Ok(json) = serde_json::to_string(&peers) {
-                        if let Ok(mut current) = thread_latest.lock() {
+                        if let Ok(mut current) = thread_events.lock() {
                             *current = json;
                         }
                     }
@@ -291,7 +291,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
     let stop = Arc::new(AtomicBool::new(false));
     let events = Arc::new(Mutex::new(VecDeque::new()));
     let thread_stop = Arc::clone(&stop);
-    let thread_latest = Arc::clone(&latest);
+    let thread_events = Arc::clone(&events);
 
     if std::thread::Builder::new().name("capsi-messages".into()).spawn(move || {
         let runtime = match tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build() {
@@ -316,7 +316,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                 let (stream, addr) = match accepted {
                     Ok(Ok(value)) => value,
                     Ok(Err(error)) => {
-                        message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                        message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                         continue;
                     }
                     Err(_) => continue,
@@ -325,7 +325,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                 let (peer_id, envelope) = match capsi_core::transport::accept_and_read(stream, &identity).await {
                     Ok(value) => value,
                     Err(error) => {
-                        message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                        message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                         continue;
                     }
                 };
@@ -333,14 +333,14 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                 let trust = match TrustStore::load(&data_dir) {
                     Ok(store) => store,
                     Err(error) => {
-                        message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                        message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                         continue;
                     }
                 };
                 let known = match trust.get(&peer_id) {
                     Some(device) if device.is_trusted() => device.clone(),
                     _ => {
-                        message_event(&thread_latest, serde_json::json!({"error":"untrusted device","device_id":peer_id.as_str()}));
+                        message_event(&thread_events, serde_json::json!({"error":"untrusted device","device_id":peer_id.as_str()}));
                         continue;
                     }
                 };
@@ -350,18 +350,18 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         let mut messages = match MessageStore::load(&data_dir) {
                             Ok(store) => store,
                             Err(error) => {
-                                message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                                message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                                 continue;
                             }
                         };
                         let incoming_dir = data_dir.join("files").join("incoming");
                         if let Err(error) = std::fs::create_dir_all(&incoming_dir) {
-                            message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                            message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                             continue;
                         }
                         let temp_path = incoming_dir.join(format!("{}.part", offer.transfer_id));
                         if let Err(error) = File::create(&temp_path) {
-                            message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                            message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                             continue;
                         }
                         let mut stored = StoredMessage::file(&offer, false);
@@ -372,7 +372,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                             file.state = if offer.size == 0 { TransferState::Complete } else { TransferState::Transferring };
                         }
                         if let Err(error) = messages.append(&peer_id, &known.name, stored) {
-                            message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                            message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                             continue;
                         }
 
@@ -394,7 +394,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         });
                         let socket = format!("{}:{}", addr.ip(), 45892);
                         let _ = capsi_core::transport::connect_and_send(&socket, &identity, &peer_id, &receipt).await;
-                        message_event(&thread_latest, serde_json::json!({
+                        message_event(&thread_events, serde_json::json!({
                             "type":"file_offer",
                             "device_id":peer_id.as_str(),
                             "transfer_id":offer.transfer_id,
@@ -406,58 +406,58 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         let raw = match base64::engine::general_purpose::STANDARD.decode(data) {
                             Ok(bytes) => bytes,
                             Err(error) => {
-                                message_event(&thread_latest, serde_json::json!({"error": format!("invalid file chunk: {error}")}));
+                                message_event(&thread_events, serde_json::json!({"error": format!("invalid file chunk: {error}")}));
                                 continue;
                             }
                         };
                         if capsi_core::util::digest_hex(&raw) != digest {
-                            message_event(&thread_latest, serde_json::json!({"error":"file chunk digest mismatch","transfer_id":transfer_id}));
+                            message_event(&thread_events, serde_json::json!({"error":"file chunk digest mismatch","transfer_id":transfer_id}));
                             continue;
                         }
 
                         let mut messages = match MessageStore::load(&data_dir) {
                             Ok(store) => store,
                             Err(error) => {
-                                message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                                message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                                 continue;
                             }
                         };
                         let conversation = match messages.get(&peer_id) {
                             Some(value) => value,
                             None => {
-                                message_event(&thread_latest, serde_json::json!({"error":"unknown file transfer","transfer_id":transfer_id}));
+                                message_event(&thread_events, serde_json::json!({"error":"unknown file transfer","transfer_id":transfer_id}));
                                 continue;
                             }
                         };
                         let file = match conversation.find_transfer(&transfer_id) {
                             Some(value) => value.clone(),
                             None => {
-                                message_event(&thread_latest, serde_json::json!({"error":"unknown file transfer","transfer_id":transfer_id}));
+                                message_event(&thread_events, serde_json::json!({"error":"unknown file transfer","transfer_id":transfer_id}));
                                 continue;
                             }
                         };
                         let temp_path = match file.local_path {
                             Some(path) => PathBuf::from(path),
                             None => {
-                                message_event(&thread_latest, serde_json::json!({"error":"file transfer has no local path","transfer_id":transfer_id}));
+                                message_event(&thread_events, serde_json::json!({"error":"file transfer has no local path","transfer_id":transfer_id}));
                                 continue;
                             }
                         };
                         let current_len = std::fs::metadata(&temp_path).map(|m| m.len()).unwrap_or(0);
                         let expected_index = current_len / capsi_core::TRANSFER_CHUNK_SIZE as u64;
                         if index != expected_index {
-                            message_event(&thread_latest, serde_json::json!({"error":"file chunk out of order","transfer_id":transfer_id,"expected":expected_index,"received":index}));
+                            message_event(&thread_events, serde_json::json!({"error":"file chunk out of order","transfer_id":transfer_id,"expected":expected_index,"received":index}));
                             continue;
                         }
                         let mut output = match OpenOptions::new().append(true).open(&temp_path) {
                             Ok(file) => file,
                             Err(error) => {
-                                message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                                message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                                 continue;
                             }
                         };
                         if let Err(error) = output.write_all(&raw) {
-                            message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                            message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                             continue;
                         }
 
@@ -465,14 +465,14 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         if new_len >= file.size {
                             if new_len != file.size || capsi_core::util::digest_file(&temp_path).ok().as_deref() != Some(file.digest.as_str()) {
                                 let _ = messages.update_transfer(&peer_id, &transfer_id, TransferState::Failed, None);
-                                message_event(&thread_latest, serde_json::json!({"error":"file digest or size mismatch","transfer_id":transfer_id}));
+                                message_event(&thread_events, serde_json::json!({"error":"file digest or size mismatch","transfer_id":transfer_id}));
                                 continue;
                             }
                             let download_dir = data_dir.join("files").join("downloads");
                             let _ = std::fs::create_dir_all(&download_dir);
                             let final_path = download_dir.join(&file.file_name);
                             if let Err(error) = std::fs::rename(&temp_path, &final_path) {
-                                message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                                message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                                 continue;
                             }
                             let _ = messages.update_transfer(&peer_id, &transfer_id, TransferState::Complete, Some(final_path.to_string_lossy().to_string()));
@@ -482,7 +482,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                             });
                             let socket = format!("{}:{}", addr.ip(), 45892);
                             let _ = capsi_core::transport::connect_and_send(&socket, &identity, &peer_id, &receipt).await;
-                            message_event(&thread_latest, serde_json::json!({"type":"file_complete","device_id":peer_id.as_str(),"transfer_id":transfer_id,"file_name":file.file_name,"size":file.size}));
+                            message_event(&thread_events, serde_json::json!({"type":"file_complete","device_id":peer_id.as_str(),"transfer_id":transfer_id,"file_name":file.file_name,"size":file.size}));
                         }
                     }
                     Message::FileReceipt { transfer_id, state } => {
@@ -496,7 +496,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         if let Ok(mut messages) = MessageStore::load(&data_dir) {
                             let _ = messages.update_transfer(&peer_id, &transfer_id, state_name, None);
                         }
-                        message_event(&thread_latest, serde_json::json!({
+                        message_event(&thread_events, serde_json::json!({
                             "type":"file_receipt",
                             "device_id":peer_id.as_str(),
                             "transfer_id":transfer_id,
@@ -505,7 +505,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                     }
                     Message::WorkplaceSync(sync) => {
                         if sync.actor_device_id != peer_id.as_str() {
-                            message_event(&thread_latest, serde_json::json!({
+                            message_event(&thread_events, serde_json::json!({
                                 "error":"workplace sync actor does not match authenticated peer",
                                 "device_id":peer_id.as_str()
                             }));
@@ -516,7 +516,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         let existing = match store.load() {
                             Ok(value) => value,
                             Err(error) => {
-                                message_event(&thread_latest, serde_json::json!({"error":error}));
+                                message_event(&thread_events, serde_json::json!({"error":error}));
                                 continue;
                             }
                         };
@@ -528,10 +528,10 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         match result {
                             Ok(workspace) => {
                                 if let Err(error) = store.save(&workspace) {
-                                    message_event(&thread_latest, serde_json::json!({"error":error}));
+                                    message_event(&thread_events, serde_json::json!({"error":error}));
                                     continue;
                                 }
-                                message_event(&thread_latest, serde_json::json!({
+                                message_event(&thread_events, serde_json::json!({
                                     "type":"workplace_sync",
                                     "device_id":peer_id.as_str(),
                                     "workspace_id":workspace.id,
@@ -539,7 +539,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                                 }));
                             }
                             Err(error) => {
-                                message_event(&thread_latest, serde_json::json!({
+                                message_event(&thread_events, serde_json::json!({
                                     "error":format!("workplace sync rejected: {error}"),
                                     "device_id":peer_id.as_str()
                                 }));
@@ -551,7 +551,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         let Some(mut workspace) = (match store.load() {
                             Ok(value) => value,
                             Err(error) => {
-                                message_event(&thread_latest, serde_json::json!({"error":error}));
+                                message_event(&thread_events, serde_json::json!({"error":error}));
                                 continue;
                             }
                         }) else {
@@ -569,7 +569,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                             && workspace.members.iter().any(|member| member.device_id == peer_id.as_str());
 
                         if !authorized {
-                            message_event(&thread_latest, serde_json::json!({
+                            message_event(&thread_events, serde_json::json!({
                                 "error":"workplace message sender is not a member of the group",
                                 "device_id":peer_id.as_str(),
                                 "group_id":workplace_message.group_id
@@ -586,7 +586,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                             workspace.mark_received_message(&envelope.id);
                             workspace.touch();
                             if let Err(error) = store.save(&workspace) {
-                                message_event(&thread_latest, serde_json::json!({"error":error}));
+                                message_event(&thread_events, serde_json::json!({"error":error}));
                                 continue;
                             }
 
@@ -596,7 +596,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                             let socket = format!("{}:{}", addr.ip(), 45892);
                             let _ = capsi_core::transport::connect_and_send(&socket, &identity, &peer_id, &receipt).await;
 
-                            message_event(&thread_latest, serde_json::json!({
+                            message_event(&thread_events, serde_json::json!({
                                 "type":"workplace_message",
                                 "device_id":peer_id.as_str(),
                                 "group_id":workplace_message.group_id,
@@ -613,7 +613,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         let Some(mut workspace) = (match store.load() {
                             Ok(value) => value,
                             Err(error) => {
-                                message_event(&thread_latest, serde_json::json!({"error":error}));
+                                message_event(&thread_events, serde_json::json!({"error":error}));
                                 continue;
                             }
                         }) else {
@@ -635,7 +635,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                             created_at,
                         ) {
                             let _ = store.save(&workspace);
-                            message_event(&thread_latest, serde_json::json!({
+                            message_event(&thread_events, serde_json::json!({
                                 "type":"workplace_broadcast",
                                 "broadcast_id":broadcast.broadcast_id
                             }));
@@ -645,7 +645,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         let mut stored = match StoredMessage::text(&text.body, false) {
                             Ok(message) => message,
                             Err(error) => {
-                                message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                                message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                                 continue;
                             }
                         };
@@ -656,12 +656,12 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         let mut messages = match MessageStore::load(&data_dir) {
                             Ok(store) => store,
                             Err(error) => {
-                                message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                                message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                                 continue;
                             }
                         };
                         if let Err(error) = messages.append(&peer_id, &known.name, stored) {
-                            message_event(&thread_latest, serde_json::json!({"error": error.to_string()}));
+                            message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                             continue;
                         }
 
@@ -671,7 +671,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         let socket = format!("{}:{}", addr.ip(), 45892);
                         let _ = capsi_core::transport::connect_and_send(&socket, &identity, &peer_id, &receipt).await;
 
-                        message_event(&thread_latest, serde_json::json!({
+                        message_event(&thread_events, serde_json::json!({
                             "type":"message",
                             "device_id":peer_id.as_str(),
                             "message_id":envelope.id,
@@ -688,7 +688,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                                 let _ = capsi_core::workplace::WorkspaceStore::new(&data_dir).save(&workspace);
                             }
                         }
-                        message_event(&thread_latest, serde_json::json!({
+                        message_event(&thread_events, serde_json::json!({
                             "type":"delivery_receipt",
                             "device_id":peer_id.as_str(),
                             "message_id":receipt.message_id
