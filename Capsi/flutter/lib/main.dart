@@ -360,6 +360,35 @@ class _CapsiHomeState extends State<CapsiHome> {
     (icon: Icons.verified_user_outlined, label: 'Trusted devices'),
   ];
 
+  Future<void> _showIncomingFileOffer(Map<String, dynamic> event) async {
+    final transferId = event['transfer_id']?.toString();
+    final deviceId = event['device_id']?.toString();
+    if (transferId == null || deviceId == null || transferId.isEmpty || deviceId.isEmpty) return;
+    if (_incomingOfferDialogs.contains(transferId) || !mounted) return;
+    _incomingOfferDialogs.add(transferId);
+    try {
+      final fileName = event['file_name']?.toString() ?? 'Incoming file';
+      final size = event['size'] is num ? (event['size'] as num).toInt() : 0;
+      final accepted = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Incoming file'),
+          content: Text(fileName + '\n' + _formatBytes(size) + '\n\nAccept this file transfer?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Decline')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Accept')),
+          ],
+        ),
+      );
+      final dir = dataDirectory;
+      if (dir == null) return;
+      final operation = accepted == true ? 'file_accept' : 'file_decline';
+      await _nativeJsonInIsolate(dir, operation, [deviceId, transferId]);
+    } finally {
+      _incomingOfferDialogs.remove(transferId);
+    }
+  }
+
   String _formatBytes(int bytes) {
     if (bytes < 1024) return bytes.toString() + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toStringAsFixed(1) + ' KB';
