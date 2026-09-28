@@ -819,20 +819,20 @@ pub extern "C" fn capsi_file_send(
         let identity = DeviceIdentity::load_or_create(&data_dir)?;
         let offer_envelope = Envelope::new(Message::FileOffer(offer.clone()));
 
-        let runtime = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build()
-            .map_err(|e| capsi_core::CapsiError::Unsupported(format!("runtime: {e}")))?;
-        runtime.block_on(async {
-            capsi_core::transport::connect_and_send(&socket, &identity, &device_id, &offer_envelope).await
-        })?;
-
-        // Persist the outgoing offer before waiting for the peer's receipt. The
-        // listener can receive an acceptance immediately after the offer is sent.
+        // Persist before opening the network round trip: the peer can accept
+        // immediately, and the listener must have a durable transfer record to update.
         let mut messages = MessageStore::load(&data_dir)?;
         let mut stored = StoredMessage::file(&offer, true);
         if let Some(file) = stored.file.as_mut() {
             file.local_path = Some(file_path.to_string_lossy().to_string());
         }
         messages.append(&device_id, &peer.name, stored)?;
+
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build()
+            .map_err(|e| capsi_core::CapsiError::Unsupported(format!("runtime: {e}")))?;
+        runtime.block_on(async {
+            capsi_core::transport::connect_and_send(&socket, &identity, &device_id, &offer_envelope).await
+        })?;
 
         // The receiver acknowledges the offer before chunks are sent. Each
         // envelope currently uses its own TCP connection, so waiting for the
@@ -942,7 +942,12 @@ fn file_transfer_action(
             .and_then(|path| std::fs::metadata(path).ok())
             .map(|metadata| metadata.len() / capsi_core::TRANSFER_CHUNK_SIZE as u64)
             .unwrap_or(0);
-        messages.update_transfer(device_id, transfer_id, TransferState::Transferring, None)?;
+        let next_state = if file.size == 0 {
+            TransferState::Complete
+        } else {
+            TransferState::Transferring
+        };
+        messages.update_transfer(device_id, transfer_id, next_state, None)?;
         send_file_receipt_action(
             data_dir,
             device_id,
