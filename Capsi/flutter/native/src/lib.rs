@@ -16,7 +16,7 @@ use capsi_core::protocol::{Envelope, FileOffer, FileReceipt, Message, TextMessag
 use capsi_core::storage::conversation::TransferState;
 use capsi_core::storage::conversation::{DeliveryState, MessageStore, StoredMessage};
 
-fn (now_millis() as i64) -> u64 {
+fn now_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis() as u64)
