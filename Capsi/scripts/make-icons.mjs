@@ -13,8 +13,8 @@ import { deflateSync, inflateSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const FRONTEND = join(HERE, '..', 'frontend');
-const SRC = process.argv[2] || 'd:/Capsi/Source/capsi-logo-removebg.png';
+const FLUTTER = join(HERE, '..', 'flutter');
+const SRC = process.argv[2] || join(HERE, '..', 'icons', 'capsi-logo-512.png');
 
 /* ------------------------------------------------------------------ decode */
 
@@ -301,20 +301,17 @@ function main() {
 
   const groups = [
     {
-      dir: join(FRONTEND, 'icons'),
-      files: [['capsi-icon.png', 512], ['favicon.png', 64]],
+      dir: join(FLUTTER, 'assets'),
+      files: [['capsi-logo-512.png', 512]],
     },
     {
       dir: join(HERE, '..', 'icons'),
       files: [['capsi-logo-512.png', 512], ['capsi-logo-256.png', 256], ['capsi-logo-64.png', 64]],
     },
     {
-      dir: join(HERE, '..', 'src-tauri', 'icons'),
+      dir: join(FLUTTER, 'windows', 'runner', 'resources'),
       files: [
-        ['icon.png', 512],
-        ['32x32.png', 32],
-        ['128x128.png', 128],
-        ['128x128@2x.png', 256],
+        ['app-icon-512.png', 512],
         ...winLogos,
       ],
     },
@@ -332,7 +329,7 @@ function main() {
   const ico = encodeIco(
     [16, 24, 32, 48, 64, 128, 256].map((size) => ({ size, rgba: resizeSquare(trimmed, size, 0.06) })),
   );
-  const icoPath = join(HERE, '..', 'src-tauri', 'icons', 'icon.ico');
+  const icoPath = join(HERE, '..', 'flutter', 'windows', 'runner', 'resources', 'app_icon.ico');
   writeFileSync(icoPath, ico);
   console.log(`  wrote ${icoPath.replace(/\\/g, '/')} (7 sizes, ${ico.length} B)`);
 }
