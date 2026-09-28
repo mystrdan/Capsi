@@ -1183,7 +1183,7 @@ ListView(
                           : () => _createWorkplaceName(
                               context,
                               'Create group',
-                              (name) => widget.native!.createWorkplaceGroup(widget.dataDirectory!, name),
+                              'workplace_group',
                             ),
                       icon: const Icon(Icons.group_add_outlined),
                       label: const Text('Group'),
@@ -1205,7 +1205,7 @@ ListView(
                           _createWorkplaceName(
                             context,
                             'Create group',
-                            (name) => widget.native!.createWorkplaceGroup(widget.dataDirectory!, name),
+                            'workplace_group',
                           );
                         } else {
                           _createBroadcast(context);
@@ -1349,7 +1349,7 @@ ListView(
   Future<void> _createWorkplaceName(
     BuildContext context,
     String title,
-    Map<String, dynamic>? Function(String name) action,
+    String operation,
   ) async {
     final controller = TextEditingController();
     final name = await showDialog<String>(
@@ -1373,9 +1373,6 @@ ListView(
     if (!mounted || name == null || name.isEmpty) return;
     final data = widget.dataDirectory;
     if (data == null) return;
-    final operation = title.toLowerCase().contains('department')
-        ? 'workplace_department'
-        : 'workplace_group';
     final result = await _nativeJsonInIsolate(data, operation, [name]);
     if (!mounted) return;
     if (result != null && result['error'] == null) {
