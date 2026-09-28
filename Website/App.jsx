@@ -47,6 +47,30 @@ function App() {
 }
 function Step({ n, title, text }) { return <article className="step"><span className="step-number">{n}</span><h3>{title}</h3><p>{text}</p></article>; }
 function Feature({ icon, title, text }) { return <article className="feature"><div className="feature-icon">{icon}</div><h3>{title}</h3><p>{text}</p></article>; }
-function Platform({ name, status }) { return <div className="platform"><span className="platform-icon">□</span><div><strong>{name}</strong><small>{status}</small></div></div>; }
+function Platform({ name, status }) {
+  const logos = {
+    Windows: (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="platform-svg">
+        <path fill="currentColor" d="M2 4.5 10.5 3.3v8.2H2V4.5Zm9.8-1.35L22 1.7v9.8h-10.2V3.15ZM2 12.5h8.5v8.2L2 19.5v-7Zm9.8 0H22v9.8l-10.2-1.45V12.5Z"/>
+      </svg>
+    ),
+    Android: (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="platform-svg">
+        <path fill="currentColor" d="M7.1 7.4 5.55 4.72a.65.65 0 1 1 1.12-.65l1.53 2.64A8.2 8.2 0 0 1 12 5.8c1.35 0 2.63.32 3.76.9l1.57-2.63a.65.65 0 1 1 1.12.67L16.9 7.42A7.65 7.65 0 0 1 19.7 13v4.25c0 .96-.78 1.75-1.75 1.75h-.95v2.45a1.05 1.05 0 1 1-2.1 0V19h-5.8v2.45a1.05 1.05 0 1 1-2.1 0V19h-.95A1.75 1.75 0 0 1 4.3 17.25V13a7.65 7.65 0 0 1 2.8-5.6ZM8.1 11.1a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8Zm7.8 0a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8Z"/>
+      </svg>
+    ),
+    macOS: (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="platform-svg">
+        <path fill="currentColor" d="M16.9 12.7c0-2.2 1.8-3.3 1.9-3.4-1-.9-2.5-1-3-.9-1.3.1-2.5.8-3.1.8-.7 0-1.6-.8-2.7-.8-1.4 0-2.7.8-3.5 2.1-1.5 2.6-.4 6.5 1.1 8.7.7 1 1.6 2.1 2.8 2 .? 0-1.6-.5-1.6-.5-.9-1.3-1.5-1.7-1.5-2.7 0-1 .6-1.5.7-1.5.8-1.1 2-1.4 3.1-1.4 1.1 0 2.1.5 2.7.5.7 0 1.8-.6 3-.6 1.3 0 2.5.7 3.2 1.8-2.4 1.3-2 4.1.4 5.1-.5 1.5-1.2 2.9-2.2 4.3-.8 1.1-1.7 2.2-3 2.2-1.2 0-1.6-.7-3.1-.7-1.4 0-1.9.7-3.1.7-1.3 0-2.3-1.2-3.1-2.3-2-2.9-3.5-8.1-1.5-11.8.9-1.8 2.6-2.9 4.4-2.9 1.3 0 2.5.8 3.2.8.8 0 2.2-1 3.7-.9.6 0 2.5.2 3.7 1.9-3.5 2-2.9 6.1-.5 7.4-.6.4-1.2.7-1.8.9-.4-1.2-.5-2.4-.4-3.6ZM14.6 5.2c.6-.8 1-1.9.9-3-.9 0-2 .6-2.7 1.3-.6.7-1.1 1.8-1 2.9 1 .1 2-.4 2.8-1.2Z"/>
+      </svg>
+    ),
+    iOS: (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="platform-svg">
+        <path fill="currentColor" d="M16.6 12.4c0-2.1 1.7-3.1 1.8-3.2-1-.9-2.4-1-2.9-1-1.2-.1-2.4.7-3 .7-.6 0-1.5-.7-2.5-.7-1.3 0-2.6.8-3.3 2-.? 0-1.4 2.5-1.4 5.1 0 2.3 1 4.6 2.2 6.1.6.8 1.4 1.7 2.4 1.7 1 0 1.4-.6 2.6-.6 1.2 0 1.5.6 2.6.6 1.1 0 1.8-.8 2.4-1.7.7-1 1.1-2 1.4-3.1-3.1-1.3-2.7-5.3-.3-6.9-1-1.2-2.4-1.8-3.9-1.9Z"/>
+      </svg>
+    )
+  };
+  return <div className="platform"><span className="platform-icon">{logos[name] ?? <span className="platform-fallback">•</span>}</span><div><strong>{name}</strong><small>{status}</small></div></div>;
+}
 function AppPreview() { return <div className="app-preview"><div className="window-bar"><span className="window-logo"><img src={logoUrl} alt="" /></span><b>Capsi</b><span className="window-more">•••</span></div><div className="preview-body"><aside><div className="preview-nav active">Conversations</div><div className="preview-nav">Nearby</div><div className="preview-nav">Files</div><div className="preview-nav">WorkPlace</div></aside><div className="preview-main"><div className="preview-title">Nearby</div><div className="device-row"><span className="avatar">OP</span><div><b>Office PC</b><small>Trusted device</small></div><span className="online">●</span></div><div className="device-row"><span className="avatar">LP</span><div><b>Laptop</b><small>Available to connect</small></div><span className="online">●</span></div><div className="preview-empty"><img src={logoUrl} alt="" /><b>Find devices. Send.</b><span>Messages and files, device to device.</span></div></div></div></div>; }
 createRoot(document.getElementById('root')).render(<App />);
