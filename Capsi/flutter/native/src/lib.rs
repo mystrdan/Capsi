@@ -369,37 +369,20 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         stored.sent_at = envelope.sent_at;
                         if let Some(file) = stored.file.as_mut() {
                             file.local_path = Some(temp_path.to_string_lossy().to_string());
-                            file.state = if offer.size == 0 { TransferState::Complete } else { TransferState::Transferring };
+                            file.state = TransferState::Offered;
                         }
                         if let Err(error) = messages.append(&peer_id, &known.name, stored) {
                             message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                             continue;
                         }
 
-                        if offer.size == 0 {
-                            let final_path = data_dir.join("files").join("downloads").join(&offer.file_name);
-                            let _ = std::fs::create_dir_all(final_path.parent().unwrap_or(&data_dir));
-                            let _ = std::fs::rename(&temp_path, &final_path);
-                            let _ = messages.update_transfer(&peer_id, &offer.transfer_id, TransferState::Complete, Some(final_path.to_string_lossy().to_string()));
-                        }
-
-                        let receipt_state = if offer.size == 0 {
-                            FileReceipt::Completed
-                        } else {
-                            FileReceipt::Accepted { next_chunk: 0 }
-                        };
-                        let receipt = Envelope::new(Message::FileReceipt {
-                            transfer_id: offer.transfer_id.clone(),
-                            state: receipt_state,
-                        });
-                        let socket = format!("{}:{}", addr.ip(), 45892);
-                        let _ = capsi_core::transport::connect_and_send(&socket, &identity, &peer_id, &receipt).await;
                         message_event(&thread_events, serde_json::json!({
                             "type":"file_offer",
                             "device_id":peer_id.as_str(),
                             "transfer_id":offer.transfer_id,
                             "file_name":offer.file_name,
-                            "size":offer.size
+                            "size":offer.size,
+                            "chunks":offer.chunks
                         }));
                     }
                     Message::FileChunk { transfer_id, index, digest, data } => {
@@ -436,6 +419,14 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                                 continue;
                             }
                         };
+                        if file.state != TransferState::Transferring {
+                            message_event(&thread_events, serde_json::json!({
+                                "error":"file transfer is not accepted",
+                                "transfer_id":transfer_id,
+                                "state":format!("{:?}", file.state)
+                            }));
+                            continue;
+                        }
                         let temp_path = match file.local_path {
                             Some(path) => PathBuf::from(path),
                             None => {
@@ -462,6 +453,13 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         }
 
                         let new_len = current_len + raw.len() as u64;
+                        message_event(&thread_events, serde_json::json!({
+                            "type":"file_progress",
+                            "device_id":peer_id.as_str(),
+                            "transfer_id":transfer_id,
+                            "received":new_len,
+                            "size":file.size
+                        }));
                         if new_len >= file.size {
                             if new_len != file.size || capsi_core::util::digest_file(&temp_path).ok().as_deref() != Some(file.digest.as_str()) {
                                 let _ = messages.update_transfer(&peer_id, &transfer_id, TransferState::Failed, None);
@@ -827,8 +825,13 @@ pub extern "C" fn capsi_file_send(
             capsi_core::transport::connect_and_send(&socket, &identity, &device_id, &offer_envelope).await
         })?;
 
+        // Persist the outgoing offer before waiting for the peer's receipt. The
+        // listener can receive an acceptance immediately after the offer is sent.
         let mut messages = MessageStore::load(&data_dir)?;
-        let stored = StoredMessage::file(&offer, true);
+        let mut stored = StoredMessage::file(&offer, true);
+        if let Some(file) = stored.file.as_mut() {
+            file.local_path = Some(file_path.to_string_lossy().to_string());
+        }
         messages.append(&device_id, &peer.name, stored)?;
 
         // The receiver acknowledges the offer before chunks are sent. Each
@@ -879,6 +882,126 @@ pub extern "C" fn capsi_file_send(
 
     match result {
         Ok(id) => trust_result(id),
+        Err(error) => error_json(&error.to_string()),
+    }
+}
+
+fn send_file_receipt_action(
+    data_dir: &Path,
+    device_id: &DeviceId,
+    transfer_id: &str,
+    state: FileReceipt,
+) -> capsi_core::Result<bool> {
+    let trust = TrustStore::load(data_dir)?;
+    let peer = trust
+        .get(device_id)
+        .filter(|device| device.is_trusted())
+        .ok_or_else(|| capsi_core::CapsiError::NotFound("device is not trusted".into()))?
+        .clone();
+    let address = peer
+        .last_address
+        .ok_or_else(|| capsi_core::CapsiError::NotFound("trusted device has no known address".into()))?;
+    let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
+    let socket = format!("{host}:45892");
+    let identity = DeviceIdentity::load_or_create(data_dir)?;
+    let receipt = Envelope::new(Message::FileReceipt {
+        transfer_id: transfer_id.to_string(),
+        state,
+    });
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .enable_time()
+        .build()
+        .map_err(|e| capsi_core::CapsiError::Unsupported(format!("runtime: {e}")))?;
+    runtime.block_on(async {
+        capsi_core::transport::connect_and_send(&socket, &identity, device_id, &receipt).await
+    })?;
+    Ok(true)
+}
+
+fn file_transfer_action(
+    data_dir: &Path,
+    device_id: &DeviceId,
+    transfer_id: &str,
+    accept: bool,
+) -> capsi_core::Result<bool> {
+    let mut messages = MessageStore::load(data_dir)?;
+    let conversation = messages
+        .get(device_id)
+        .ok_or_else(|| capsi_core::CapsiError::NotFound("conversation not found".into()))?;
+    let file = conversation
+        .find_transfer(transfer_id)
+        .cloned()
+        .ok_or_else(|| capsi_core::CapsiError::NotFound("file transfer not found".into()))?;
+    if file.state != TransferState::Offered {
+        return Err(capsi_core::CapsiError::Invalid("file transfer is no longer awaiting a decision".into()));
+    }
+
+    if accept {
+        let next_chunk = file.local_path.as_deref()
+            .and_then(|path| std::fs::metadata(path).ok())
+            .map(|metadata| metadata.len() / capsi_core::TRANSFER_CHUNK_SIZE as u64)
+            .unwrap_or(0);
+        messages.update_transfer(device_id, transfer_id, TransferState::Transferring, None)?;
+        send_file_receipt_action(
+            data_dir,
+            device_id,
+            transfer_id,
+            if file.size == 0 {
+                FileReceipt::Completed
+            } else {
+                FileReceipt::Accepted { next_chunk }
+            },
+        )?;
+    } else {
+        if let Some(path) = file.local_path.as_deref() {
+            let _ = std::fs::remove_file(path);
+        }
+        messages.update_transfer(device_id, transfer_id, TransferState::Declined, None)?;
+        send_file_receipt_action(data_dir, device_id, transfer_id, FileReceipt::Declined)?;
+    }
+
+    Ok(true)
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_file_accept(
+    data_dir: *const c_char,
+    device_id: *const c_char,
+    transfer_id: *const c_char,
+) -> *mut c_char {
+    let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    let device_id = match c_string(device_id).and_then(|value| DeviceId::from_hex(&value).ok()) {
+        Some(id) => id,
+        None => return error_json("device id is invalid"),
+    };
+    let transfer_id = match c_string(transfer_id).filter(|value| !value.trim().is_empty()) {
+        Some(value) => value,
+        None => return error_json("transfer id is invalid"),
+    };
+    match file_transfer_action(&dir, &device_id, &transfer_id, true) {
+        Ok(value) => trust_result(value),
+        Err(error) => error_json(&error.to_string()),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_file_decline(
+    data_dir: *const c_char,
+    device_id: *const c_char,
+    transfer_id: *const c_char,
+) -> *mut c_char {
+    let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    let device_id = match c_string(device_id).and_then(|value| DeviceId::from_hex(&value).ok()) {
+        Some(id) => id,
+        None => return error_json("device id is invalid"),
+    };
+    let transfer_id = match c_string(transfer_id).filter(|value| !value.trim().is_empty()) {
+        Some(value) => value,
+        None => return error_json("transfer id is invalid"),
+    };
+    match file_transfer_action(&dir, &device_id, &transfer_id, false) {
+        Ok(value) => trust_result(value),
         Err(error) => error_json(&error.to_string()),
     }
 }
