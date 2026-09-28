@@ -163,6 +163,7 @@ class CapsiNative {
         _fileSend = library.lookupFunction<_FileSendNative, _FileSendDart>('capsi_file_send'),
         _fileAccept = library.lookupFunction<_FileActionNative, _FileActionDart>('capsi_file_accept'),
         _fileDecline = library.lookupFunction<_FileActionNative, _FileActionDart>('capsi_file_decline'),
+        _fileCancel = library.lookupFunction<_FileActionNative, _FileActionDart>('capsi_file_cancel'),
         _workplaceLoad = library.lookupFunction<_WorkplaceLoadNative, _WorkplaceLoadDart>('capsi_workplace_load'),
         _workplaceCreate = library.lookupFunction<_WorkplaceCreateNative, _WorkplaceCreateDart>('capsi_workplace_create'),
         _workplaceCreateGroup = library.lookupFunction<_WorkplaceNameActionNative, _WorkplaceNameActionDart>('capsi_workplace_create_group'),
@@ -192,6 +193,7 @@ class CapsiNative {
   final _FileSendDart _fileSend;
   final _FileActionDart _fileAccept;
   final _FileActionDart _fileDecline;
+  final _FileActionDart _fileCancel;
   final _FreeStringDart _freeString;
   final _WorkplaceLoadDart _workplaceLoad;
   final _WorkplaceCreateDart _workplaceCreate;
@@ -458,6 +460,9 @@ class CapsiNative {
 
   bool declineFile(String dataDirectory, String deviceId, String transferId) =>
       _fileAction(_fileDecline, dataDirectory, deviceId, transferId);
+
+  bool cancelFile(String dataDirectory, String deviceId, String transferId) =>
+      _fileAction(_fileCancel, dataDirectory, deviceId, transferId);
 
   bool _fileAction(
     _FileActionDart action,
