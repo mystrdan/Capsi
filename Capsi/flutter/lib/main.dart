@@ -248,8 +248,11 @@ class _CapsiHomeState extends State<CapsiHome> {
           lastMessageEvent = event;
           final transferId = event['transfer_id']?.toString();
           final received = event['received'];
+          final sent = event['sent'];
           if (transferId != null && received is num) {
             _transferReceived[transferId] = received.toInt();
+          } else if (transferId != null && sent is num) {
+            _transferReceived[transferId] = sent.toInt();
           }
           if (event['type'] == 'file_complete' && transferId != null) {
             final size = event['size'];
