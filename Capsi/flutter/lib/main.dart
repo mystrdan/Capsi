@@ -68,6 +68,8 @@ class _CapsiHomeState extends State<CapsiHome> {
   CapsiNative? native;
   List<CapsiPeer> peers = const [];
   bool scanning = false;
+  bool runtimeLoading = true;
+  String? runtimeError;
   int discoveryHandle = 0;
   Timer? discoveryTimer;
   String? dataDirectory;
@@ -85,15 +87,65 @@ class _CapsiHomeState extends State<CapsiHome> {
   }
 
   Future<void> _initializeRuntime() async {
-    final directory = await getApplicationSupportDirectory();
-    if (!mounted) return;
-    dataDirectory = directory.path;
-    if (native == null) return;
-    _loadTrust();
-    _loadWorkplace();
-    workplaceTimer = Timer.periodic(const Duration(seconds: 2), (_) => _loadWorkplace());
-    _startDiscovery();
-    _startMessages();
+    if (mounted) {
+      setState(() {
+        runtimeLoading = true;
+        runtimeError = null;
+      });
+    }
+
+    try {
+      final directory = await getApplicationSupportDirectory();
+      if (!mounted) return;
+      dataDirectory = directory.path;
+
+      if (native == null) {
+        setState(() {
+          runtimeLoading = false;
+          runtimeError = 'The Capsi native core could not be loaded on this platform.';
+        });
+        return;
+      }
+
+      _loadTrust();
+      _loadWorkplace();
+      workplaceTimer?.cancel();
+      workplaceTimer = Timer.periodic(const Duration(seconds: 2), (_) => _loadWorkplace());
+      _startDiscovery();
+      _startMessages();
+
+      if (mounted) {
+        setState(() {
+          runtimeLoading = false;
+          runtimeError = null;
+        });
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        runtimeLoading = false;
+        runtimeError = 'Capsi could not finish starting: $error';
+      });
+    }
+  }
+
+  void _retryRuntime() {
+    discoveryTimer?.cancel();
+    messageTimer?.cancel();
+    workplaceTimer?.cancel();
+
+    if (mounted) {
+      setState(() {
+        discoveryHandle = 0;
+        messageHandle = 0;
+        peers = const [];
+        runtimeLoading = true;
+        runtimeError = null;
+      });
+    }
+
+    native = CapsiNative.tryLoad();
+    _initializeRuntime();
   }
 
   void _loadWorkplace() {
@@ -199,6 +251,14 @@ class _CapsiHomeState extends State<CapsiHome> {
       workplaceData: workplaceData,
     );
 
+    if (runtimeLoading || runtimeError != null) {
+      return _RuntimeGate(
+        loading: runtimeLoading,
+        error: runtimeError,
+        onRetry: _retryRuntime,
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 760;
@@ -243,6 +303,86 @@ class _CapsiHomeState extends State<CapsiHome> {
                 ),
         );
       },
+    );
+  }
+}
+
+class _RuntimeGate extends StatelessWidget {
+  final bool loading;
+  final String? error;
+  final VoidCallback onRetry;
+
+  const _RuntimeGate({
+    required this.loading,
+    required this.error,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF090B0C),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  'assets/capsi-logo-512.png',
+                  width: 88,
+                  height: 88,
+                ),
+                const SizedBox(height: 24),
+                if (loading) ...[
+                  const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Starting Capsi',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  const Text(
+                    'Loading the local Capsi runtime…',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Color(0xFF858D88)),
+                  ),
+                ] else ...[
+                  Text(
+                    'Capsi could not start',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error ?? 'The local runtime is unavailable.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Color(0xFF858D88),
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Try again'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
