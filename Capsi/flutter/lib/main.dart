@@ -640,7 +640,6 @@ class _SettingsDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final version = native?.runtimeVersion ?? '1.0.2';
-    final protocol = native?.protocolVersion ?? 'Unavailable';
 
     return AlertDialog(
       title: Row(
@@ -849,7 +848,7 @@ class _AboutDialog extends StatelessWidget {
           const Text('About Capsi'),
         ],
       ),
-      content: const SizedBox(
+      content: SizedBox(
         width: 500,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -865,7 +864,7 @@ class _AboutDialog extends StatelessWidget {
               style: TextStyle(height: 1.5, color: Color(0xFF9AA19C)),
             ),
             SizedBox(height: 18),
-            Text('Version $version', style: TextStyle(color: Color(0xFF858D88))),
+            Text('Version $version', style: const TextStyle(color: Color(0xFF858D88))),
           ],
         ),
       ),
@@ -1042,7 +1041,7 @@ class _PageBodyState extends State<_PageBody> {
           Text('Trusted devices let you choose who can communicate with you.', style: Theme.of(context).textTheme.bodySmall),
         ]),
         const SizedBox(height: 8),
-        Text(widget.native == null ? 'Rust core not packaged for this build yet.' : 'Capsi is ready to connect and communicate.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: const Color(0xFF606863))),
+        Text(widget.native == null ? 'Capsi is not ready on this device yet.' : 'Capsi is ready to connect and communicate.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: const Color(0xFF606863))),
       ],
     );
   }
