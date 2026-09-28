@@ -75,15 +75,15 @@ class CapsiApp extends StatelessWidget {
         useMaterial3: true,
         scaffoldBackgroundColor: const Color(0xFF090B0C),
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFB8F36B),
+          seedColor: const Color(0xFF7ED957),
           brightness: Brightness.dark,
           surface: const Color(0xFF111516),
         ),
         dividerColor: const Color(0x18FFFFFF),
         navigationRailTheme: const NavigationRailThemeData(
           backgroundColor: Color(0xFF0E1112),
-          indicatorColor: Color(0x18B8F36B),
-          selectedIconTheme: IconThemeData(color: Color(0xFFB8F36B)),
+          indicatorColor: Color(0x187ED957),
+          selectedIconTheme: IconThemeData(color: Color(0xFF7ED957)),
           selectedLabelTextStyle: TextStyle(color: Color(0xFFF4F6F2), fontWeight: FontWeight.w700),
           unselectedIconTheme: IconThemeData(color: Color(0xFF777E79)),
           unselectedLabelTextStyle: TextStyle(color: Color(0xFF777E79)),
@@ -98,7 +98,7 @@ class CapsiApp extends StatelessWidget {
           fillColor: Color(0xFF0E1112),
           border: OutlineInputBorder(borderSide: BorderSide(color: Color(0x18FFFFFF))),
           enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0x18FFFFFF))),
-          focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0x66B8F36B))),
+          focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0x667ED957))),
         ),
       ),
       home: const CapsiHome(),
@@ -549,7 +549,7 @@ class _DesktopContent extends StatelessWidget {
                 Expanded(
                   child: Row(
                     children: [
-                      Icon(page.icon, size: 20, color: const Color(0xFFB8F36B)),
+                      Icon(page.icon, size: 20, color: const Color(0xFF7ED957)),
                       const SizedBox(width: 10),
                       Text(page.label, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                     ],
@@ -588,7 +588,7 @@ class _EmptyPanel extends StatelessWidget {
     child: Padding(
       padding: const EdgeInsets.all(34),
       child: Column(children: [
-        Icon(icon, size: 34, color: const Color(0xFFB8F36B)),
+        Icon(icon, size: 34, color: const Color(0xFF7ED957)),
         const SizedBox(height: 14),
         Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(height: 7),
@@ -604,8 +604,8 @@ class _DeviceIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     width: 42, height: 42,
-    decoration: BoxDecoration(color: const Color(0x18B8F36B), border: Border.all(color: const Color(0x30B8F36B)), borderRadius: BorderRadius.circular(11)),
-    child: Icon(icon, size: 21, color: const Color(0xFFB8F36B)),
+    decoration: BoxDecoration(color: const Color(0x187ED957), border: Border.all(color: const Color(0x307ED957)), borderRadius: BorderRadius.circular(11)),
+    child: Icon(icon, size: 21, color: const Color(0xFF7ED957)),
   );
 }
 
@@ -675,7 +675,7 @@ class _SettingsDialog extends StatelessWidget {
                     subtitle: 'Find Capsi devices that are available on your local connection.',
                     trailing: Icon(
                       native == null ? Icons.error_outline : Icons.check_circle_outline,
-                      color: native == null ? Colors.orange : const Color(0xFFB8F36B),
+                      color: native == null ? Colors.orange : const Color(0xFF7ED957),
                     ),
                   ),
                   _SettingsRow(
@@ -684,7 +684,7 @@ class _SettingsDialog extends StatelessWidget {
                     subtitle: 'Messages are sent directly between your devices.',
                     trailing: Icon(
                       native == null ? Icons.error_outline : Icons.check_circle_outline,
-                      color: native == null ? Colors.orange : const Color(0xFFB8F36B),
+                      color: native == null ? Colors.orange : const Color(0xFF7ED957),
                     ),
                   ),
                 ],
@@ -821,7 +821,7 @@ class _SettingsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListTile(
         contentPadding: const EdgeInsets.symmetric(vertical: 3),
-        leading: Icon(icon, color: const Color(0xFFB8F36B)),
+        leading: Icon(icon, color: const Color(0xFF7ED957)),
         title: Text(title),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 3),
@@ -894,7 +894,7 @@ class _NetworkStatus extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.circle, size: 7, color: available ? const Color(0xFFB8F36B) : Colors.orange),
+          Icon(Icons.circle, size: 7, color: available ? const Color(0xFF7ED957) : Colors.orange),
           const SizedBox(width: 7),
           Text(available ? 'Ready' : 'Unavailable', style: const TextStyle(fontSize: 12)),
         ],
@@ -1036,7 +1036,7 @@ class _PageBodyState extends State<_PageBody> {
           }),
         const SizedBox(height: 28),
         Row(children: [
-          const Icon(Icons.security_outlined, size: 18, color: Color(0xFFB8F36B)),
+          const Icon(Icons.security_outlined, size: 18, color: Color(0xFF7ED957)),
           const SizedBox(width: 9),
           Text('Trusted devices let you choose who can communicate with you.', style: Theme.of(context).textTheme.bodySmall),
         ]),
@@ -1834,7 +1834,7 @@ class _PageBodyState extends State<_PageBody> {
       case 'complete':
       case 'completed':
       case 'delivered':
-        return const Color(0xFFB8F36B);
+        return const Color(0xFF7ED957);
       case 'failed':
       case 'error':
         return Colors.orange;
@@ -2017,7 +2017,7 @@ class _PageBodyState extends State<_PageBody> {
                 ? Icons.verified_outlined
                 : Icons.circle_outlined,
             color: selected.state.toLowerCase() == 'accepted'
-                ? const Color(0xFFB8F36B)
+                ? const Color(0xFF7ED957)
                 : const Color(0xFF777E79),
           ),
         ),
