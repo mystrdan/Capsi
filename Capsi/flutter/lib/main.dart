@@ -259,6 +259,42 @@ class _CapsiHomeState extends State<CapsiHome> {
     });
   }
 
+  Future<void> _showIncomingFileOffer(Map<String, dynamic> event) async {
+    final transferId = event['transfer_id']?.toString();
+    final deviceId = event['device_id']?.toString();
+    final fileName = event['file_name']?.toString() ?? 'File';
+    final size = event['size'];
+    if (transferId == null || deviceId == null || !mounted) return;
+    if (!_incomingOfferDialogs.add(transferId)) return;
+
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Incoming file'),
+        content: Text(
+          '${event['device_name']?.toString() ?? 'A trusted device'} wants to send $fileName (${_formatBytes(size)}).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Decline'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Accept'),
+          ),
+        ],
+      ),
+    );
+
+    _incomingOfferDialogs.remove(transferId);
+    if (!mounted || dataDirectory == null) return;
+
+    final operation = accepted == true ? 'file_accept' : 'file_decline';
+    await _nativeJsonInIsolate(dataDirectory!, operation, [deviceId, transferId]);
+    if (mounted) setState(() {});
+  }
+
   void _startDiscovery() {
     final bridge = native;
     final dir = dataDirectory;
@@ -1746,6 +1782,67 @@ ListView(
         ),
       );
     }
+  }
+
+  Widget _fileTransferSubtitle(({String deviceId, String name, Map<String, dynamic> file}) item) {
+    final state = item.file['state']?.toString() ?? 'unknown';
+    final size = item.file['size'];
+    final received = _transferReceived[item.file['transfer_id']?.toString() ?? ''];
+    final progress = received != null && size is num && size > 0
+        ? ' · ${(received / size * 100).clamp(0, 100).toStringAsFixed(0)}%'
+        : '';
+    return Text(
+      '${item.name} · ${_formatBytes(size)} · $state$progress',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  Widget _fileTransferActions(({String deviceId, String name, Map<String, dynamic> file}) item) {
+    final state = item.file['state']?.toString().toLowerCase();
+    final transferId = item.file['transfer_id']?.toString();
+    if (transferId == null) {
+      return Icon(_fileStateIcon(state), color: _fileStateColor(state));
+    }
+    if (state == 'offered') {
+      return Wrap(
+        spacing: 2,
+        children: [
+          IconButton(
+            tooltip: 'Decline',
+            onPressed: () => _respondToFile(item.deviceId, transferId, false),
+            icon: const Icon(Icons.close_outlined),
+          ),
+          IconButton(
+            tooltip: 'Accept',
+            onPressed: () => _respondToFile(item.deviceId, transferId, true),
+            icon: const Icon(Icons.check_outlined),
+          ),
+        ],
+      );
+    }
+    if (state == 'transferring') {
+      return IconButton(
+        tooltip: 'Cancel',
+        onPressed: () => _cancelFile(item.deviceId, transferId),
+        icon: const Icon(Icons.close_outlined),
+      );
+    }
+    return Icon(_fileStateIcon(state), color: _fileStateColor(state));
+  }
+
+  Future<void> _respondToFile(String deviceId, String transferId, bool accept) async {
+    final data = dataDirectory;
+    if (data == null) return;
+    await _nativeJsonInIsolate(data, accept ? 'file_accept' : 'file_decline', [deviceId, transferId]);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _cancelFile(String deviceId, String transferId) async {
+    final data = dataDirectory;
+    if (data == null) return;
+    await _nativeJsonInIsolate(data, 'file_cancel', [deviceId, transferId]);
+    if (mounted) setState(() {});
   }
 
   IconData _fileIcon(String name) {
