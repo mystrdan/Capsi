@@ -30,6 +30,7 @@ tauri-plugin-notification = "2"
 # `open_website` goes through the opener plugin so it works from the desktop
 # WebView AND from an Android WebView (where `cmd /C start` does not exist).
 tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
 
 # --- serialization ----------------------------------------------------
 serde = { version = "1", features = ["derive"] }
