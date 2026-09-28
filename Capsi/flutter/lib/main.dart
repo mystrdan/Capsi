@@ -71,8 +71,6 @@ class _CapsiHomeState extends State<CapsiHome> {
   int discoveryHandle = 0;
   Timer? discoveryTimer;
   String? dataDirectory;
-  bool initializing = true;
-  String? initializationError;
   List<KnownDevice> trustedDevices = const [];
   Map<String, dynamic>? workplaceData;
   int messageHandle = 0;
@@ -87,35 +85,15 @@ class _CapsiHomeState extends State<CapsiHome> {
   }
 
   Future<void> _initializeRuntime() async {
-    try {
-      final directory = await getApplicationSupportDirectory();
-      if (!mounted) return;
-      setState(() {
-        dataDirectory = directory.path;
-        initializing = false;
-        initializationError = null;
-      });
-      if (native == null) return;
-      _loadTrust();
+    final directory = await getApplicationSupportDirectory();
+    if (!mounted) return;
+    dataDirectory = directory.path;
+    if (native == null) return;
+    _loadTrust();
     _loadWorkplace();
     workplaceTimer = Timer.periodic(const Duration(seconds: 2), (_) => _loadWorkplace());
     _startDiscovery();
     _startMessages();
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        initializing = false;
-        initializationError = error.toString();
-      });
-    }
-  }
-
-  void _retryInitialization() {
-    setState(() {
-      initializing = true;
-      initializationError = null;
-    });
-    _initializeRuntime();
   }
 
   void _loadWorkplace() {
@@ -172,14 +150,7 @@ class _CapsiHomeState extends State<CapsiHome> {
     });
   }
 
-  void _scan() {
-    if (scanning) return;
-    setState(() => scanning = true);
-    Future<void>.delayed(const Duration(milliseconds: 450), () {
-      if (!mounted) return;
-      _pollDiscovery();
-    });
-  }
+  void _scan() => _pollDiscovery();
 
   @override
   void dispose() {
@@ -235,7 +206,7 @@ class _CapsiHomeState extends State<CapsiHome> {
           body: compact
               ? Column(
                   children: [
-                    Expanded(child: _DesktopContent(page: page, body: body, native: native, initializing: initializing, initializationError: initializationError, onRetry: _retryInitialization)),
+                    Expanded(child: _DesktopContent(page: page, body: body, native: native)),
                     NavigationBar(
                       selectedIndex: selected,
                       onDestinationSelected: (index) => setState(() => selected = index),
@@ -267,7 +238,7 @@ class _CapsiHomeState extends State<CapsiHome> {
                       ],
                     ),
                     const VerticalDivider(width: 1),
-                    Expanded(child: _DesktopContent(page: page, body: body, native: native, initializing: initializing, initializationError: initializationError, onRetry: _retryInitialization)),
+                    Expanded(child: _DesktopContent(page: page, body: body, native: native)),
                   ],
                 ),
         );
@@ -280,11 +251,8 @@ class _DesktopContent extends StatelessWidget {
   final ({IconData icon, String label}) page;
   final Widget body;
   final CapsiNative? native;
-  final bool initializing;
-  final String? initializationError;
-  final VoidCallback onRetry;
 
-  const _DesktopContent({required this.page, required this.body, required this.native, required this.initializing, required this.initializationError, required this.onRetry});
+  const _DesktopContent({required this.page, required this.body, required this.native});
 
   @override
   Widget build(BuildContext context) {
@@ -309,7 +277,7 @@ class _DesktopContent extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _NetworkStatus(available: native != null && !initializing, initializing: initializing),
+                    _NetworkStatus(available: native != null),
                     const SizedBox(width: 8),
                     IconButton(
                       tooltip: 'Settings',
@@ -323,14 +291,6 @@ class _DesktopContent extends StatelessWidget {
           ),
         ),
         const Divider(height: 1),
-        if (initializationError != null)
-          MaterialBanner(
-            content: Text('Capsi could not finish starting: $initializationError'),
-            leading: const Icon(Icons.error_outline),
-            actions: [
-              TextButton(onPressed: onRetry, child: const Text('Retry')),
-            ],
-          ),
         Expanded(child: body),
       ],
     );
@@ -654,8 +614,7 @@ class _AboutDialog extends StatelessWidget {
 
 class _NetworkStatus extends StatelessWidget {
   final bool available;
-  final bool initializing;
-  const _NetworkStatus({required this.available, this.initializing = false});
+  const _NetworkStatus({required this.available});
 
   @override
   Widget build(BuildContext context) {
@@ -669,9 +628,9 @@ class _NetworkStatus extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.circle, size: 7, color: initializing ? Colors.orange : (available ? const Color(0xFFB8F36B) : Colors.orange)),
+          Icon(Icons.circle, size: 7, color: available ? const Color(0xFFB8F36B) : Colors.orange),
           const SizedBox(width: 7),
-          Text(initializing ? 'Starting…' : (available ? 'Local network' : 'Core unavailable'), style: const TextStyle(fontSize: 12)),
+          Text(available ? 'Local network' : 'Core unavailable', style: const TextStyle(fontSize: 12)),
         ],
       ),
     );
@@ -723,21 +682,7 @@ class _PageBodyState extends State<_PageBody> {
             const Card(child: Padding(padding: EdgeInsets.all(24), child: Text('No trusted devices yet. Accept a device from Nearby to add it here.')))
           else
             for (final device in widget.trustedDevices)
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.verified_user_outlined),
-                  title: Text(device.displayName),
-                  subtitle: Text(device.fingerprint),
-                  trailing: IconButton(
-                    tooltip: 'Remove trust',
-                    icon: const Icon(Icons.remove_circle_outline),
-                    onPressed: widget.dataDirectory == null ? null : () {
-                      final removed = widget.native?.ignoreTrust(widget.dataDirectory!, device.deviceId);
-                      if (removed != null) widget.onTrustChanged();
-                    },
-                  ),
-                ),
-              ),
+              Card(child: ListTile(leading: const Icon(Icons.verified_user_outlined), title: Text(device.displayName), subtitle: Text(device.fingerprint))),
         ],
       );
     }
