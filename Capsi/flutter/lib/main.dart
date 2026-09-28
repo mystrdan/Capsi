@@ -238,22 +238,26 @@ class _CapsiHomeState extends State<CapsiHome> {
     if (messageHandle == 0) return;
     messageTimer = Timer.periodic(const Duration(milliseconds: 750), (_) {
       if (!mounted) return;
-      final event = bridge.pollMessage(messageHandle);
-      if (event != null && event['type'] != null) {
+      for (var i = 0; i < 64; i++) {
+        final event = bridge.pollMessage(messageHandle);
+        if (event == null || event['type'] == null) break;
         _loadTrust();
         _loadWorkplace();
-        if (mounted) {
-          setState(() {
-            lastMessageEvent = event;
-            final transferId = event['transfer_id']?.toString();
-            final received = event['received'];
-            if (transferId != null && received is num) {
-              _transferReceived[transferId] = received.toInt();
-            }
-          });
-          if (event['type'] == 'file_offer') {
-            _showIncomingFileOffer(event);
+        if (!mounted) return;
+        setState(() {
+          lastMessageEvent = event;
+          final transferId = event['transfer_id']?.toString();
+          final received = event['received'];
+          if (transferId != null && received is num) {
+            _transferReceived[transferId] = received.toInt();
           }
+          if (event['type'] == 'file_complete' && transferId != null) {
+            final size = event['size'];
+            if (size is num) _transferReceived[transferId] = size.toInt();
+          }
+        });
+        if (event['type'] == 'file_offer') {
+          _showIncomingFileOffer(event);
         }
       }
     });
@@ -1606,7 +1610,10 @@ ListView(
     final total = size is num ? size.toInt() : int.tryParse(size?.toString() ?? '');
     int? received = _transferReceived[transferId];
     final localPath = file['local_path']?.toString();
-    if (received == null && localPath != null && total != null && total > 0) {
+    // For incoming transfers the .part file is real progress. For outgoing
+    // transfers, the selected source file is already complete, so never use
+    // its size as a fake "sent" byte count.
+    if (!outgoing && received == null && localPath != null && total != null && total > 0) {
       try {
         final length = File(localPath).lengthSync();
         if (length >= 0) received = length;
@@ -1640,14 +1647,16 @@ ListView(
                 color: _fileStateColor(state),
               ),
             ),
-            if (progress != null && state == 'transferring') ...[
+            if (state == 'transferring') ...[
               const SizedBox(height: 4),
-              LinearProgressIndicator(value: progress),
+              LinearProgressIndicator(value: outgoing ? null : progress),
               const SizedBox(height: 5),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '${_formatBytes(received)} of ${_formatBytes(total)}',
+                  outgoing && received == null
+                      ? 'Sending…'
+                      : '${_formatBytes(received)} of ${_formatBytes(total)}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: const Color(0xFF858D88),
                   ),
