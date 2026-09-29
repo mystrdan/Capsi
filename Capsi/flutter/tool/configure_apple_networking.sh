@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+TARGET="${1:-all}"
 
 LOCAL_NETWORK_DESCRIPTION="Capsi uses your local network to discover trusted devices and exchange messages and files directly between them."
 
@@ -29,12 +30,21 @@ patch_entitlements() {
   /usr/libexec/PlistBuddy -c "Add :com.apple.security.network.server bool true" "$file"
 }
 
-patch_info "$ROOT/ios/Runner/Info.plist"
-patch_info "$ROOT/macos/Runner/Info.plist"
+case "$TARGET" in
+  ios)
+    patch_info "$ROOT/ios/Runner/Info.plist"
+    ;;
+  macos)
+    patch_info "$ROOT/macos/Runner/Info.plist"
+    for entitlements in "$ROOT"/macos/Runner/*.entitlements; do
+      [ -f "$entitlements" ] || continue
+      patch_entitlements "$entitlements"
+    done
+    ;;
+  *)
+    echo "Usage: $0 ios|macos"
+    exit 2
+    ;;
+esac
 
-for entitlements in "$ROOT"/macos/Runner/*.entitlements; do
-  [ -f "$entitlements" ] || continue
-  patch_entitlements "$entitlements"
-done
-
-echo "Configured Capsi Apple local-network metadata and macOS socket entitlements."
+echo "Configured Capsi $TARGET local-network metadata."
