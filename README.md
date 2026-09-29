@@ -146,6 +146,8 @@ using `tool/link_ios_rust.sh` and verifies the native bridge is linked into the
 iOS application; real-device communication and simulator runtime behavior still
 require platform-specific validation before release.
 
+Apple local-network metadata is configured during the generated-platform CI build. The iOS runner receives `NSLocalNetworkUsageDescription`; because Capsi uses UDP broadcast for discovery, a physical iOS release also requires Apple's `com.apple.developer.networking.multicast` entitlement. That entitlement is intentionally not fabricated by CI and must be provisioned before claiming physical-device iOS discovery support. macOS receives the local-network usage description plus sandbox client/server network entitlements.
+
 ## Cross-platform interface principles
 
 Capsi uses one product identity across platforms, but the layout should respect the device.
