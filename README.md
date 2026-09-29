@@ -24,6 +24,8 @@ Capsi is intentionally not a cloud collaboration platform. The workplace layer i
 
 The application is built from one shared Flutter UI with a shared Rust core:
 
+The local peer TCP service uses port **45892** by default. Discovery advertises that same service port so a discovered device can be contacted directly for messages and files.
+
 - Windows
 - Android
 - macOS
