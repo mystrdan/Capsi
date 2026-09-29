@@ -228,7 +228,7 @@ pub extern "C" fn capsi_trust_accept(
             // mutation can synchronize the member again.
             if let Some(address) = device.last_address.clone() {
                 let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
-                let socket = format!("{host}:45892");
+                let socket = format!("{host}:{}", capsi_core::TCP_SERVICE_PORT);
                 let sync = Envelope::new(Message::WorkplaceSync(
                     capsi_core::protocol::WorkplaceSyncMessage {
                         actor_device_id: identity.id().as_str().to_string(),
@@ -497,7 +497,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                                 transfer_id: transfer_id.clone(),
                                 state: FileReceipt::Completed,
                             });
-                            let socket = format!("{}:{}", addr.ip(), 45892);
+                            let socket = format!("{}:{}", addr.ip(), capsi_core::TCP_SERVICE_PORT);
                             let _ = capsi_core::transport::connect_and_send(&socket, &identity, &peer_id, &receipt).await;
                             message_event(&thread_events, serde_json::json!({"type":"file_complete","device_id":peer_id.as_str(),"transfer_id":transfer_id,"file_name":file.file_name,"size":file.size}));
                         }
@@ -618,7 +618,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                             let receipt = Envelope::new(Message::DeliveryReceipt(
                                 capsi_core::protocol::DeliveryReceipt { message_id: envelope.id.clone() }
                             ));
-                            let socket = format!("{}:{}", addr.ip(), 45892);
+                            let socket = format!("{}:{}", addr.ip(), capsi_core::TCP_SERVICE_PORT);
                             let _ = capsi_core::transport::connect_and_send(&socket, &identity, &peer_id, &receipt).await;
 
                             message_event(&thread_events, serde_json::json!({
@@ -693,7 +693,7 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                         let receipt = Envelope::new(Message::DeliveryReceipt(capsi_core::protocol::DeliveryReceipt {
                             message_id: envelope.id.clone(),
                         }));
-                        let socket = format!("{}:{}", addr.ip(), 45892);
+                        let socket = format!("{}:{}", addr.ip(), capsi_core::TCP_SERVICE_PORT);
                         let _ = capsi_core::transport::connect_and_send(&socket, &identity, &peer_id, &receipt).await;
 
                         message_event(&thread_events, serde_json::json!({
@@ -779,7 +779,7 @@ pub extern "C" fn capsi_message_send(
         let address = peer.last_address.clone()
             .ok_or_else(|| capsi_core::CapsiError::NotFound("trusted device has no known address".into()))?;
         let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
-        let socket = format!("{host}:45892");
+        let socket = format!("{host}:{}", capsi_core::TCP_SERVICE_PORT);
 
         let identity = DeviceIdentity::load_or_create(&data_dir)?;
         let text = TextMessage::new(&body)?;
@@ -828,7 +828,7 @@ pub extern "C" fn capsi_file_send(
         let address = peer.last_address.clone()
             .ok_or_else(|| capsi_core::CapsiError::NotFound("trusted device has no known address".into()))?;
         let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
-        let socket = format!("{host}:45892");
+        let socket = format!("{host}:{}", capsi_core::TCP_SERVICE_PORT);
 
         let metadata = std::fs::metadata(&file_path)?;
         if !metadata.is_file() {
@@ -946,7 +946,7 @@ fn send_file_receipt_action(
         .last_address
         .ok_or_else(|| capsi_core::CapsiError::NotFound("trusted device has no known address".into()))?;
     let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
-    let socket = format!("{host}:45892");
+    let socket = format!("{host}:{}", capsi_core::TCP_SERVICE_PORT);
     let identity = DeviceIdentity::load_or_create(data_dir)?;
     let receipt = Envelope::new(Message::FileReceipt {
         transfer_id: transfer_id.to_string(),
@@ -1289,7 +1289,7 @@ pub extern "C" fn capsi_workplace_send_message(
                 continue;
             };
             let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
-            let socket = format!("{host}:45892");
+            let socket = format!("{host}:{}", capsi_core::TCP_SERVICE_PORT);
             match runtime.block_on(async {
                 capsi_core::transport::connect_and_send(&socket, &identity, &device_id, &envelope).await
             }) {
@@ -1445,7 +1445,7 @@ fn sync_workplace_to_members(
             continue;
         };
         let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
-        let socket = format!("{host}:45892");
+        let socket = format!("{host}:{}", capsi_core::TCP_SERVICE_PORT);
         let peer_id = device.device_id;
         let envelope = Envelope::new(Message::WorkplaceSync(
             capsi_core::protocol::WorkplaceSyncMessage {
