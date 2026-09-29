@@ -126,7 +126,7 @@ pub struct Peer {
 }
 
 impl Peer {
-    /// `192.168.0.9:45893` - the TCP address to dial.
+    /// `192.168.0.9:45892` - the TCP address to dial.
     pub fn tcp_address(&self) -> String {
         format!("{}:{}", self.address.ip(), self.port)
     }
