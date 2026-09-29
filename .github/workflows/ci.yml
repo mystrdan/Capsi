@@ -192,13 +192,15 @@ jobs:
         run: bash ./tool/prepare_ios.sh
       - name: Install dependencies
         run: flutter pub get
+      - name: Configure iOS Xcode project
+        run: flutter build ios --config-only --no-codesign
       - name: Refresh CocoaPods integration
         shell: bash
         run: |
           cd ios
           pod install --repo-update
       - name: Build iOS application
-        run: flutter build ios --release --no-codesign
+        run: flutter build ios --release --no-codesign --no-pub
       - name: Verify iOS Rust symbols are linked
         shell: bash
         run: |
