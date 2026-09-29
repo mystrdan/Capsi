@@ -187,7 +187,7 @@ jobs:
           cargo build --release --target aarch64-apple-ios-sim
           cargo build --release --target x86_64-apple-ios
       - name: Link Rust FFI into iOS Runner
-        run: ./tool/link_ios_rust.sh
+        run: bash ./tool/link_ios_rust.sh
       - name: Prepare iOS Rust FFI integration
         run: ./tool/prepare_ios.sh
       - name: Install dependencies
