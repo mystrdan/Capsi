@@ -123,6 +123,8 @@ jobs:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
       - name: Generate macOS runner
         run: flutter create --platforms=macos .
+      - name: Configure macOS local networking
+        run: bash ./tool/configure_apple_networking.sh
       - name: Build Rust macOS libraries
         working-directory: Capsi/flutter/native
         run: |
@@ -180,6 +182,8 @@ jobs:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
       - name: Generate iOS runner
         run: flutter create --platforms=ios .
+      - name: Configure iOS local networking
+        run: bash ./tool/configure_apple_networking.sh
       - name: Build Rust iOS libraries
         working-directory: Capsi/flutter/native
         run: |
