@@ -137,10 +137,12 @@ GitHub Actions verifies both Apple Flutter runners in clean macOS environments.
 The macOS release pipeline bundles the Rust FFI library inside the app's
 Contents/Frameworks directory and publishes the packaged app as a CI artifact.
 
-The iOS pipeline now links the Rust device library into the generated Runner
-during CI using `tool/link_ios_rust.sh`. The build verifies the native bridge
-is linked into the iOS application; real-device communication and simulator
-runtime behavior still require platform-specific validation before release.
+The iOS pipeline configures the generated Runner before synchronizing CocoaPods,
+then builds with dependency resolution disabled so Flutter does not rewrite the
+Podfile after the lockfile has been synchronized. It links the Rust device library
+using `tool/link_ios_rust.sh` and verifies the native bridge is linked into the
+iOS application; real-device communication and simulator runtime behavior still
+require platform-specific validation before release.
 
 ## Cross-platform interface principles
 
