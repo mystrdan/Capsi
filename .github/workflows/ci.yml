@@ -189,7 +189,7 @@ jobs:
       - name: Link Rust FFI into iOS Runner
         run: bash ./tool/link_ios_rust.sh
       - name: Prepare iOS Rust FFI integration
-        run: ./tool/prepare_ios.sh
+        run: bash ./tool/prepare_ios.sh
       - name: Install dependencies
         run: flutter pub get
       - name: Build iOS application
