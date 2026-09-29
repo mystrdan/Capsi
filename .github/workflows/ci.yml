@@ -124,7 +124,7 @@ jobs:
       - name: Generate macOS runner
         run: flutter create --platforms=macos .
       - name: Configure macOS local networking
-        run: bash ./tool/configure_apple_networking.sh
+        run: bash ./tool/configure_apple_networking.sh macos
       - name: Build Rust macOS libraries
         working-directory: Capsi/flutter/native
         run: |
@@ -183,7 +183,7 @@ jobs:
       - name: Generate iOS runner
         run: flutter create --platforms=ios .
       - name: Configure iOS local networking
-        run: bash ./tool/configure_apple_networking.sh
+        run: bash ./tool/configure_apple_networking.sh ios
       - name: Build Rust iOS libraries
         working-directory: Capsi/flutter/native
         run: |
