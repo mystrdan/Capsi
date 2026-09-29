@@ -350,7 +350,7 @@ class CapsiNative {
   }
 
 
-  int startDiscovery({required String deviceName, int tcpPort = 45893, required String dataDirectory}) {
+  int startDiscovery({required String deviceName, int tcpPort = 45892, required String dataDirectory}) {
     final nativeName = deviceName.toNativeUtf8();
     final nativeDir = dataDirectory.toNativeUtf8();
     try {
