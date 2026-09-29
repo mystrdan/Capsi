@@ -323,7 +323,7 @@ class CapsiNative {
 
   List<CapsiPeer> discoveryProbe({
     required String deviceName,
-    int tcpPort = 45893,
+    int tcpPort = 45892,
     Duration wait = const Duration(milliseconds: 500),
   }) {
     final nativeName = deviceName.toNativeUtf8();
