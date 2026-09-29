@@ -35,8 +35,48 @@ xcodebuild -create-xcframework \
   -output "$XCFRAMEWORK"
 
 PODFILE="$IOS/Podfile"
-if ! grep -q "capsi_ffi" "$PODFILE"; then
-  python3 - "$PODFILE" <<'PY'
+if [ ! -f "$PODFILE" ]; then
+  cat > "$PODFILE" <<'RUBY'
+platform :ios, '12.0'
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings)
+    raise "#{generated_xcode_build_settings} must exist. Run flutter pub get first"
+  end
+
+  File.foreach(generated_xcode_build_settings) do |line|
+    matches = line.match(/FLUTTER_ROOT=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings}"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  pod 'capsi_ffi', :path => '../native'
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+  end
+end
+RUBY
+else
+  if ! grep -q "capsi_ffi" "$PODFILE"; then
+    python3 - "$PODFILE" <<'PY'
 from pathlib import Path
 import sys
 
@@ -52,6 +92,7 @@ text = text.replace(
 )
 path.write_text(text)
 PY
+  fi
 fi
 
 echo "Prepared CapsiFfi.xcframework and CocoaPods integration."
