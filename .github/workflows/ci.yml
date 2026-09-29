@@ -192,6 +192,11 @@ jobs:
         run: bash ./tool/prepare_ios.sh
       - name: Install dependencies
         run: flutter pub get
+      - name: Refresh CocoaPods integration
+        shell: bash
+        run: |
+          cd ios
+          pod install --repo-update
       - name: Build iOS application
         run: flutter build ios --release --no-codesign
       - name: Verify iOS Rust symbols are linked
@@ -221,11 +226,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Build Windows release
         shell: pwsh
-        run: .\tool\build_windows.ps1
+        run: .\\tool\\build_windows.ps1
       - name: Package Windows release
         shell: pwsh
         run: |
-          Compress-Archive -Path .\build\windows\x64\runner\Release\* -DestinationPath .\build\Capsi-Windows-x64.zip -Force
+          Compress-Archive -Path .\\build\\windows\\x64\\runner\\Release\\* -DestinationPath .\\build\\Capsi-Windows-x64.zip -Force
       - name: Upload Windows release
         uses: actions/upload-artifact@v4
         with:
