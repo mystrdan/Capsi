@@ -1,0 +1,97 @@
+# Configures the generated Flutter Android runner for the Capsi release build.
+#
+# `flutter create` writes a template runner that is not fit for a release build
+# of this application: the INTERNET permission only lands in the debug and
+# profile manifests, the application id is still the template placeholder, and
+# the label is the raw project name. Capsi is a peer-to-peer LAN messenger, so
+# a release build without INTERNET cannot open a single socket.
+#
+# The script is idempotent and is safe to run after every `flutter create`.
+
+$ErrorActionPreference = "Stop"
+
+Set-Location (Join-Path $PSScriptRoot "..")
+
+$ApplicationId = "win.capsi.app"
+$AppLabel = "Capsi"
+
+$gradle = "android/app/build.gradle.kts"
+$manifest = "android/app/src/main/AndroidManifest.xml"
+
+if (-not (Test-Path $gradle)) {
+  throw "Android runner is missing: $gradle. Run tool\bootstrap_platforms.ps1 first."
+}
+if (-not (Test-Path $manifest)) {
+  throw "Android manifest is missing: $manifest. Run tool\bootstrap_platforms.ps1 first."
+}
+
+function Write-Text([string]$Path, [string]$Text) {
+  # No byte order mark: the Android toolchain and Gradle scripts are read as plain UTF-8.
+  $root = (Get-Location).Path
+  $full = Join-Path $root $Path
+  # .NET's writer will not create directories, and the relocated package may not exist yet.
+  $directory = Split-Path $full -Parent
+  if (-not (Test-Path $directory)) {
+    New-Item -ItemType Directory -Force -Path $directory | Out-Null
+  }
+  [System.IO.File]::WriteAllText($full, $Text, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+$gradleText = Get-Content $gradle -Raw
+$gradleText = $gradleText -replace '(?m)^(\s*)namespace\s*=\s*"[^"]+"', "`$1namespace = `"$ApplicationId`""
+$gradleText = $gradleText -replace '(?m)^(\s*)applicationId\s*=\s*"[^"]+"', "`$1applicationId = `"$ApplicationId`""
+Write-Text $gradle $gradleText
+Write-Host "Android application id set to $ApplicationId."
+
+# The manifest names the activity ".MainActivity", which the manifest merger
+# resolves against the namespace, so the class must live in the application id's
+# package. `flutter create` put it in the template's com.example.capsi, which
+# would compile happily and then die with "unable to find explicit activity
+# class" the moment anyone tapped the icon.
+$kotlin = "android/app/src/main/kotlin"
+$mainActivity = "$kotlin/$($ApplicationId.Replace('.', '/'))/MainActivity.kt"
+$found = @(Get-ChildItem $kotlin -Recurse -Filter "MainActivity.kt" -ErrorAction SilentlyContinue)
+$wanted = [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $mainActivity))
+$misplaced = @($found | Where-Object { $_.FullName -ne $wanted })
+
+if ($misplaced.Count -gt 0) {
+  $body = Get-Content $misplaced[0].FullName -Raw
+  $body = $body -replace '(?m)^package\s+[\w\.]+', "package $ApplicationId"
+  Write-Text $mainActivity $body
+  foreach ($stale in $misplaced) {
+    Remove-Item $stale.FullName -Force
+    # Walk back up the vacated template package, stopping at the kotlin root.
+    $dir = $stale.DirectoryName
+    $stop = [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $kotlin))
+    while ($dir -and $dir.Length -gt $stop.Length -and
+           @(Get-ChildItem $dir -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+      $parent = Split-Path $dir -Parent
+      Remove-Item $dir -Force -ErrorAction SilentlyContinue
+      $dir = $parent
+    }
+  }
+  Write-Host "MainActivity.kt moved into the $ApplicationId package."
+} elseif (-not (Test-Path $mainActivity)) {
+  Write-Text $mainActivity "package $ApplicationId`r`n`r`nimport io.flutter.embedding.android.FlutterActivity`r`n`r`nclass MainActivity : FlutterActivity()`r`n"
+  Write-Host "Created MainActivity.kt in the $ApplicationId package."
+} else {
+  Write-Host "MainActivity.kt is already in the $ApplicationId package."
+}
+
+$manifestText = Get-Content $manifest -Raw
+$manifestText = $manifestText -replace 'android:label="[^"]*"', "android:label=`"$AppLabel`""
+if ($manifestText -notmatch 'android\.permission\.INTERNET') {
+  $permissions = @(
+    '    <!-- Capsi talks to peers on the local network in every build, so the'
+    '         permission belongs in the main manifest, not only in debug. -->'
+    '    <uses-permission android:name="android.permission.INTERNET"/>'
+    '    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>'
+  ) -join "`r`n"
+  $manifestText = $manifestText -replace '(?m)^<manifest([^>]*)>', ("<manifest`$1>`r`n" + $permissions)
+  Write-Host "Added the INTERNET permission to the main manifest."
+} else {
+  Write-Host "The INTERNET permission is already declared."
+}
+Write-Text $manifest $manifestText
+
+Write-Host "Capsi Android runner configured."

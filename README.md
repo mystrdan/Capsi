@@ -97,18 +97,24 @@ The native bridge is built from `Capsi/flutter/native` and the resulting
 
 ## Android development
 
-Generate the Flutter Android runner when needed:
+Build the release APK with the script that also cross-compiles the Rust bridge:
 
 ```powershell
 cd Capsi/flutter
-.\tool\bootstrap_platforms.ps1
+.\tool\build_android.ps1
 ```
 
-Then build:
+or from `Capsi`:
 
-```powershell
-flutter build apk --release
+```batch
+build-android.bat
 ```
+
+The script generates the Flutter Android runner when it is missing, applies the
+Capsi application id and the `INTERNET` permission that a release build needs,
+builds `libcapsi_ffi.so` for `arm64-v8a`, `armeabi-v7a` and `x86_64` with
+`cargo-ndk`, drops them into `android/app/src/main/jniLibs/`, and runs
+`flutter build apk --release`.
 
 The Android build uses the same Flutter UI and Rust FFI architecture. Real-device
 validation is still required before treating Android support as production-ready.

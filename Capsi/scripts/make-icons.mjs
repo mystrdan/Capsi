@@ -2,13 +2,19 @@
 //
 // The supplied logo is authoritative, so this script never redraws it: it only
 // removes empty margins, scales it with a box filter and re-encodes it as the
-// PNG sizes + multi-resolution Windows `.ico` used by the Flutter Windows runner.
+// PNG sizes + multi-resolution Windows `.ico` used by the Flutter Windows
+// runner, and as the Android launcher set (legacy + adaptive foreground icons,
+// the adaptive backdrop and the launch screen artwork).
+//
+// The logo artwork is light on transparency, so every launcher plate uses the
+// Capsi ink backdrop (#090B0C, the same colour the Flutter theme paints its
+// scaffold with) instead of letting launchers put it on white.
 //
 // Pure Node (zlib only) so it runs anywhere without native dependencies.
 //
 // Usage: node scripts/make-icons.mjs [source.png]
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { deflateSync, inflateSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
@@ -276,6 +282,150 @@ function resizeSquare(src, size, pad = 0) {
   return out;
 }
 
+/* ------------------------------------------------------------------ Android */
+
+/**
+ * Capsi ink (#090B0C): the plate the light logo artwork sits on. The Flutter
+ * theme paints the same colour, so launcher and app agree on the background.
+ */
+const INK = [9, 11, 12];
+
+/** Flatten a transparent layer over the ink plate; legacy launchers ignore alpha. */
+function overInk(rgba, size) {
+  const out = Buffer.alloc(size * size * 4);
+  for (let i = 0; i < size * size; i++) {
+    const a = rgba[i * 4 + 3] / 255;
+    out[i * 4] = Math.round(rgba[i * 4] * a + INK[0] * (1 - a));
+    out[i * 4 + 1] = Math.round(rgba[i * 4 + 1] * a + INK[1] * (1 - a));
+    out[i * 4 + 2] = Math.round(rgba[i * 4 + 2] * a + INK[2] * (1 - a));
+    out[i * 4 + 3] = 255;
+  }
+  return out;
+}
+
+/** Keep only the inside of a centred disc, for the legacy `ic_launcher_round`. */
+function discCrop(rgba, size) {
+  const out = Buffer.from(rgba);
+  const r = size / 2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x + 0.5 - r, y + 0.5 - r);
+      if (d > r) out[(y * size + x) * 4 + 3] = 0;
+      else if (d > r - 1) out[(y * size + x) * 4 + 3] = Math.round(out[(y * size + x) * 4 + 3] * (r - d));
+    }
+  }
+  return out;
+}
+
+/**
+ * Android launcher assets. Adaptive icons (API 26+) get a transparent
+ * foreground layer plus an ink background colour, and the mark stays inside the
+ * 66/108dp safe zone so no launcher mask (circle, squircle or rounded square)
+ * can cut it. The pre-26 densities keep their own flattened PNG plates.
+ */
+function writeAndroidIcons(resDir, trimmed) {
+  // Adaptive launchers mask the icon down to the centred 66/108dp circle, so the
+  // corners of the mark's bounding box must stay inside that circle. Deriving the
+  // margin from the artwork keeps tall marks like the Capsi logo intact, with a
+  // little breathing room (0.30 of the canvas instead of the exact 0.3056 limit).
+  const aspect = trimmed.width / trimmed.height;
+  const safeHeight = Math.min(1, (2 * 0.3) / Math.hypot(aspect, 1));
+  const foregroundPad = (1 - safeHeight) / 2;
+
+  // 48dp legacy icons and the 108dp adaptive foreground canvas per density.
+  const densities = [
+    ['mdpi', 48, 108],
+    ['hdpi', 72, 162],
+    ['xhdpi', 96, 216],
+    ['xxhdpi', 144, 324],
+    ['xxxhdpi', 192, 432],
+  ];
+
+  for (const [dpi, legacy, canvas] of densities) {
+    const dir = join(resDir, `mipmap-${dpi}`);
+    mkdirSync(dir, { recursive: true });
+
+    const plate = overInk(resizeSquare(trimmed, legacy, legacy <= 48 ? 0.12 : 0.1), legacy);
+    writeFileSync(join(dir, 'ic_launcher.png'), encodePng(legacy, legacy, plate));
+    writeFileSync(
+      join(dir, 'ic_launcher_round.png'),
+      encodePng(legacy, legacy, discCrop(plate, legacy)),
+    );
+    writeFileSync(
+      join(dir, 'ic_launcher_foreground.png'),
+      encodePng(canvas, canvas, resizeSquare(trimmed, canvas, foregroundPad)),
+    );
+    console.log(`  wrote android mipmap-${dpi} (launcher ${legacy}dp, foreground ${canvas}dp)`);
+  }
+
+  const adaptiveDir = join(resDir, 'mipmap-anydpi-v26');
+  mkdirSync(adaptiveDir, { recursive: true });
+  const adaptiveIcon = `<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>
+`;
+  for (const name of ['ic_launcher.xml', 'ic_launcher_round.xml']) {
+    writeFileSync(join(adaptiveDir, name), adaptiveIcon);
+  }
+  console.log('  wrote android mipmap-anydpi-v26 adaptive icons');
+
+  const valuesDir = join(resDir, 'values');
+  mkdirSync(valuesDir, { recursive: true });
+  writeFileSync(
+    join(valuesDir, 'colors.xml'),
+    `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Capsi ink: launcher backdrop behind the light logo artwork. -->
+    <color name="ic_launcher_background">#FF090B0C</color>
+    <color name="capsi_ink">#FF090B0C</color>
+</resources>
+`,
+  );
+  console.log('  wrote android values/colors.xml');
+
+  // The splash screen is drawn by the OS before Flutter starts, so it needs the
+  // same ink plate; the stock template splash is white and flashes against the
+  // app's dark theme.
+  const splashDir = join(resDir, 'drawable-nodpi');
+  mkdirSync(splashDir, { recursive: true });
+  writeFileSync(
+    join(splashDir, 'capsi_splash_logo.png'),
+    encodePng(320, 320, resizeSquare(trimmed, 320, 0.06)),
+  );
+  const launchBackground = `<?xml version="1.0" encoding="utf-8"?>
+<!-- Capsi launch screen: the mark on the ink plate the app opens on. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/capsi_ink" />
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/capsi_splash_logo" />
+    </item>
+</layer-list>
+`;
+  for (const dir of ['drawable', 'drawable-v21']) {
+    const target = join(resDir, dir);
+    if (!existsSync(target)) continue;
+    writeFileSync(join(target, 'launch_background.xml'), launchBackground);
+  }
+  console.log('  wrote android launch background');
+
+  const manifestPath = join(resDir, '..', 'AndroidManifest.xml');
+  if (existsSync(manifestPath)) {
+    const manifest = readFileSync(manifestPath, 'utf8');
+    if (!manifest.includes('android:roundIcon')) {
+      writeFileSync(
+        manifestPath,
+        manifest.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@mipmap/ic_launcher"\n        android:roundIcon="@mipmap/ic_launcher_round"'),
+      );
+      console.log('  added android:roundIcon to the manifest');
+    }
+  }
+}
+
 /* -------------------------------------------------------------------- main */
 
 function main() {
@@ -320,18 +470,39 @@ function main() {
   for (const { dir, files } of groups) {
     mkdirSync(dir, { recursive: true });
     for (const [name, size] of files) {
+      const target = join(dir, name);
+      // The trimmed-and-repadded render is not the original artwork: writing it
+      // back over the source would zoom the mark a little on every run.
+      if (resolve(target) === resolve(SRC)) {
+        console.log(`  kept  ${target.replace(/\\/g, '/')} (source artwork, untouched)`);
+        continue;
+      }
       const png = encodePng(size, size, resizeSquare(trimmed, size, size <= 64 ? 0.06 : 0.03));
-      writeFileSync(join(dir, name), png);
-      console.log(`  wrote ${join(dir, name).replace(/\\/g, '/')} (${size}px, ${png.length} B)`);
+      writeFileSync(target, png);
+      console.log(`  wrote ${target.replace(/\\/g, '/')} (${size}px, ${png.length} B)`);
     }
   }
 
   const ico = encodeIco(
-    [16, 24, 32, 48, 64, 128, 256].map((size) => ({ size, rgba: resizeSquare(trimmed, size, 0.06) })),
+    [16, 24, 32, 48, 64, 128, 256].map((size) => ({
+      size,
+      // The desktop icon carries its own ink plate: taskbars and Explorer
+      // backings are not guaranteed to be dark, and the mark is light art.
+      rgba: overInk(resizeSquare(trimmed, size, size <= 64 ? 0.09 : 0.06), size),
+    })),
   );
   const icoPath = join(HERE, '..', 'flutter', 'windows', 'runner', 'resources', 'app_icon.ico');
   writeFileSync(icoPath, ico);
   console.log(`  wrote ${icoPath.replace(/\\/g, '/')} (7 sizes, ${ico.length} B)`);
+
+  // Android only once the Flutter runner exists; the script is also run in CI
+  // right after the runner is generated.
+  const androidRes = join(FLUTTER, 'android', 'app', 'src', 'main', 'res');
+  if (existsSync(join(FLUTTER, 'android', 'app'))) {
+    writeAndroidIcons(androidRes, trimmed);
+  } else {
+    console.log('  skipped android launcher icons (no android/app runner yet)');
+  }
 }
 
 if (process.argv[1] && process.argv[1].endsWith('make-icons.mjs')) main();

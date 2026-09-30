@@ -13,6 +13,8 @@ if [ ! -d "windows" ]; then
   flutter create --platforms=windows .
 fi
 
+bash "$(dirname "${BASH_SOURCE[0]}")/make_icons.sh"
+
 flutter pub get
 
 echo "Building Capsi Rust native bridge..."

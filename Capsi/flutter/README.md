@@ -44,15 +44,41 @@ macOS and Linux.
 
 ## Android release build
 
-The Android release build generates the standard Flutter Android runner in CI, builds the Rust FFI bridge for `arm64-v8a`, `armeabi-v7a` and `x86_64`, packages those libraries under `android/app/src/main/jniLibs/`, and produces a release APK.
+The Android release build cross-compiles the Rust FFI bridge for `arm64-v8a`,
+`armeabi-v7a` and `x86_64`, packages those libraries under
+`android/app/src/main/jniLibs/`, and produces a release APK. One script does
+all of it, from `Capsi/flutter`:
 
-For local Android setup, generate the runner first:
-
-```bash
-flutter create --platforms=android .
+```powershell
+.\tool\build_android.ps1
 ```
 
-Then build the Rust bridge for Android with `cargo-ndk` and package the resulting `.so` libraries into the Android runner before running `flutter build apk --release`.
+or, from the repository root on Windows:
+
+```batch
+build-android.bat
+```
+
+The script generates the Flutter Android runner when it is missing, applies the
+Capsi runner settings, runs `flutter pub get`, builds the bridge with
+`cargo-ndk`, verifies every ABI landed in `jniLibs`, and only then runs
+`flutter build apk --release`. The APK is written to
+`build/app/outputs/flutter-apk/app-release.apk`.
+
+Requirements: a Flutter SDK, a Rust toolchain with the `aarch64-linux-android`,
+`armv7-linux-androideabi` and `x86_64-linux-android` targets, `cargo-ndk`
+(`cargo install cargo-ndk --locked`) and an Android SDK with an NDK installed.
+
+`tool/configure_android.ps1` is safe to re-run after every `flutter create`.
+It fixes the four things the Flutter template gets wrong for this product: the
+placeholder application id (it becomes `win.capsi.app`, the id Capsi shipped
+with before the Flutter migration), the placeholder label, the fact that
+the template only declares `android.permission.INTERNET` in the debug and
+profile manifests — a Capsi release build needs it to open any socket at all —
+and the location of `MainActivity.kt`. The manifest names the activity
+`.MainActivity`, which resolves against the application id, so the class has to
+move out of the template's `com.example.capsi` package or the APK builds
+cleanly and then dies on launch.
 
 ## Windows native bridge
 

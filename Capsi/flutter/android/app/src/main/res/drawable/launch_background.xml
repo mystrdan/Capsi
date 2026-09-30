@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Capsi launch screen: the mark on the ink plate the app opens on. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/capsi_ink" />
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/capsi_splash_logo" />
+    </item>
+</layer-list>

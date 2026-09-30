@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Capsi ink: launcher backdrop behind the light logo artwork. -->
+    <color name="ic_launcher_background">#FF090B0C</color>
+    <color name="capsi_ink">#FF090B0C</color>
+</resources>
