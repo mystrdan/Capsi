@@ -12,3 +12,9 @@ Capsi/*.log
 # cargo-ndk copies the Rust FFI libraries into the Android runner on every build,
 # so they are build outputs rather than sources.
 Capsi/flutter/android/app/src/main/jniLibs/
+# Gradle/Kotlin caches and compiler sessions under the Flutter runner.
+Capsi/flutter/android/.gradle/
+Capsi/flutter/android/.kotlin/
+# Retired Tauri prototype: generated Android project, build outputs and empty
+# source stubs left from before the Flutter migration.
+Capsi/src-tauri/

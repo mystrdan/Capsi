@@ -10,31 +10,7 @@ $ErrorActionPreference = "Stop"
 
 Set-Location (Join-Path $PSScriptRoot "..")
 
-# Flutter, cargo and CMake report progress and warnings on stderr. PowerShell
-# promotes every line a native tool writes there into an error record, so with
-# "Stop" a build that is going perfectly aborts on its first progress message
-# (silently, when the output is redirected into a log). Native steps therefore
-# run with "Continue" and are judged by their exit code instead.
-function Invoke-BuildStep {
-  param(
-    [ScriptBlock]$Step,
-    [string]$Failure
-  )
-  $previous = $ErrorActionPreference
-  $ErrorActionPreference = "Continue"
-  $exit = 0
-  try {
-    # Surface native stderr as ordinary build text: without this, Windows
-    # PowerShell turns each line into a NativeCommandError record.
-    & $Step 2>&1 | ForEach-Object {
-      if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { $_ }
-    }
-    $exit = $LASTEXITCODE
-  } finally {
-    $ErrorActionPreference = $previous
-  }
-  if ($exit -ne 0) { throw "$Failure (exit code $exit)" }
-}
+. (Join-Path $PSScriptRoot "build_steps.ps1")
 
 if (-not (Get-Command flutter -ErrorAction SilentlyContinue)) {
   throw "Flutter SDK was not found on PATH."
@@ -66,21 +42,21 @@ if (Test-Path $vswhere) {
 
 if (-not (Test-Path "windows")) {
   Write-Host "Flutter Windows runner is missing. Generating it..."
-  Invoke-BuildStep { flutter create --platforms=windows . } "flutter create failed"
+  Invoke-Native "flutter" @("create", "--platforms=windows", ".") "flutter create failed"
 }
 
 & (Join-Path $PSScriptRoot "make_icons.ps1")
 
 Write-Host "Resolving Flutter packages..."
-Invoke-BuildStep { flutter pub get } "flutter pub get failed"
+Invoke-Native "flutter" @("pub", "get") "flutter pub get failed"
 
 Write-Host "Building Capsi Rust native bridge..."
-Invoke-BuildStep { cargo build --manifest-path native/Cargo.toml --release } "Building the Rust FFI bridge failed"
+Invoke-Native "cargo" @("build", "--manifest-path", "native/Cargo.toml", "--release") "Building the Rust FFI bridge failed"
 
 $ffi = Resolve-Path "native/target/release/capsi_ffi.dll"
 
 Write-Host "Building Capsi Windows application..."
-Invoke-BuildStep { flutter build windows --release } "flutter build windows --release failed"
+Invoke-Native "flutter" @("build", "windows", "--release") "flutter build windows --release failed"
 
 $exe = Get-ChildItem -Path "build/windows" -Filter "capsi.exe" -Recurse -File |
   Select-Object -First 1

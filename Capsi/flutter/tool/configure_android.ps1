@@ -94,4 +94,29 @@ if ($manifestText -notmatch 'android\.permission\.INTERNET') {
 }
 Write-Text $manifest $manifestText
 
+# The Flutter template asks for `-Xmx8G`. That is more heap than a typical Capsi
+# development or CI box has memory for: the Gradle daemon reserves it, the Kotlin
+# compile daemon and the AGP build-logic process ask for their own on top, and
+# the resulting page-file thrash stalls a JVM long enough for Gradle's 60-second
+# internal file-lock timeout to fire mid-build ("Timeout waiting to lock build
+# logic queue"). Keep one JVM, keep it inside physical memory.
+$properties = "android/gradle.properties"
+$propertyText = Get-Content $properties -Raw
+$overrides = [ordered]@{
+  "org.gradle.jvmargs" = "-Xmx2048m -XX:MaxMetaspaceSize=768m -XX:ReservedCodeCacheSize=256m"
+  "kotlin.compiler.execution.strategy" = "in-process"
+  "org.gradle.workers.max" = "2"
+}
+foreach ($key in $overrides.Keys) {
+  $value = $overrides[$key]
+  $pattern = "(?m)^" + [regex]::Escape($key) + "\s*=.*"
+  if ($propertyText -match $pattern) {
+    $propertyText = $propertyText -replace $pattern, "$key=$value"
+  } else {
+    $propertyText = $propertyText.TrimEnd() + "`r`n$key=$value`r`n"
+  }
+}
+Write-Text $properties $propertyText
+Write-Host "Gradle heap and worker limits sized for a release build on a modest box."
+
 Write-Host "Capsi Android runner configured."

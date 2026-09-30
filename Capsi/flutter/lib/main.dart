@@ -361,10 +361,10 @@ class _CapsiHomeState extends State<CapsiHome> {
   ];
 
   String _formatBytes(int bytes) {
-    if (bytes < 1024) return bytes.toString() + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toStringAsFixed(1) + ' KB';
-    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toStringAsFixed(1) + ' MB';
-    return (bytes / (1024 * 1024 * 1024)).toStringAsFixed(2) + ' GB';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
   void _showSettings(BuildContext context) {
     showDialog<void>(
@@ -377,6 +377,7 @@ class _CapsiHomeState extends State<CapsiHome> {
     );
   }
 
+  @override
   Widget build(BuildContext context) {
     final page = pages[selected];
     final body = _PageBody(
@@ -1406,7 +1407,7 @@ class _PageBodyState extends State<_PageBody> {
     if (result != null && result['error'] == null) {
       widget.onTrustChanged();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(this.context).showSnackBar(
         SnackBar(content: Text(result?['error']?.toString() ?? 'Member could not be added.')),
       );
     }
@@ -1444,7 +1445,7 @@ class _PageBodyState extends State<_PageBody> {
     if (result != null && result['error'] == null) {
       widget.onTrustChanged();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(this.context).showSnackBar(
         SnackBar(content: Text(result?['error']?.toString() ?? 'Workplace change could not be completed.')),
       );
     }
@@ -1489,7 +1490,7 @@ class _PageBodyState extends State<_PageBody> {
     if (result != null && result['error'] == null) {
       widget.onTrustChanged();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(this.context).showSnackBar(
         SnackBar(content: Text(result?['error']?.toString() ?? 'Broadcast could not be created.')),
       );
     }
@@ -1520,7 +1521,7 @@ class _PageBodyState extends State<_PageBody> {
       widget.onTrustChanged();
       setState(() {});
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(this.context).showSnackBar(
         SnackBar(content: Text(created?['error']?.toString() ?? 'Workplace could not be created.')),
       );
     }
@@ -1641,7 +1642,7 @@ class _PageBodyState extends State<_PageBody> {
                 overflow: TextOverflow.ellipsis,
               ),
               subtitle: Text(
-                '${deviceName} · ${_formatBytes(size)} · ${_fileStateLabel(state)}',
+                '$deviceName · ${_formatBytes(size)} · ${_fileStateLabel(state)}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1858,6 +1859,27 @@ class _PageBodyState extends State<_PageBody> {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
+  Future<String?> _materialisePickedFile(PlatformFile file) async {
+    final path = file.path;
+    if (path != null && await File(path).exists()) return path;
+
+    // Android hands the picker back a content:// uri that the Rust core cannot
+    // open directly, so cache a real copy the transfer can read.
+    late final Uint8List bytes;
+    try {
+      bytes = await file.readAsBytes();
+    } catch (_) {
+      return null;
+    }
+    final support = await getApplicationSupportDirectory();
+    final outbox = Directory('${support.path}${Platform.pathSeparator}outbox');
+    await outbox.create(recursive: true);
+    final safeName = file.name.replaceAll(RegExp(r'[\\/]'), '_');
+    final target = File('${outbox.path}${Platform.pathSeparator}$safeName');
+    await target.writeAsBytes(bytes);
+    return target.path;
+  }
+
   Future<void> _pickAndSendFile() async {
     final data = widget.dataDirectory;
     final native = widget.native;
@@ -1865,9 +1887,11 @@ class _PageBodyState extends State<_PageBody> {
 
     final selectedId = _validSelectedDevice() ?? widget.trustedDevices.first.deviceId;
     final file = await FilePicker.pickFile();
-    if (!mounted || file == null || file.path == null) return;
+    if (!mounted || file == null) return;
+    final path = await _materialisePickedFile(file);
+    if (!mounted || path == null) return;
 
-    final transferId = await _sendFileInIsolate(data, selectedId, file.path!);
+    final transferId = await _sendFileInIsolate(data, selectedId, path);
     if (transferId == null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('File transfer could not be started.')),
@@ -1885,7 +1909,7 @@ class _PageBodyState extends State<_PageBody> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove trusted device?'),
-        content: Text('Remove ' + device.displayName + ' from trusted devices?'),
+        content: Text('Remove ${device.displayName} from trusted devices?'),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Keep')),
           FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Remove')),

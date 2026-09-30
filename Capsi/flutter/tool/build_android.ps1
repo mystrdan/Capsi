@@ -11,30 +11,7 @@ $ErrorActionPreference = "Stop"
 
 Set-Location (Join-Path $PSScriptRoot "..")
 
-# cargo-ndk, Gradle and Flutter report progress on stderr. PowerShell promotes
-# every line a native tool writes there into an error record, so with "Stop" a
-# healthy build aborts on its first progress message. Native steps run with
-# "Continue" and are judged by their exit code instead.
-function Invoke-BuildStep {
-  param(
-    [ScriptBlock]$Step,
-    [string]$Failure
-  )
-  $previous = $ErrorActionPreference
-  $ErrorActionPreference = "Continue"
-  $exit = 0
-  try {
-    # Surface native stderr as ordinary build text: without this, Windows
-    # PowerShell turns each line into a NativeCommandError record.
-    & $Step 2>&1 | ForEach-Object {
-      if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { $_ }
-    }
-    $exit = $LASTEXITCODE
-  } finally {
-    $ErrorActionPreference = $previous
-  }
-  if ($exit -ne 0) { throw "$Failure (exit code $exit)" }
-}
+. (Join-Path $PSScriptRoot "build_steps.ps1")
 
 $Abis = @("arm64-v8a", "armeabi-v7a", "x86_64")
 
@@ -53,14 +30,14 @@ if (-not (Get-Command cargo-ndk -ErrorAction SilentlyContinue)) {
 
 if (-not (Test-Path "android")) {
   Write-Host "Flutter Android runner is missing. Generating it..."
-  Invoke-BuildStep { flutter create --platforms=android . } "flutter create failed"
+  Invoke-Native "flutter" @("create", "--platforms=android", ".") "flutter create failed"
 }
 
 & (Join-Path $PSScriptRoot "configure_android.ps1")
 & (Join-Path $PSScriptRoot "make_icons.ps1")
 
 Write-Host "Resolving Flutter packages..."
-Invoke-BuildStep { flutter pub get } "flutter pub get failed"
+Invoke-Native "flutter" @("pub", "get") "flutter pub get failed"
 
 Write-Host "Building Capsi Rust native bridge for: $($Abis -join ', ')"
 $ndkArgs = @("ndk")
@@ -71,7 +48,7 @@ $ndkArgs += @("-o", "../android/app/src/main/jniLibs", "build", "--release")
 
 Push-Location native
 try {
-  Invoke-BuildStep { cargo @ndkArgs } "cargo-ndk could not build the Capsi bridge"
+  Invoke-Native "cargo" $ndkArgs "cargo-ndk could not build the Capsi bridge"
 } finally {
   Pop-Location
 }
@@ -84,7 +61,7 @@ foreach ($abi in $Abis) {
 }
 
 Write-Host "Building Capsi Android application..."
-Invoke-BuildStep { flutter build apk --release } "flutter build apk --release failed"
+Invoke-Native "flutter" @("build", "apk", "--release") "flutter build apk --release failed"
 
 $apk = "build/app/outputs/flutter-apk/app-release.apk"
 if (-not (Test-Path $apk)) {

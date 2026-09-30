@@ -67,4 +67,24 @@ else
   echo "The INTERNET permission is already declared."
 fi
 
+# The Flutter template asks for `-Xmx8G`. That is more heap than a typical Capsi
+# development or CI box has memory for: the Gradle daemon reserves it, the Kotlin
+# compile daemon and the AGP build-logic process ask for their own on top, and
+# the resulting page-file thrash stalls a JVM long enough for Gradle's 60-second
+# internal file-lock timeout to fire mid-build ("Timeout waiting to lock build
+# logic queue"). Keep one JVM, keep it inside physical memory.
+PROPERTIES="android/gradle.properties"
+set_property() {
+  local key="$1" value="$2"
+  if grep -qE "^${key}[[:space:]]*=" "$PROPERTIES"; then
+    sed -i -E "s|^${key}[[:space:]]*=.*|${key}=${value}|" "$PROPERTIES"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$PROPERTIES"
+  fi
+}
+set_property "org.gradle.jvmargs" "-Xmx2048m -XX:MaxMetaspaceSize=768m -XX:ReservedCodeCacheSize=256m"
+set_property "kotlin.compiler.execution.strategy" "in-process"
+set_property "org.gradle.workers.max" "2"
+echo "Gradle heap and worker limits sized for a release build on a modest box."
+
 echo "Capsi Android runner configured."

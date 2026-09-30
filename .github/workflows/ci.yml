@@ -65,17 +65,7 @@ jobs:
         run: cargo install cargo-ndk --locked
       - name: Build Android APK
         shell: bash
-        run: |
-          for attempt in 1 2 3; do
-            if pwsh -NoProfile -ExecutionPolicy Bypass -File ./tool/build_android.ps1; then
-              exit 0
-            fi
-            if [ "$attempt" -lt 3 ]; then
-              echo "Android build attempt $attempt failed; retrying after Gradle download/network failure..."
-              sleep 10
-            fi
-          done
-          exit 1
+        run: bash ./tool/build_android.sh
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:

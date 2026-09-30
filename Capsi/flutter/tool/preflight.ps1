@@ -3,6 +3,8 @@ $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
+. (Join-Path $PSScriptRoot 'build_steps.ps1')
+
 function Require-Command([string]$Name) {
   if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
     throw "$Name was not found on PATH."
@@ -26,17 +28,17 @@ Require-Path 'assets/capsi-logo-512.png'
 
 Write-Host 'Capsi Flutter preflight'
 Write-Host '-----------------------'
-flutter --version
-cargo --version
+Invoke-Native "flutter" @("--version") "flutter --version failed"
+Invoke-Native "cargo" @("--version") "cargo --version failed"
 
 Write-Host 'Checking Flutter package metadata...'
-flutter pub get
+Invoke-Native "flutter" @("pub", "get") "flutter pub get failed"
 
 Write-Host 'Checking Rust FFI crate...'
-cargo check --manifest-path native/Cargo.toml
+Invoke-Native "cargo" @("check", "--manifest-path", "native/Cargo.toml") "cargo check failed"
 
 Write-Host 'Checking Flutter analyzer...'
-flutter analyze
+Invoke-Native "flutter" @("analyze") "flutter analyze failed"
 
 Write-Host ''
 Write-Host 'Preflight passed.'

@@ -200,7 +200,7 @@ fn kdf(
     input.extend_from_slice(second.exchange_key.as_bytes());
 
     let mut key = [0u8; 32];
-    hex::decode_to_slice(&digest_hex(&input), &mut key).expect("blake2b digest is 64 hex chars");
+    hex::decode_to_slice(digest_hex(&input), &mut key).expect("blake2b digest is 64 hex chars");
     key
 }
 

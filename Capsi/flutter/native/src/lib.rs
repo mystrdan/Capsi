@@ -99,14 +99,9 @@ pub extern "C" fn capsi_discovery_start(
     tcp_port: u16,
     data_dir: *const c_char,
 ) -> u64 {
-    let name = unsafe {
-        if name.is_null() {
-            return 0;
-        }
-        match CStr::from_ptr(name).to_str() {
-            Ok(value) => value.to_owned(),
-            Err(_) => return 0,
-        }
+    let name = match c_string(name) {
+        Some(value) => value,
+        None => return 0,
     };
     let data_dir = match c_path(data_dir) {
         Some(path) => path,
@@ -607,7 +602,9 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                             peer_id.as_str(),
                             workplace_message.body.clone(),
                         ) {
-                            workspace.messages.last_mut().map(|message| message.id = message_id.clone());
+                            if let Some(message) = workspace.messages.last_mut() {
+                                message.id = message_id.clone();
+                            }
                             workspace.mark_received_message(&envelope.id);
                             workspace.touch();
                             if let Err(error) = store.save(&workspace) {
@@ -837,7 +834,7 @@ pub extern "C" fn capsi_file_send(
         let size = metadata.len();
         let digest = capsi_core::util::digest_file(&file_path)?;
         let chunk_size = capsi_core::TRANSFER_CHUNK_SIZE as u64;
-        let chunks = if size == 0 { 0 } else { (size + chunk_size - 1) / chunk_size };
+        let chunks = size.div_ceil(chunk_size);
         let transfer_id = capsi_core::util::new_id("t");
         let file_name = capsi_core::util::safe_file_name(
             file_path.file_name().and_then(|n| n.to_str()).unwrap_or("capsi-file")
@@ -1284,7 +1281,7 @@ pub extern "C" fn capsi_workplace_send_message(
                 continue;
             };
             let Some(address) = device.last_address.clone() else {
-                workspace.queue_delivery(envelope.clone(), recipient.clone(), (now_millis() as i64));
+                workspace.queue_delivery(envelope.clone(), recipient.clone(), now_millis() as i64);
                 queued += 1;
                 continue;
             };
@@ -1294,9 +1291,8 @@ pub extern "C" fn capsi_workplace_send_message(
                 capsi_core::transport::connect_and_send(&socket, &identity, &device_id, &envelope).await
             }) {
                 Ok(()) => delivered += 1,
-                Err(error) => {
-                    workspace.queue_delivery(envelope.clone(), recipient.clone(), (now_millis() as i64));
-                    let _ = error;
+                Err(_) => {
+                    workspace.queue_delivery(envelope.clone(), recipient.clone(), now_millis() as i64);
                     queued += 1;
                 }
             }
@@ -1419,7 +1415,7 @@ fn sync_workplace_to_members(
     let local_id = identity.id().as_str();
     let members: Vec<_> = workspace.members.iter()
         .filter(|member| member.device_id != local_id)
-        .filter_map(|member| trust.get(&DeviceId::from_hex(&member.device_id).ok()?).filter(|device| device.is_trusted()).map(|device| device.clone()))
+        .filter_map(|member| trust.get(&DeviceId::from_hex(&member.device_id).ok()?).filter(|device| device.is_trusted()).cloned())
         .collect();
 
     if members.is_empty() {
@@ -1535,14 +1531,12 @@ pub extern "C" fn capsi_discovery_probe(
     tcp_port: u16,
     wait_ms: u32,
 ) -> *mut c_char {
-    let name = unsafe {
-        if name.is_null() {
-            return error_json("device name is null");
-        }
-        match CStr::from_ptr(name).to_str() {
-            Ok(value) => value.to_owned(),
-            Err(_) => return error_json("device name is not valid UTF-8"),
-        }
+    if name.is_null() {
+        return error_json("device name is null");
+    }
+    let name = match c_string(name) {
+        Some(value) => value,
+        None => return error_json("device name is not valid UTF-8"),
     };
 
     let wait = Duration::from_millis(wait_ms.clamp(50, 2_000) as u64);
@@ -1585,6 +1579,12 @@ pub extern "C" fn capsi_discovery_probe(
 }
 
 /// Release a string returned by this FFI layer.
+///
+/// # Safety
+///
+/// `value` must either be null or a pointer previously returned by this
+/// library that has not been freed yet. Passing any other pointer, or freeing
+/// the same string twice, is undefined behaviour.
 #[no_mangle]
 pub unsafe extern "C" fn capsi_free_string(value: *mut c_char) {
     if !value.is_null() {

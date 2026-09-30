@@ -10,6 +10,10 @@ $ErrorActionPreference = "Stop"
 $flutter = Split-Path -Parent $PSScriptRoot
 $generator = Join-Path (Split-Path -Parent $flutter) "scripts/make-icons.mjs"
 
+# Loaded after the path setup: the shared helper only provides Invoke-Native,
+# which is used for the node call below.
+. (Join-Path $PSScriptRoot "build_steps.ps1")
+
 if (-not (Test-Path $generator)) {
   throw "Capsi icon generator is missing: $generator"
 }
@@ -23,8 +27,4 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 }
 
 Write-Host "Stamping the Capsi logo into the platform icon sets..."
-# Node and its tooling chatter on stderr, which "Stop" would read as a failure;
-# the exit code is the real verdict.
-$ErrorActionPreference = "Continue"
-node $generator
-if ($LASTEXITCODE -ne 0) { throw "scripts/make-icons.mjs failed (exit code $LASTEXITCODE)." }
+Invoke-Native "node" @($generator) "scripts/make-icons.mjs failed"
