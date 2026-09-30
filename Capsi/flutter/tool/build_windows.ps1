@@ -22,14 +22,50 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
 
 # A missing Visual Studio C++ toolchain is the usual reason this step fails on a
 # fresh Windows machine, and CMake is not part of the default C++ workload.
+#
+# Flutter decides whether an installation is usable by asking vswhere for one of
+# the C++ workload IDs together with the C++ toolchain and CMake components.
+# Asking only for the component (as this script first did) passes on a machine
+# where Flutter then aborts with a bare "Unable to find suitable Visual Studio
+# toolchain", so ask vswhere the same question Flutter asks and name the missing
+# piece in the failure instead.
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$vcTools = "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
+$vcCMake = "Microsoft.VisualStudio.Component.VC.CMake.Project"
+$cppWorkloads = @(
+  # The IDE workload, then the Build Tools workload.
+  "Microsoft.VisualStudio.Workload.NativeDesktop",
+  "Microsoft.VisualStudio.Workload.VCTools"
+)
+
 if (Test-Path $vswhere) {
-  $vsPath = & $vswhere -latest -products * `
-    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-    -property installationPath | Select-Object -First 1
-  if (-not $vsPath) {
-    throw "Visual Studio with the 'Desktop development with C++' workload (MSVC v143 build tools) is required. Install it with: & `"${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe`" modify --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.CMake.Project --passive"
+  $vsPath = $null
+  foreach ($workload in $cppWorkloads) {
+    $vsPath = & $vswhere -latest -products * -requires $workload $vcTools $vcCMake `
+      -property installationPath | Select-Object -First 1
+    if ($vsPath) { break }
   }
+
+  if (-not $vsPath) {
+    # Separate "no C++ tooling at all" from "tooling present, workload ID
+    # missing": the first needs an install, the second only needs the workload
+    # added to the installation that is already there.
+    $componentsOnly = & $vswhere -latest -products * -requires $vcTools $vcCMake `
+      -property installationPath | Select-Object -First 1
+    $setup = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+    if ($componentsOnly) {
+      throw ("Visual Studio at $componentsOnly has the C++ build tools and CMake " +
+        "but not the 'Desktop development with C++' workload that Flutter requires. " +
+        "Add it from an elevated prompt:`n" +
+        "  & `"$setup`" modify --installPath `"$componentsOnly`" " +
+        "--add Microsoft.VisualStudio.Workload.NativeDesktop --passive --norestart")
+    }
+    throw ("Visual Studio with the 'Desktop development with C++' workload is required. " +
+      "Install it from an elevated prompt:`n" +
+      "  & `"$setup`" modify --add Microsoft.VisualStudio.Workload.NativeDesktop " +
+      "--add $vcCMake --passive --norestart")
+  }
+
   $cmake = Join-Path $vsPath "Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
   if (-not (Test-Path $cmake)) {
     throw "CMake was not found inside Visual Studio at $cmake. Add the 'C++ CMake tools for Windows' component to the Visual Studio installation."
