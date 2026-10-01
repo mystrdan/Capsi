@@ -5,8 +5,10 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
@@ -40,10 +42,22 @@ class MainActivity : FlutterActivity() {
 
         /** Arbitrary request code for the Android 13+ permission prompt. */
         private const val NOTIFICATION_PERMISSION_REQUEST = 47
+
+        /** Name the Wi-Fi stack shows against Capsi's multicast lock. */
+        private const val MULTICAST_LOCK_TAG = "capsi-discovery"
     }
 
     /** Mirrors the in-app preference so the Dart side does not resend it. */
     private var notificationsEnabled = true
+
+    /**
+     * The Wi-Fi multicast lock, held from `onCreate` until `onDestroy`.
+     *
+     * It is what lets the Rust discovery socket receive the broadcast beacons
+     * its peers send, and it lives with the activity because the lock is only
+     * worth holding while Capsi is running.
+     */
+    private var multicastLock: WifiManager.MulticastLock? = null
 
     /**
      * Hold the process in the foreground for as long as the app is running.
@@ -131,6 +145,7 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestNotificationPermission()
+        acquireDiscoveryLock()
         startMessageListener()
     }
 
@@ -164,8 +179,50 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        releaseDiscoveryLock()
         stopMessageListener()
         super.onDestroy()
+    }
+
+    /**
+     * Ask the Wi-Fi stack to hand Capsi the broadcast datagrams it filters out.
+     *
+     * Android's Wi-Fi driver drops packets that are not addressed to this device
+     * unless a multicast lock is held, and Capsi's peer discovery is a UDP
+     * broadcast. Without this the phone never hears a peer announce itself - and
+     * is never heard in return, because it is not the only side that filters -
+     * while the rest of the app looks perfectly healthy. The lock is set to not
+     * reference count because it is taken once for the whole activity lifetime,
+     * so the single release in `onDestroy` always matches it.
+     *
+     * Best effort by design: `createMulticastLock` throws when
+     * `CHANGE_WIFI_MULTICAST_STATE` has not been granted, and a build like that
+     * carries on in the foreground instead of failing at startup.
+     */
+    private fun acquireDiscoveryLock() {
+        if (multicastLock != null) return
+        val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            ?: return
+        try {
+            val lock = wifi.createMulticastLock(MULTICAST_LOCK_TAG)
+            lock.setReferenceCounted(false)
+            lock.acquire()
+            multicastLock = lock
+        } catch (_: RuntimeException) {
+            // No multicast permission, or no Wi-Fi on this build. Discovery
+            // still works wherever the platform delivers broadcasts anyway.
+            multicastLock = null
+        }
+    }
+
+    /** Give the multicast lock back. Safe to call when it was never taken. */
+    private fun releaseDiscoveryLock() {
+        try {
+            multicastLock?.release()
+        } catch (_: RuntimeException) {
+            // The platform already dropped it; there is nothing left to undo.
+        }
+        multicastLock = null
     }
 
     private fun startMessageListener() {

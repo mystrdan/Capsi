@@ -3,6 +3,12 @@
          permission belongs in the main manifest, not only in debug. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Capsi's peer discovery is a UDP broadcast, and Android's Wi-Fi stack
+         drops broadcast and multicast datagrams that are not addressed to this
+         device unless a MulticastLock is held. Without this permission the
+         phone neither hears a peer's announcement nor is heard in return, while
+         everything else about the app looks healthy. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <!-- The Rust message listener runs in the app process, so a backgrounded
          Capsi can be reclaimed by the platform and stop receiving. This service
          holds the process in the foreground for as long as the app is open. -->

@@ -323,6 +323,11 @@ class _CapsiHomeState extends State<CapsiHome> {
   String? runtimeError;
   int discoveryHandle = 0;
   Timer? discoveryTimer;
+  Timer? scanTimer;
+
+  /// True once a scan has run to completion. It is what lets the Nearby surface
+  /// tell "nothing found yet" apart from "looked and found nothing".
+  bool scanFinished = false;
   String? dataDirectory;
   List<KnownDevice> trustedDevices = const [];
   Map<String, dynamic>? workplaceData;
@@ -427,6 +432,8 @@ class _CapsiHomeState extends State<CapsiHome> {
   void _stopRuntimeSessions() {
     discoveryTimer?.cancel();
     discoveryTimer = null;
+    scanTimer?.cancel();
+    scanTimer = null;
     messageTimer?.cancel();
     messageTimer = null;
     workplaceTimer?.cancel();
@@ -450,6 +457,7 @@ class _CapsiHomeState extends State<CapsiHome> {
         lastMessageEvent = null;
         workplaceData = null;
         scanning = false;
+        scanFinished = false;
         runtimeLoading = true;
         runtimeError = null;
       });
@@ -584,20 +592,48 @@ class _CapsiHomeState extends State<CapsiHome> {
   void _pollDiscovery() {
     final bridge = native;
     if (bridge == null || discoveryHandle == 0 || !mounted) return;
-    setState(() {
-      peers = bridge.pollDiscovery(discoveryHandle);
-      scanning = false;
-    });
+    setState(() => peers = bridge.pollDiscovery(discoveryHandle));
   }
 
   void _scan() {
     if (!mounted || native == null || dataDirectory == null) return;
     if (discoveryHandle == 0) {
       _startDiscovery();
-      return;
+      if (discoveryHandle == 0) {
+        _showScanMessage('Discovery could not start on this device.');
+        return;
+      }
     }
-    setState(() => scanning = true);
+    scanTimer?.cancel();
+    setState(() {
+      scanning = true;
+      scanFinished = false;
+    });
+    scanTimer = Timer(_scanWindow, _finishScan);
+  }
+
+  void _finishScan() {
+    if (!mounted) return;
+    // Poll once more before reporting, so the count is what this scan turned up
+    // rather than whatever the last background tick happened to hold.
     _pollDiscovery();
+    final found = peers.length;
+    setState(() {
+      scanning = false;
+      scanFinished = true;
+    });
+    _showScanMessage(
+      found == 0
+          ? 'No Capsi devices found. Make sure the other device has Capsi open on the same network.'
+          : 'Found $found device${found == 1 ? '' : 's'}.',
+    );
+  }
+
+  void _showScanMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -607,6 +643,13 @@ class _CapsiHomeState extends State<CapsiHome> {
     _stopRuntimeSessions();
     super.dispose();
   }
+
+  /// How long a scan stays open before it reports a result.
+  ///
+  /// Peers announce as soon as they start and then every five seconds, so a
+  /// shorter window could miss a device that had announced just before the
+  /// button was pressed, which would look like the scan being broken.
+  static const Duration _scanWindow = Duration(seconds: 6);
 
   static const pages = <({IconData icon, String label})>[
     (icon: Icons.radar_outlined, label: 'Nearby'),
@@ -630,8 +673,18 @@ class _CapsiHomeState extends State<CapsiHome> {
         dataDirectory: dataDirectory,
         trustedDeviceCount: trustedDevices.length,
         settings: settings,
+        // Settings is a dialog over whichever page was open, so its trusted
+        // devices row closes the dialog and moves the shell to that page rather
+        // than stacking a second dialog on top of the first.
+        onOpenTrustedDevices: _openTrustedDevicesPage,
       ),
     );
+  }
+
+  /// Show the full trusted devices list, which is a page of its own.
+  void _openTrustedDevicesPage() {
+    final index = pages.indexWhere((page) => page.label == 'Trusted devices');
+    if (index >= 0) setState(() => selected = index);
   }
 
   @override
@@ -641,6 +694,7 @@ class _CapsiHomeState extends State<CapsiHome> {
       label: page.label,
       peers: peers,
       scanning: scanning,
+      scanFinished: scanFinished,
       native: native,
       onScan: _scan,
       trustedDevices: trustedDevices,
@@ -856,6 +910,36 @@ class _EmptyPanel extends StatelessWidget {
   );
 }
 
+/// The Nearby surface while a scan is still running.
+///
+/// A scan stays open for a few seconds, so it needs something on screen other
+/// than the same "no devices found" card a finished scan shows.
+class _ScanningPanel extends StatelessWidget {
+  const _ScanningPanel();
+
+  @override
+  Widget build(BuildContext context) => const Card(
+    child: Padding(
+      padding: EdgeInsets.all(34),
+      child: Column(children: [
+        SizedBox(
+          width: 26,
+          height: 26,
+          child: CircularProgressIndicator(strokeWidth: 2.5),
+        ),
+        SizedBox(height: 16),
+        Text('Scanning for devices…', style: TextStyle(fontWeight: FontWeight.w700)),
+        SizedBox(height: 7),
+        Text(
+          'Looking for other Capsi devices on this network.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Color(0xFF858D88), height: 1.5),
+        ),
+      ]),
+    ),
+  );
+}
+
 class _DeviceIcon extends StatelessWidget {
   final IconData icon;
   const _DeviceIcon({required this.icon});
@@ -890,11 +974,15 @@ class _SettingsDialog extends StatelessWidget {
   final int trustedDeviceCount;
   final AppSettings settings;
 
+  /// Closes this dialog and moves the shell to the trusted devices page.
+  final VoidCallback onOpenTrustedDevices;
+
   const _SettingsDialog({
     required this.native,
     required this.dataDirectory,
     required this.trustedDeviceCount,
     required this.settings,
+    required this.onOpenTrustedDevices,
   });
 
   @override
@@ -975,6 +1063,12 @@ class _SettingsDialog extends StatelessWidget {
                     title: 'Trusted devices',
                     subtitle: '$trustedDeviceCount trusted device${trustedDeviceCount == 1 ? '' : 's'}',
                     trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      // The list itself is a page of the shell, not part of this
+                      // dialog, so the row hands the user over to it.
+                      Navigator.of(context).pop();
+                      onOpenTrustedDevices();
+                    },
                   ),
                   const _SettingsRow(
                     icon: Icons.lock_outline,
@@ -1362,13 +1456,14 @@ class _PageBody extends StatefulWidget {
   final String label;
   final List<CapsiPeer> peers;
   final bool scanning;
+  final bool scanFinished;
   final CapsiNative? native;
   final VoidCallback onScan;
   final List<KnownDevice> trustedDevices;
   final VoidCallback onTrustChanged;
   final String? dataDirectory;
   final Map<String, dynamic>? workplaceData;
-  const _PageBody({required this.label, required this.peers, required this.scanning, required this.native, required this.onScan, required this.trustedDevices, required this.onTrustChanged, required this.dataDirectory, required this.workplaceData});
+  const _PageBody({required this.label, required this.peers, required this.scanning, required this.scanFinished, required this.native, required this.onScan, required this.trustedDevices, required this.onTrustChanged, required this.dataDirectory, required this.workplaceData});
 
   @override
   State<_PageBody> createState() => _PageBodyState();
@@ -1437,17 +1532,27 @@ class _PageBodyState extends State<_PageBody> {
             const SizedBox(width: 16),
             OutlinedButton.icon(
               onPressed: widget.scanning ? null : widget.onScan,
-              icon: Icon(widget.scanning ? Icons.sync : Icons.radar_outlined),
+              icon: widget.scanning
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.radar_outlined),
               label: Text(widget.scanning ? 'Scanning…' : 'Scan'),
             ),
           ],
         ),
         const SizedBox(height: 22),
-        if (widget.peers.isEmpty)
-          const _EmptyPanel(
+        if (widget.scanning && widget.peers.isEmpty)
+          const _ScanningPanel()
+        else if (widget.peers.isEmpty)
+          _EmptyPanel(
             icon: Icons.radar_outlined,
             title: 'No devices found',
-            message: 'Make sure the other device is running Capsi and both devices can communicate directly.',
+            message: widget.scanFinished
+                ? 'Nothing answered this scan. Check that the other device is on the same network, has Capsi open, and is not blocked by a firewall.'
+                : 'Make sure the other device is running Capsi and both devices can communicate directly.',
           )
         else
           LayoutBuilder(builder: (context, constraints) {
