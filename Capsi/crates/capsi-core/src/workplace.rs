@@ -30,6 +30,52 @@ fn id(prefix: &str, counter: usize) -> String {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Role { Owner, Admin, Manager, Member }
 
+impl Role {
+    /// Parse the wire spelling (`"Admin"`) used by the UI and the isolate layer.
+    pub fn from_wire(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "owner" => Some(Role::Owner),
+            "admin" => Some(Role::Admin),
+            "manager" => Some(Role::Manager),
+            "member" => Some(Role::Member),
+            _ => None,
+        }
+    }
+
+    /// The wire spelling, so the UI can send back exactly what it was shown.
+    pub fn as_wire(&self) -> &'static str {
+        match self {
+            Role::Owner => "Owner",
+            Role::Admin => "Admin",
+            Role::Manager => "Manager",
+            Role::Member => "Member",
+        }
+    }
+
+    /// Whether this role is allowed to hand out `other`.
+    ///
+    /// Only the owner can mint an admin, so the top of the hierarchy stays
+    /// with one device; an admin can still delegate down to manager and member.
+    /// A manager and a member may not assign roles at all, which is what keeps
+    /// them from promoting themselves.
+    pub fn can_assign(&self, other: Self) -> bool {
+        match self {
+            Role::Owner => matches!(other, Role::Admin | Role::Manager | Role::Member),
+            Role::Admin => matches!(other, Role::Manager | Role::Member),
+            Role::Manager | Role::Member => false,
+        }
+    }
+
+    /// Roles this actor may assign, for building the UI list without letting
+    /// the UI and the core disagree about what is allowed.
+    pub fn assignable_roles(&self) -> Vec<Role> {
+        [Role::Admin, Role::Manager, Role::Member]
+            .into_iter()
+            .filter(|role| self.can_assign(role.clone()))
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Permission {
     ManageWorkspace,
@@ -131,7 +177,36 @@ impl Workspace {
             departments: self.departments.clone(),
             broadcasts: self.broadcasts.clone(),
             messages: self.messages.clone(),
+            // `deleted` is only ever set through tombstone_state; a normal sync
+            // carries a live workplace.
+            deleted: false,
         }
+    }
+
+    /// The state an owner sends right before removing the workplace everywhere.
+    ///
+    /// The id and owner stay intact so the receiving side can prove the
+    /// tombstone belongs to *its* workplace before deleting anything, and
+    /// `updated_at` moves forward so a stale live sync cannot resurrect it.
+    pub fn tombstone_state(&self) -> WorkspaceState {
+        let mut state = self.network_state();
+        state.deleted = true;
+        state.updated_at = now_millis();
+        state
+    }
+
+    /// Rename the workplace. Kept in the core so every surface (FFI, sync
+    /// tests) shares the same validation as creation.
+    pub fn rename(&mut self, name: &str) -> Result<(), String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("workplace name cannot be empty".into());
+        }
+        if name.chars().count() > 64 {
+            return Err("workplace name is limited to 64 characters".into());
+        }
+        self.name = name.to_string();
+        Ok(())
     }
 
     pub fn apply_network_state(
@@ -295,6 +370,42 @@ impl Workspace {
         self.members.push(Member { device_id, display_name: display_name.into(), role, department_id: None });
     }
 
+    /// Change a member's role, enforcing the two invariants that keep a
+    /// workplace administrable.
+    ///
+    /// Ownership is not a role a promote/demote call may hand out: `owner_device_id`
+    /// is the field every ownership check reads, and letting it drift from the
+    /// owner's `Role` would strand the workplace (nobody could hold
+    /// `ManageWorkspace`, and `capsi_workplace_delete` would start refusing).
+    /// Transferring ownership is a separate, explicit operation. The last owner
+    /// also cannot be demoted, and no role can be demoted below the actor's own
+    /// level, so a manager cannot escalate itself above the owner.
+    pub fn set_member_role(&mut self, actor_device_id: &str, device_id: &str, role: Role) -> Result<(), String> {
+        let Some(target) = self.members.iter().find(|m| m.device_id == device_id) else {
+            return Err("member is not part of this workplace".into());
+        };
+        let current = target.role.clone();
+
+        if device_id == self.owner_device_id || current == Role::Owner || role == Role::Owner {
+            return Err("the workplace owner role cannot be changed here".into());
+        }
+
+        let Some(actor) = self.members.iter().find(|m| m.device_id == actor_device_id).map(|m| m.role.clone()) else {
+            return Err("device is not a member of this workplace".into());
+        };
+        if !actor.can_assign(role.clone()) {
+            return Err("cannot grant a role above your own".into());
+        }
+        if !actor.can_assign(current.clone()) {
+            return Err("cannot change the role of someone above you".into());
+        }
+
+        if let Some(member) = self.members.iter_mut().find(|m| m.device_id == device_id) {
+            member.role = role;
+        }
+        Ok(())
+    }
+
     pub fn create_department(&mut self, name: impl Into<String>) -> String {
         let id = id("department", self.departments.len());
         self.departments.push(Department { id: id.clone(), name: name.into(), member_ids: Vec::new() });
@@ -401,6 +512,17 @@ impl Workspace {
         before != self.pending_deliveries.len()
     }
 
+    /// Push a pending delivery back so the flush loop retries it later instead
+    /// of hammering a recipient that is currently unreachable.
+    pub fn reschedule_delivery(&mut self, envelope_id: &str, recipient_device_id: &str, next_attempt_at: i64) {
+        if let Some(pending) = self.pending_deliveries.iter_mut().find(|p| {
+            p.envelope.id == envelope_id && p.recipient_device_id == recipient_device_id
+        }) {
+            pending.attempts += 1;
+            pending.next_attempt_at = next_attempt_at;
+        }
+    }
+
     pub fn remove_pending_delivery(&mut self, envelope_id: &str, recipient_device_id: &str) {
         self.pending_deliveries.retain(|p| {
             !(p.envelope.id == envelope_id && p.recipient_device_id == recipient_device_id)
@@ -489,6 +611,11 @@ pub struct WorkspaceState {
     pub departments: Vec<Department>,
     pub broadcasts: Vec<Broadcast>,
     pub messages: Vec<WorkplaceMessage>,
+    /// Owner-issued tombstone: the workplace has been deleted. Defaults to
+    /// false for states written before this field existed, and peers that do
+    /// not know the field ignore it, so the wire format stays compatible.
+    #[serde(default)]
+    pub deleted: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -629,5 +756,119 @@ mod tests {
         workspace.mark_received_message(&envelope.id);
         assert_eq!(workspace.received_message_ids.len(), 1);
         assert!(workspace.has_received_message(&envelope.id));
+    }
+
+    #[test]
+    fn rename_validates_and_trims() {
+        let mut workspace = Workspace::new("Office", "owner");
+        assert!(workspace.rename("  Studio  ").is_ok());
+        assert_eq!(workspace.name, "Studio");
+        assert!(workspace.rename("   ").is_err());
+        assert!(workspace.rename(&"x".repeat(65)).is_err());
+        assert_eq!(workspace.name, "Studio");
+    }
+
+    #[test]
+    fn a_tombstone_marks_the_state_deleted_without_losing_identity() {
+        let mut workspace = Workspace::new("Office", "owner");
+        workspace.touch();
+        let live = workspace.network_state();
+        assert!(!live.deleted);
+        let tombstone = workspace.tombstone_state();
+        assert!(tombstone.deleted);
+        assert_eq!(tombstone.id, workspace.id);
+        assert_eq!(tombstone.owner_device_id, workspace.owner_device_id);
+        assert!(tombstone.updated_at >= live.updated_at);
+    }
+
+    #[test]
+    fn rescheduled_deliveries_back_off_with_attempts() {
+        let mut workspace = Workspace::new("Test", "owner");
+        let envelope = crate::protocol::Envelope::new(
+            crate::protocol::Message::WorkplaceText(
+                crate::protocol::WorkplaceTextMessage::new("group-1", "hello").unwrap(),
+            ),
+        );
+        workspace.queue_delivery(envelope.clone(), "alice", 100);
+        workspace.reschedule_delivery(&envelope.id, "alice", 200);
+        assert_eq!(workspace.pending_deliveries.len(), 1);
+        assert_eq!(workspace.pending_deliveries[0].attempts, 1);
+        assert_eq!(workspace.pending_deliveries[0].next_attempt_at, 200);
+    }
+
+    fn role_of(workspace: &Workspace, device_id: &str) -> Role {
+        workspace.members.iter().find(|m| m.device_id == device_id).map(|m| m.role.clone()).unwrap()
+    }
+
+    #[test]
+    fn owner_promotes_and_demotes_members() {
+        let mut workspace = Workspace::new("Office", "owner");
+        workspace.add_member("alice", "Alice", Role::Member);
+        workspace.add_member("bob", "Bob", Role::Member);
+
+        assert!(workspace.set_member_role("owner", "alice", Role::Admin).is_ok());
+        assert_eq!(role_of(&workspace, "alice"), Role::Admin);
+
+        assert!(workspace.set_member_role("owner", "alice", Role::Member).is_ok());
+        assert_eq!(role_of(&workspace, "alice"), Role::Member);
+
+        // The promotion really widened their permissions.
+        assert!(!workspace.permissions_for("alice").contains(&Permission::ManageGroups));
+        assert!(workspace.set_member_role("owner", "bob", Role::Manager).is_ok());
+        assert!(workspace.permissions_for("bob").contains(&Permission::ManageGroups));
+    }
+
+    #[test]
+    fn promoting_a_role_revokes_the_permissions_it_had() {
+        let mut workspace = Workspace::new("Office", "owner");
+        workspace.add_member("alice", "Alice", Role::Admin);
+        assert!(workspace.permissions_for("alice").contains(&Permission::ManageMembers));
+        assert!(workspace.set_member_role("owner", "alice", Role::Member).is_ok());
+        assert!(!workspace.permissions_for("alice").contains(&Permission::ManageMembers));
+        assert!(workspace.permissions_for("alice").contains(&Permission::SendMessages));
+    }
+
+    #[test]
+    fn ownership_cannot_be_assigned_or_demoted() {
+        let mut workspace = Workspace::new("Office", "owner");
+        workspace.add_member("alice", "Alice", Role::Admin);
+
+        // Nobody may mint a second owner through a role change.
+        assert!(workspace.set_member_role("owner", "alice", Role::Owner).is_err());
+        // The owner cannot demote themselves and strand the workplace.
+        assert!(workspace.set_member_role("owner", "owner", Role::Member).is_err());
+        assert_eq!(role_of(&workspace, "owner"), Role::Owner);
+        assert_eq!(workspace.owner_device_id, "owner");
+    }
+
+    #[test]
+    fn a_member_cannot_promote_themselves_or_their_peers() {
+        let mut workspace = Workspace::new("Office", "owner");
+        workspace.add_member("alice", "Alice", Role::Admin);
+        workspace.add_member("bob", "Bob", Role::Member);
+
+        assert!(workspace.set_member_role("alice", "bob", Role::Admin).is_err());
+        assert_eq!(role_of(&workspace, "bob"), Role::Member);
+        assert!(workspace.set_member_role("bob", "bob", Role::Admin).is_err());
+        assert!(workspace.set_member_role("alice", "alice", Role::Owner).is_err());
+    }
+
+    #[test]
+    fn roles_reject_unknown_and_non_member_targets() {
+        let mut workspace = Workspace::new("Office", "owner");
+        assert!(workspace.set_member_role("owner", "nobody", Role::Admin).is_err());
+        assert!(workspace.set_member_role("stranger", "owner", Role::Member).is_err());
+        assert!(Role::from_wire("Chief").is_none());
+        assert!(Role::from_wire(" admin ").is_some());
+        assert_eq!(Role::from_wire("manager").map(|r| r.as_wire()), Some("Manager"));
+    }
+
+    #[test]
+    fn assignable_roles_match_the_assignment_rules() {
+        assert_eq!(Role::Owner.assignable_roles(), vec![Role::Admin, Role::Manager, Role::Member]);
+        // An admin cannot mint a peer admin; only the owner can.
+        assert_eq!(Role::Admin.assignable_roles(), vec![Role::Manager, Role::Member]);
+        assert!(Role::Manager.assignable_roles().is_empty());
+        assert!(Role::Member.assignable_roles().is_empty());
     }
 }

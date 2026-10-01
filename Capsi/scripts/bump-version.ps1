@@ -20,6 +20,8 @@ $RepoRoot = Split-Path -Parent $AppRoot
 $flutterPubspec = Join-Path $AppRoot 'flutter/pubspec.yaml'
 $nativeManifest = Join-Path $AppRoot 'flutter/native/Cargo.toml'
 $workspaceManifest = Join-Path $AppRoot 'Cargo.toml'
+$coreManifest = Join-Path $AppRoot 'crates/capsi-core/Cargo.toml'
+$flutterClient = Join-Path $AppRoot 'flutter/lib/main.dart'
 
 $found = Select-String -Path $flutterPubspec -Pattern '(?m)^version: *([0-9]+)[.]([0-9]+)[.]([0-9]+)[+]([0-9]+)' | Select-Object -First 1
 if (-not $found) { throw "Capsi: could not find Flutter version in $flutterPubspec" }
@@ -50,19 +52,38 @@ function Replace-Text($path, $pattern, $replacement) {
 Replace-Text $flutterPubspec ('(?m)^version: *' + $oldEsc + '[+]([0-9]+)') ('version: ' + $newVersion)
 Replace-Text $nativeManifest ('(?m)^version *= *"' + $oldEsc + '"') ('version = "' + $new + '"')
 Replace-Text $workspaceManifest ('(?m)^version *= *"' + $oldEsc + '"') ('version = "' + $new + '"')
+Replace-Text $coreManifest ('(?m)^version *= *"' + $oldEsc + '"') ('version = "' + $new + '"')
 
-# Website fallback filename only. The website itself is a separate product
-# presentation and does not share application source with Flutter.
+# The Flutter client keeps a display-only fallback for when the native bridge
+# cannot be loaded; it has to move with the release or About shows a stale build.
+Replace-Text $flutterClient ('capsiVersionFallback = ''' + $oldEsc + '''') ('capsiVersionFallback = ''' + $new + '''')
+
+# Website presentation: the download button names the release artifact and the
+# hero eyebrow repeats the version. The website is a separate product surface,
+# so both are updated only while the files are present.
 foreach ($path in @(
-    (Join-Path $RepoRoot 'Website/app.js'),
-    (Join-Path $RepoRoot 'Website/assets/js/config.js')
+    (Join-Path $RepoRoot 'Website/App.jsx')
 )) {
     if (Test-Path $path) {
-        $enc = New-Object System.Text.UTF8Encoding($false)
-        $text = $enc.GetString([System.IO.File]::ReadAllBytes($path))
-        $updated = $text -replace ('Capsi_' + $oldEsc + '_x64-setup[.]exe'), ('Capsi_' + $new + '_x64-setup.exe')
+        Replace-Text $path ('Capsi-' + $oldEsc + '-x64[.]msi') ('Capsi-' + $new + '-x64.msi')
+        Replace-Text $path ('(?m)CAPSI ' + $oldEsc + '\b') ('CAPSI ' + $new)
+    }
+}
+
+# Documentation and tooling strings that quote the release version. These are
+# soft targets: a file that no longer mentions the version is not an error.
+function Replace-TextIfPresent($path, $pattern, $replacement) {
+    if (-not (Test-Path $path)) { return }
+    $enc = New-Object System.Text.UTF8Encoding($false)
+    $text = $enc.GetString([System.IO.File]::ReadAllBytes($path))
+    if ($text -notmatch $pattern) { return }
+    $updated = $text -replace $pattern, $replacement
+    if ($updated -cne $text) {
         [System.IO.File]::WriteAllBytes($path, $enc.GetBytes($updated))
     }
 }
+
+Replace-TextIfPresent (Join-Path $AppRoot 'flutter/README.md') ('The Flutter client currently tracks Capsi `' + $oldEsc) ('The Flutter client currently tracks Capsi `' + $new)
+Replace-TextIfPresent (Join-Path $AppRoot 'scripts/rc-preproc/main.rs') ('preprocessor\) ' + $oldEsc) ('preprocessor) ' + $new)
 
 Write-Host "Capsi: version bumped $old -> $new"

@@ -1,13 +1,193 @@
 import 'dart:async';
-import 'dart:isolate';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'capsi_native.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+/// User preferences that survive a restart, stored beside the rest of the Capsi
+/// data as a single small JSON file.
+///
+/// The native side already owns the data directory (`capsi_data.json`, trust
+/// store, workplace), so preferences live there too rather than in a second
+/// location the user would never find. Reads are best-effort: a missing or
+/// corrupt file falls back to the defaults instead of blocking startup, because
+/// preferences are not worth refusing to launch over.
+class AppSettings extends ChangeNotifier {
+  AppSettings._(this._directory);
+
+  /// Used before [load] resolves, and by tests.
+  factory AppSettings.inMemory() => AppSettings._(null);
+
+  final Directory? _directory;
+
+  static const _defaultDeviceName = 'Capsi device';
+
+  String _deviceName = _defaultDeviceName;
+  bool _notificationsEnabled = true;
+  bool _minimizeToTray = true;
+  bool _sendReadReceipts = true;
+
+  /// The name this device advertises over discovery. Peers show this, so it is
+  /// worth letting the user pick something recognisable.
+  String get deviceName => _deviceName;
+  bool get notificationsEnabled => _notificationsEnabled;
+  bool get minimizeToTray => _minimizeToTray;
+  bool get sendReadReceipts => _sendReadReceipts;
+
+  File? get _file {
+    final directory = _directory;
+    if (directory == null) return null;
+    return File('${directory.path}${Platform.pathSeparator}capsi_settings.json');
+  }
+
+  /// Load from disk, creating the file on first run so the location is obvious.
+  static Future<AppSettings> load() async {
+    AppSettings settings;
+    try {
+      settings = AppSettings._(await getApplicationSupportDirectory());
+    } catch (_) {
+      return AppSettings.inMemory();
+    }
+    await settings._read();
+    return settings;
+  }
+
+  Future<void> _read() async {
+    final file = _file;
+    if (file == null || !await file.exists()) return;
+    try {
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map<String, dynamic>) return;
+      final name = decoded['deviceName'];
+      _deviceName = name is String && name.trim().isNotEmpty ? name.trim() : _defaultDeviceName;
+      _notificationsEnabled = decoded['notificationsEnabled'] is bool ? decoded['notificationsEnabled'] as bool : true;
+      _minimizeToTray = decoded['minimizeToTray'] is bool ? decoded['minimizeToTray'] as bool : true;
+      _sendReadReceipts = decoded['sendReadReceipts'] is bool ? decoded['sendReadReceipts'] as bool : true;
+    } catch (_) {
+      // Corrupt preferences are not a reason to fail; keep the defaults.
+    }
+  }
+
+  Future<void> _write() async {
+    final file = _file;
+    if (file == null) return;
+    try {
+      await file.writeAsString(jsonEncode({
+        'deviceName': _deviceName,
+        'notificationsEnabled': _notificationsEnabled,
+        'minimizeToTray': _minimizeToTray,
+        'sendReadReceipts': _sendReadReceipts,
+      }));
+    } catch (_) {
+      // Losing a preference write must never take the app down with it.
+    }
+  }
+
+  /// Capsi validates the name in the core (`validate_device_name`), which
+  /// trims and caps the length; mirror that here so the user gets the message
+  /// before discovery restarts.
+  static const maxDeviceNameLength = 32;
+
+  /// Returns the trimmed name, or an error the UI can show.
+  String? setDeviceName(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return 'Device name cannot be empty.';
+    if (trimmed.length > maxDeviceNameLength) {
+      return 'Device name is limited to $maxDeviceNameLength characters.';
+    }
+    if (trimmed == _deviceName) return null;
+    _deviceName = trimmed;
+    _write();
+    notifyListeners();
+    return null;
+  }
+
+  void setNotificationsEnabled(bool value) {
+    if (value == _notificationsEnabled) return;
+    _notificationsEnabled = value;
+    _write();
+    notifyListeners();
+  }
+
+  void setMinimizeToTray(bool value) {
+    if (value == _minimizeToTray) return;
+    _minimizeToTray = value;
+    _write();
+    notifyListeners();
+  }
+
+  void setSendReadReceipts(bool value) {
+    if (value == _sendReadReceipts) return;
+    _sendReadReceipts = value;
+    _write();
+    notifyListeners();
+  }
+}
+
+/// Capsi is published by Capsicom and every build points at the public site.
+const String capsiWebsite = 'https://capsi.win';
+const String capsiPublisher = 'Capsicom';
+
+/// Fallback shown when the native bridge (and with it the authoritative crate
+/// version) is unavailable. scripts/bump-version.ps1 updates this const.
+const String capsiVersionFallback = '1.1.0';
+
+/// True where the Capsi data folder is an ordinary folder the user can open.
+/// The mobile sandbox keeps application data private to the application, so
+/// Android and iOS expose the path instead of a file manager.
+bool get _dataFolderIsOpenable =>
+    Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+
+/// Opens [url] in the user's browser. A device without a browser handler is
+/// still a working Capsi device, so a failure is reported instead of thrown.
+Future<void> _openExternalLink(BuildContext context, String url) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  void report(String message) {
+    messenger?.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  try {
+    final opened = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    if (!opened) report('Could not open $url.');
+  } catch (_) {
+    report('Could not open $url.');
+  }
+}
+
+/// Opens the Capsi data folder in the platform file manager.
+Future<void> _openDataFolder(BuildContext context, String directory) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  void report(String message) {
+    messenger?.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  if (!_dataFolderIsOpenable) {
+    report('Capsi data stays private to the application on this device.');
+    return;
+  }
+
+  // explorer.exe opens a directory in File Explorer; `open` and `xdg-open` are
+  // the equivalents on the other desktops.
+  final command = Platform.isWindows
+      ? 'explorer.exe'
+      : Platform.isMacOS
+          ? 'open'
+          : 'xdg-open';
+
+  try {
+    await Process.run(command, [directory]);
+  } catch (_) {
+    report('Could not open the Capsi data folder.');
+  }
+}
 
 Future<String?> _sendFileInIsolate(String dataDirectory, String deviceId, String filePath) async {
   return Isolate.run(() {
@@ -46,6 +226,16 @@ Future<Map<String, dynamic>?> _nativeJsonInIsolate(
         return bridge.sendWorkplaceMessage(dataDirectory, args[0], args[1]);
       case 'workplace_add_member':
         return bridge.addWorkplaceGroupMember(dataDirectory, args[0], args[1]);
+      case 'workplace_remove_member':
+        return bridge.removeWorkplaceGroupMember(dataDirectory, args[0], args[1]);
+      case 'workplace_move_member':
+        return bridge.moveWorkplaceGroupMember(dataDirectory, args[0], args[1], args[2]);
+      case 'workplace_set_role':
+        return bridge.setWorkplaceMemberRole(dataDirectory, args[0], args[1]);
+      case 'workplace_rename':
+        return bridge.renameWorkplace(dataDirectory, args[0]);
+      case 'workplace_delete':
+        return bridge.deleteWorkplace(dataDirectory);
       case 'file_accept':
         return {'ok': bridge.acceptFile(dataDirectory, args[0], args[1])};
       case 'file_decline':
@@ -110,9 +300,14 @@ class CapsiHome extends StatefulWidget {
   const CapsiHome({
     super.key,
     this.autoInitialize = true,
+    this.settings,
   });
 
   final bool autoInitialize;
+
+  /// Preferences are injected so a widget test can supply an in-memory instance
+  /// instead of touching the filesystem.
+  final AppSettings? settings;
 
   @override
   State<CapsiHome> createState() => _CapsiHomeState();
@@ -137,15 +332,46 @@ class _CapsiHomeState extends State<CapsiHome> {
   final Set<String> _incomingOfferDialogs = <String>{};
   final Map<String, int> _transferReceived = <String, int>{};
 
+  /// Preferences. Always non-null: injected by a test, or loaded from disk.
+  late AppSettings settings;
+
+  /// Whether the app is currently visible. A notification is only worth raising
+  /// when the user is not already looking at the conversation.
+  bool _foreground = true;
+
   @override
   void initState() {
     super.initState();
     native = CapsiNative.tryLoad();
+    settings = widget.settings ?? AppSettings.inMemory();
+    settings.addListener(_onSettingsChanged);
+    WidgetsBinding.instance.addObserver(_lifecycle);
     if (widget.autoInitialize) {
       _initializeRuntime();
     } else {
       runtimeLoading = false;
     }
+  }
+
+  /// A changed device name has to be re-announced: the beacon is signed once
+  /// when discovery starts, so the running listener would keep advertising the
+  /// old name until the next launch. Restarting discovery is the only way to
+  /// make peers see the new one straight away.
+  void _onSettingsChanged() {
+    if (!mounted) return;
+    _restartDiscovery();
+  }
+
+  late final WidgetsBindingObserver _lifecycle = _CapsiLifecycleObserver(this);
+
+  void _restartDiscovery() {
+    final bridge = native;
+    if (bridge == null || discoveryHandle == 0) return;
+    bridge.stopDiscovery(discoveryHandle);
+    discoveryTimer?.cancel();
+    discoveryTimer = null;
+    discoveryHandle = 0;
+    _startDiscovery();
   }
 
   Future<void> _initializeRuntime() async {
@@ -160,6 +386,13 @@ class _CapsiHomeState extends State<CapsiHome> {
       final directory = await getApplicationSupportDirectory();
       if (!mounted) return;
       dataDirectory = directory.path;
+
+      // Preferences are loaded alongside the directory because that is where
+      // they live; an injected instance (test) is already resolved.
+      if (widget.settings == null) {
+        settings = await AppSettings.load();
+        settings.addListener(_onSettingsChanged);
+      }
 
       if (native == null) {
         setState(() {
@@ -271,8 +504,27 @@ class _CapsiHomeState extends State<CapsiHome> {
         if (event['type'] == 'file_offer') {
           _showIncomingFileOffer(event);
         }
+        _notifyForEvent(event);
       }
     });
+  }
+
+  /// Raise a host notification for an incoming message or file offer.
+  ///
+  /// Skipped while the app is in the foreground: the user is already looking at
+  /// the conversation, and a balloon over the window they are using is noise.
+  /// [foreground] is maintained from the app lifecycle observer.
+  void _notifyForEvent(Map<String, dynamic> event) {
+    if (!settings.notificationsEnabled || _foreground) return;
+    final type = event['type']?.toString();
+    if (type != 'message' && type != 'file_offer') return;
+
+    final sender = event['device_name']?.toString();
+    final who = sender == null || sender.isEmpty ? 'A Capsi device' : sender;
+    final body = type == 'file_offer'
+        ? '$who wants to send you a file.'
+        : '$who sent you a message.';
+    postMessageNotification(title: 'Capsi', body: body);
   }
 
   Future<void> _showIncomingFileOffer(Map<String, dynamic> event) async {
@@ -316,7 +568,9 @@ class _CapsiHomeState extends State<CapsiHome> {
     final dir = dataDirectory;
     if (bridge == null || dir == null) return;
     discoveryHandle = bridge.startDiscovery(
-      deviceName: 'Capsi device',
+      // The name is re-announced by restarting discovery whenever it changes,
+      // because the beacon is signed once when the listener starts.
+      deviceName: settings.deviceName,
       dataDirectory: dir,
     );
     if (discoveryHandle == 0) return;
@@ -348,6 +602,8 @@ class _CapsiHomeState extends State<CapsiHome> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(_lifecycle);
+    settings.removeListener(_onSettingsChanged);
     _stopRuntimeSessions();
     super.dispose();
   }
@@ -373,6 +629,7 @@ class _CapsiHomeState extends State<CapsiHome> {
         native: native,
         dataDirectory: dataDirectory,
         trustedDeviceCount: trustedDevices.length,
+        settings: settings,
       ),
     );
   }
@@ -631,16 +888,18 @@ class _SettingsDialog extends StatelessWidget {
   final CapsiNative? native;
   final String? dataDirectory;
   final int trustedDeviceCount;
+  final AppSettings settings;
 
   const _SettingsDialog({
     required this.native,
     required this.dataDirectory,
     required this.trustedDeviceCount,
+    required this.settings,
   });
 
   @override
   Widget build(BuildContext context) {
-    final version = native?.runtimeVersion ?? '1.0.2';
+    final version = native?.runtimeVersion ?? capsiVersionFallback;
 
     return AlertDialog(
       title: Row(
@@ -662,31 +921,48 @@ class _SettingsDialog extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _SettingsSection(
+                title: 'Device',
+                children: [
+                  _DeviceNameRow(settings: settings),
+                  _SettingsRow(
+                    icon: Icons.notifications_outlined,
+                    title: 'Notifications',
+                    subtitle: 'Show a notification when a message or file arrives.',
+                    trailing: Switch(
+                      value: settings.notificationsEnabled,
+                      onChanged: (value) {
+                        settings.setNotificationsEnabled(value);
+                        _syncNotificationPreference(context, value);
+                      },
+                    ),
+                  ),
+                  // Only Windows has a tray; offering it elsewhere would be a
+                  // switch that silently does nothing.
+                  if (_traySupported)
+                    _SettingsRow(
+                      icon: Icons.alternate_email,
+                      title: 'Keep running in the system tray',
+                      subtitle: 'Closing the window keeps Capsi listening in the notification area.',
+                      trailing: Switch(
+                        value: settings.minimizeToTray,
+                        onChanged: settings.setMinimizeToTray,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _SettingsSection(
                 title: 'Connection',
                 children: [
+                  // One status row rather than three repeating the same
+                  // ready/not-ready answer about the same native bridge.
                   _SettingsRow(
-                    icon: Icons.wifi_outlined,
-                    title: 'Direct communication',
-                    subtitle: 'Capsi connects devices directly. No Capsi account or cloud service is required.',
-                    trailing: _NetworkStatus(available: native != null),
-                  ),
-                  _SettingsRow(
-                    icon: Icons.radar_outlined,
-                    title: 'Discovery',
-                    subtitle: 'Find Capsi devices that are available on your local connection.',
-                    trailing: Icon(
-                      native == null ? Icons.error_outline : Icons.check_circle_outline,
-                      color: native == null ? Colors.orange : const Color(0xFF7ED957),
-                    ),
-                  ),
-                  _SettingsRow(
-                    icon: Icons.message_outlined,
-                    title: 'Messages',
-                    subtitle: 'Messages are sent directly between your devices.',
-                    trailing: Icon(
-                      native == null ? Icons.error_outline : Icons.check_circle_outline,
-                      color: native == null ? Colors.orange : const Color(0xFF7ED957),
-                    ),
+                    icon: native == null ? Icons.error_outline : Icons.check_circle_outline,
+                    title: native == null ? 'Capsi is not ready' : 'Capsi is ready to connect',
+                    subtitle: native == null
+                        ? 'The native runtime did not load on this device.'
+                        : 'Devices, discovery and messages are available.',
+                    iconColor: native == null ? Colors.orange : const Color(0xFF7ED957),
                   ),
                 ],
               ),
@@ -715,19 +991,33 @@ class _SettingsDialog extends StatelessWidget {
                     icon: Icons.folder_outlined,
                     title: 'Capsi data',
                     subtitle: dataDirectory ?? 'Data folder is unavailable.',
+                    onTap: dataDirectory == null
+                        ? null
+                        : () => _openDataFolder(context, dataDirectory!),
                     trailing: dataDirectory == null
                         ? const Icon(Icons.error_outline)
-                        : IconButton(
-                            tooltip: 'Copy path',
-                            onPressed: () async {
-                              await Clipboard.setData(ClipboardData(text: dataDirectory!));
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Data folder path copied.')),
-                                );
-                              }
-                            },
-                            icon: const Icon(Icons.copy_outlined),
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_dataFolderIsOpenable)
+                                IconButton(
+                                  tooltip: 'Open folder',
+                                  onPressed: () => _openDataFolder(context, dataDirectory!),
+                                  icon: const Icon(Icons.folder_open_outlined),
+                                ),
+                              IconButton(
+                                tooltip: 'Copy path',
+                                onPressed: () async {
+                                  await Clipboard.setData(ClipboardData(text: dataDirectory!));
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Data folder path copied.')),
+                                    );
+                                  }
+                                },
+                                icon: const Icon(Icons.copy_outlined),
+                              ),
+                            ],
                           ),
                   ),
                 ],
@@ -748,17 +1038,20 @@ class _SettingsDialog extends StatelessWidget {
               _SettingsSection(
                 title: 'About',
                 children: [
-                  _SettingsRow(
-                    icon: Icons.info_outline,
-                    title: 'Capsi',
-                    subtitle: 'Messages and files, device to device.',
-                    trailing: Text('v$version'),
-                  ),
+                  // Version, publisher and website all live in the About dialog,
+                  // so they are listed once here rather than shown twice.
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.open_in_new_outlined),
-                    title: const Text('About Capsi'),
-                    subtitle: const Text('Version and app information'),
+                    leading: const Icon(Icons.info_outline),
+                    title: const Text('Capsi'),
+                    subtitle: const Text('Messages and files, device to device.'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('v$version', style: const TextStyle(color: Color(0xFF858D88))),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
                     onTap: () => showDialog<void>(
                       context: context,
                       builder: (_) => _AboutDialog(native: native),
@@ -774,6 +1067,154 @@ class _SettingsDialog extends StatelessWidget {
   }
 }
 
+/// Editable row for the name this device advertises to its peers.
+///
+/// The name is the only part of a device a user can change, and peers identify
+/// it by that name, so it is edited inline rather than behind a dialog.
+/// Tracks whether the app is visible, which decides if an incoming message
+/// warrants a notification.
+///
+/// Kept as a separate observer rather than inline in the state so the state class
+/// stays focused on the message session.
+class _CapsiLifecycleObserver extends WidgetsBindingObserver {
+  _CapsiLifecycleObserver(this._state);
+
+  final _CapsiHomeState _state;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _state._foreground = state == AppLifecycleState.resumed;
+  }
+}
+
+class _DeviceNameRow extends StatefulWidget {
+  final AppSettings settings;
+
+  const _DeviceNameRow({required this.settings});
+
+  @override
+  State<_DeviceNameRow> createState() => _DeviceNameRowState();
+}
+
+class _DeviceNameRowState extends State<_DeviceNameRow> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.settings.deviceName);
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final error = widget.settings.setDeviceName(_controller.text);
+    setState(() => _error = error);
+    if (error == null) {
+      // Show what was actually stored, which is the trimmed value.
+      _controller.text = widget.settings.deviceName;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Device name updated.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 10),
+            child: Icon(Icons.badge_outlined),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Device name'),
+                const SizedBox(height: 2),
+                Text(
+                  'Other devices on your network see this name.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: const Color(0xFF858D88)),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _controller,
+                  maxLength: AppSettings.maxDeviceNameLength,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _save(),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                    errorText: _error,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Padding(
+            padding: const EdgeInsets.only(top: 26),
+            child: FilledButton(onPressed: _save, child: const Text('Save')),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Method channel to the host for the two things Flutter cannot draw itself:
+/// a Windows tray icon and a desktop/mobile notification.
+///
+/// Both are host concerns - `Shell_NotifyIcon` on Windows, `NotificationManager`
+/// on Android - so the Dart side asks for them and never has to know which
+/// platform answered.
+const MethodChannel capsiPlatformChannel = MethodChannel('win.capsi.app/platform');
+
+/// True only where a system tray actually exists. Offering a tray switch on a
+/// phone would be a control that silently does nothing.
+bool get _traySupported => Platform.isWindows;
+
+/// Asks the host to raise a notification for an incoming message or file.
+///
+/// Returns false when the host has no notification support or the user turned
+/// notifications off, so the caller never has to branch on platform itself.
+Future<bool> postMessageNotification({
+  required String title,
+  required String body,
+}) async {
+  if (!Platform.isWindows && !Platform.isAndroid) return false;
+  try {
+    final ok = await capsiPlatformChannel.invokeMethod<bool>('notify', {
+      'title': title,
+      'body': body,
+    });
+    return ok ?? false;
+  } on MissingPluginException {
+    // An older host build (or a platform without the channel) simply cannot
+    // notify; that is not an error worth surfacing to the user.
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Tells the host whether the window should minimise to the tray on close, and
+/// asks it to (re)draw the tray icon when [enabled] turns on.
+Future<void> _syncNotificationPreference(BuildContext context, bool enabled) async {
+  if (!Platform.isWindows && !Platform.isAndroid) return;
+  try {
+    await capsiPlatformChannel.invokeMethod<void>('setNotificationsEnabled', enabled);
+  } catch (_) {
+    // The preference is still stored, so it applies on the next launch.
+  }
+}
+
+/// Keeps [text] in sync with a settings field that lives on this widget.
 class _SettingsSection extends StatelessWidget {
   final String title;
   final List<Widget> children;
@@ -811,24 +1252,29 @@ class _SettingsRow extends StatelessWidget {
   final String title;
   final String subtitle;
   final Widget? trailing;
+  final VoidCallback? onTap;
+  final Color? iconColor;
 
   const _SettingsRow({
     required this.icon,
     required this.title,
     required this.subtitle,
     this.trailing,
+    this.onTap,
+    this.iconColor,
   });
 
   @override
   Widget build(BuildContext context) => ListTile(
         contentPadding: const EdgeInsets.symmetric(vertical: 3),
-        leading: Icon(icon, color: const Color(0xFF7ED957)),
+        leading: Icon(icon, color: iconColor ?? const Color(0xFF7ED957)),
         title: Text(title),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 3),
           child: Text(subtitle, style: const TextStyle(color: Color(0xFF858D88))),
         ),
         trailing: trailing,
+        onTap: onTap,
       );
 }
 
@@ -839,7 +1285,7 @@ class _AboutDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final version = native?.runtimeVersion ?? '1.0.2';
+    final version = native?.runtimeVersion ?? capsiVersionFallback;
 
     return AlertDialog(
       title: Row(
@@ -866,6 +1312,14 @@ class _AboutDialog extends StatelessWidget {
             ),
             SizedBox(height: 18),
             Text('Version $version', style: const TextStyle(color: Color(0xFF858D88))),
+            const SizedBox(height: 4),
+            Text('Published by $capsiPublisher', style: const TextStyle(color: Color(0xFF858D88))),
+            const SizedBox(height: 10),
+            TextButton.icon(
+              onPressed: () => _openExternalLink(context, capsiWebsite),
+              icon: const Icon(Icons.open_in_new, size: 16),
+              label: Text(capsiWebsite),
+            ),
           ],
         ),
       ),
@@ -1129,11 +1583,27 @@ class _PageBodyState extends State<_PageBody> {
                                 workplaceDraft = '';
                                 workplaceController.clear();
                               }),
-                              trailing: IconButton(
-                                tooltip: 'Add member',
-                                icon: const Icon(Icons.person_add_alt_1_outlined),
-                                onPressed: () => _addWorkplaceMember(context, item, members),
-                              ),
+                              trailing: _canManageGroups(workspace)
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          tooltip: 'Manage members',
+                                          icon: const Icon(Icons.manage_accounts_outlined),
+                                          onPressed: () => _manageGroupMembers(context, item, members, groups),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Add member',
+                                          icon: const Icon(Icons.person_add_alt_1_outlined),
+                                          onPressed: () => _addWorkplaceMember(context, item, members),
+                                        ),
+                                      ],
+                                    )
+                                  : IconButton(
+                                      tooltip: 'Add member',
+                                      icon: const Icon(Icons.person_add_alt_1_outlined),
+                                      onPressed: () => _addWorkplaceMember(context, item, members),
+                                    ),
                             ),
                         ],
                       ),
@@ -1143,6 +1613,18 @@ class _PageBodyState extends State<_PageBody> {
                 padding: const EdgeInsets.all(14),
                 child: Text('People ${members.length}', style: Theme.of(context).textTheme.bodySmall),
               ),
+              if (_canManageMembers(workspace))
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 0, 14, 12),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => _manageAllMembers(context, workspace, members),
+                      icon: const Icon(Icons.shield_outlined, size: 16),
+                      label: const Text('Manage people'),
+                    ),
+                  ),
+                ),
             ],
           ),
         );
@@ -1157,10 +1639,21 @@ class _PageBodyState extends State<_PageBody> {
                       leading: const Icon(Icons.group_outlined),
                       title: Text(group['name']?.toString() ?? 'Group'),
                       subtitle: Text('${(group['member_ids'] as List?)?.length ?? 0} members'),
-                      trailing: IconButton(
-                        tooltip: 'Add member',
-                        icon: const Icon(Icons.person_add_alt_1_outlined),
-                        onPressed: () => _addWorkplaceMember(context, group, members),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_canManageGroups(workspace))
+                            IconButton(
+                              tooltip: 'Manage members',
+                              icon: const Icon(Icons.manage_accounts_outlined),
+                              onPressed: () => _manageGroupMembers(context, group, members, groups),
+                            ),
+                          IconButton(
+                            tooltip: 'Add member',
+                            icon: const Icon(Icons.person_add_alt_1_outlined),
+                            onPressed: () => _addWorkplaceMember(context, group, members),
+                          ),
+                        ],
                       ),
                     ),
                     const Divider(height: 1),
@@ -1262,7 +1755,55 @@ class _PageBodyState extends State<_PageBody> {
                       icon: const Icon(Icons.campaign_outlined),
                       label: const Text('Broadcast'),
                     ),
+                  if (!compact && _canManageDepartments(workspace)) ...[
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: widget.native == null || widget.dataDirectory == null
+                          ? null
+                          : () => _createWorkplaceName(
+                              context,
+                              'Create department',
+                              'workplace_department',
+                            ),
+                      icon: const Icon(Icons.apartment_outlined),
+                      label: const Text('Department'),
+                    ),
+                  ],
                   IconButton(onPressed: widget.onTrustChanged, tooltip: 'Refresh', icon: const Icon(Icons.refresh)),
+                  // Only the owner carries ManageWorkspace in the core, so the
+                  // rename/delete entry point is hidden from everyone else.
+                  if (_isWorkplaceOwner(workspace)) ...[
+                    if (!compact) const SizedBox(width: 8),
+                    PopupMenuButton<String>(
+                      tooltip: 'Workplace settings',
+                      onSelected: (value) {
+                        if (value == 'rename') {
+                          _renameWorkplace(context, workspace);
+                        } else {
+                          _deleteWorkplace(context, workspace);
+                        }
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: 'rename',
+                          child: ListTile(
+                            leading: Icon(Icons.edit_outlined),
+                            title: Text('Rename workplace'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: ListTile(
+                            leading: Icon(Icons.delete_outline),
+                            title: Text('Delete workplace'),
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                      ],
+                      icon: const Icon(Icons.settings_outlined),
+                    ),
+                  ],
                   if (compact)
                     PopupMenuButton<String>(
                       tooltip: 'Workplace actions',
@@ -1274,13 +1815,30 @@ class _PageBodyState extends State<_PageBody> {
                             'Create group',
                             'workplace_group',
                           );
-                        } else {
+                        } else if (value == 'broadcast') {
                           _createBroadcast(context);
+                        } else if (value == 'department') {
+                          _createWorkplaceName(
+                            context,
+                            'Create department',
+                            'workplace_department',
+                          );
+                        } else if (value == 'rename') {
+                          _renameWorkplace(context, workspace);
+                        } else if (value == 'delete') {
+                          _deleteWorkplace(context, workspace);
                         }
                       },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'group', child: Text('Create group')),
-                        PopupMenuItem(value: 'broadcast', child: Text('Create broadcast')),
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(value: 'group', child: Text('Create group')),
+                        const PopupMenuItem(value: 'broadcast', child: Text('Create broadcast')),
+                        if (_canManageDepartments(workspace))
+                          const PopupMenuItem(value: 'department', child: Text('Create department')),
+                        if (_isWorkplaceOwner(workspace)) ...[
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(value: 'rename', child: Text('Rename workplace')),
+                          const PopupMenuItem(value: 'delete', child: Text('Delete workplace')),
+                        ],
                       ],
                       icon: const Icon(Icons.more_horiz),
                     ),
@@ -1333,6 +1891,55 @@ class _PageBodyState extends State<_PageBody> {
     return id == null || id.isEmpty ? null : id;
   }
 
+  /// The role this device holds in the workplace, or null when it is not a
+  /// member. Mirrors `Workspace::permissions_for` so the UI can hide actions
+  /// the native layer would refuse anyway.
+  String? _localWorkplaceRole(Map<String, dynamic> workspace) {
+    final localId = _localWorkplaceMemberId(workspace);
+    if (localId == null) return null;
+    final members = (workspace['members'] as List?)?.whereType<Map<String, dynamic>>() ?? const [];
+    final role = members
+        .cast<Map<String, dynamic>?>()
+        .firstWhere((m) => m?['device_id']?.toString() == localId, orElse: () => null)?['role']
+        ?.toString()
+        .split('.')
+        .last;
+    return role == null || role.isEmpty ? null : role;
+  }
+
+  /// Only the owner may rename or delete the workplace.
+  bool _isWorkplaceOwner(Map<String, dynamic> workspace) => _localWorkplaceRole(workspace) == 'Owner';
+
+  /// Owner, admin and manager roles all carry `ManageGroups` in the core.
+  bool _canManageGroups(Map<String, dynamic> workspace) {
+    final role = _localWorkplaceRole(workspace);
+    return role == 'Owner' || role == 'Admin' || role == 'Manager';
+  }
+
+  /// `ManageDepartments` is held by owner and admin only.
+  bool _canManageDepartments(Map<String, dynamic> workspace) {
+    final role = _localWorkplaceRole(workspace);
+    return role == 'Owner' || role == 'Admin';
+  }
+
+  /// `ManageMembers` is held by owner and admin. Role changes ride on the same
+  /// permission as removing a member, so the two appear together.
+  bool _canManageMembers(Map<String, dynamic> workspace) {
+    final role = _localWorkplaceRole(workspace);
+    return role == 'Owner' || role == 'Admin';
+  }
+
+  /// The roles this device is allowed to hand out, mirroring
+  /// `Role::assignable_roles` so the list never offers something the core
+  /// rejects. Ownership is absent by design: it is not assignable here.
+  List<String> _assignableRoles(Map<String, dynamic> workspace) {
+    final role = _localWorkplaceRole(workspace);
+    // Only the owner may mint an admin; an admin may delegate manager/member.
+    if (role == 'Owner') return const ['Admin', 'Manager', 'Member'];
+    if (role == 'Admin') return const ['Manager', 'Member'];
+    return const [];
+  }
+
   Future<void> _sendWorkplaceMessage() async {
     final data = widget.dataDirectory;
     final native = widget.native;
@@ -1356,6 +1963,290 @@ class _PageBodyState extends State<_PageBody> {
         SnackBar(content: Text(result?['error']?.toString() ?? 'Message could not be sent.')),
       );
     }
+  }
+
+  /// Owner-only. Renames the workplace and pushes the new state to members.
+  Future<void> _renameWorkplace(BuildContext context, Map<String, dynamic> workspace) async {
+    final controller = TextEditingController(text: workspace['name']?.toString() ?? '');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename Workplace'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(labelText: 'Name'),
+          onSubmitted: (value) => Navigator.pop(context, value.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || name == null || name.isEmpty || widget.native == null || widget.dataDirectory == null) return;
+    await _runWorkplaceAction('workplace_rename', [name], 'Workplace could not be renamed.');
+  }
+
+  Future<void> _setMemberRole(
+    Map<String, dynamic> member,
+    String role,
+  ) async {
+    await _runWorkplaceAction(
+      'workplace_set_role',
+      [member['device_id']?.toString() ?? '', role],
+      'Role could not be changed.',
+    );
+  }
+
+  /// Lists every member with the roles this device may grant, so an owner can
+  /// promote and demote without going group by group.
+  Future<void> _manageAllMembers(
+    BuildContext context,
+    Map<String, dynamic> workspace,
+    List<Map<String, dynamic>> members,
+  ) async {
+    final assignable = _assignableRoles(workspace);
+    final localId = _localWorkplaceMemberId(workspace);
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('People'),
+        content: SizedBox(
+          width: 520,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final member in members)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.person_outline),
+                  title: Text(
+                    member['display_name']?.toString().isNotEmpty == true
+                        ? member['display_name'].toString()
+                        : 'Unnamed device',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(member['role']?.toString().split('.').last ?? 'Member'),
+                  trailing: _roleTrailing(
+                    member,
+                    assignable,
+                    isSelf: member['device_id']?.toString() == localId,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  /// The role control for one row. The owner row has no control at all, and a
+  /// member's current role is left out of the list so the menu never offers a
+  /// change that would do nothing.
+  Widget? _roleTrailing(Map<String, dynamic> member, List<String> assignable, {required bool isSelf}) {
+    final current = member['role']?.toString().split('.').last ?? 'Member';
+    // Ownership is not assignable through this screen, and nobody may edit
+    // their own role here.
+    if (current == 'Owner' || isSelf) return null;
+    final choices = assignable.where((role) => role != current).toList();
+    if (choices.isEmpty) return null;
+
+    return PopupMenuButton<String>(
+      tooltip: 'Change role',
+      onSelected: (role) => _setMemberRole(member, role),
+      itemBuilder: (_) => [
+        for (final role in choices)
+          PopupMenuItem(value: role, child: Text('Make $role')),
+      ],
+      icon: const Icon(Icons.shield_outlined),
+    );
+  }
+
+  /// Runs a workplace mutation and reports the outcome on a single snackbar.
+  Future<void> _runWorkplaceAction(String operation, List<String> args, String failure) async {
+    final data = widget.dataDirectory;
+    if (data == null || widget.native == null) return;
+    final result = await _nativeJsonInIsolate(data, operation, args);
+    if (!mounted) return;
+    if (result != null && result['error'] == null) {
+      widget.onTrustChanged();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result?['error']?.toString() ?? failure)),
+      );
+    }
+  }
+
+  /// Owner-only. Warns that every member loses the workplace, then deletes it
+  /// locally and tells the trusted members to drop their copy.
+  Future<void> _deleteWorkplace(BuildContext context, Map<String, dynamic> workspace) async {
+    final memberCount = (workspace['members'] as List?)?.length ?? 0;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Workplace'),
+        content: Text(
+          memberCount <= 1
+              ? 'This workplace will be removed from this device. This cannot be undone.'
+              : 'This workplace will be removed from this device and from $memberCount '
+                  'members. Their messages and groups go with it. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true || widget.native == null || widget.dataDirectory == null) return;
+
+    final result = await _nativeJsonInIsolate(widget.dataDirectory!, 'workplace_delete', const []);
+    if (!mounted) return;
+    if (result != null && result['error'] == null) {
+      // The selected group is gone with the workplace; dropping it here avoids
+      // a stale selection flashing before the next poll lands.
+      setState(() => selectedWorkplaceGroup = null);
+      widget.onTrustChanged();
+      ScaffoldMessenger.of(this.context).showSnackBar(const SnackBar(content: Text('Workplace deleted.')));
+    } else {
+      ScaffoldMessenger.of(this.context).showSnackBar(
+        SnackBar(content: Text(result?['error']?.toString() ?? 'Workplace could not be deleted.')),
+      );
+    }
+  }
+
+  /// Shows the members of [group] with per-member move and remove actions.
+  Future<void> _manageGroupMembers(
+    BuildContext context,
+    Map<String, dynamic> group,
+    List<Map<String, dynamic>> members,
+    List<Map<String, dynamic>> groups,
+  ) async {
+    final groupId = group['id']?.toString() ?? '';
+    final memberIds = (group['member_ids'] as List?)?.map((e) => e.toString()).toSet() ?? <String>{};
+    final inGroup = members.where((m) => memberIds.contains(m['device_id']?.toString())).toList();
+    final otherGroups = groups.where((g) => g['id']?.toString() != groupId).toList();
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Members of ${group['name']?.toString() ?? 'group'}'),
+        content: SizedBox(
+          width: 460,
+          child: inGroup.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: Text('This group has no members yet.')),
+                )
+              : ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final member in inGroup)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.person_outline),
+                        title: Text(
+                          member['display_name']?.toString().isNotEmpty == true
+                              ? member['display_name'].toString()
+                              : 'Unnamed device',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(member['role']?.toString().split('.').last ?? 'Member'),
+                        trailing: PopupMenuButton<String>(
+                          tooltip: 'Manage member',
+                          onSelected: (value) {
+                            Navigator.pop(dialogContext);
+                            if (value == 'remove') {
+                              _removeGroupMember(group, member);
+                            } else {
+                              _moveGroupMember(group, member, otherGroups);
+                            }
+                          },
+                          itemBuilder: (_) => [
+                            if (otherGroups.isNotEmpty)
+                              const PopupMenuItem(value: 'move', child: Text('Move to another group')),
+                            const PopupMenuItem(value: 'remove', child: Text('Remove from group')),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _removeGroupMember(Map<String, dynamic> group, Map<String, dynamic> member) async {
+    await _runWorkplaceAction(
+      'workplace_remove_member',
+      [group['id']?.toString() ?? '', member['device_id']?.toString() ?? ''],
+      'Member could not be removed.',
+    );
+  }
+
+  Future<void> _moveGroupMember(
+    Map<String, dynamic> group,
+    Map<String, dynamic> member,
+    List<Map<String, dynamic>> groups,
+  ) async {
+    if (groups.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Create a second group before moving a member.')),
+      );
+      return;
+    }
+    String? targetId;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Move to group'),
+        content: SizedBox(
+          width: 420,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final target in groups)
+                ListTile(
+                  leading: const Icon(Icons.group_outlined),
+                  title: Text(target['name']?.toString() ?? 'Group'),
+                  onTap: () {
+                    targetId = target['id']?.toString();
+                    Navigator.pop(dialogContext);
+                  },
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+        ],
+      ),
+    );
+    if (!mounted || targetId == null) return;
+    await _runWorkplaceAction(
+      'workplace_move_member',
+      [
+        group['id']?.toString() ?? '',
+        targetId!,
+        member['device_id']?.toString() ?? '',
+      ],
+      'Member could not be moved.',
+    );
   }
 
   Future<void> _addWorkplaceMember(
@@ -1859,9 +2750,9 @@ class _PageBodyState extends State<_PageBody> {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
-  Future<String?> _materialisePickedFile(PlatformFile file) async {
+  Future<String?> _materialisePickedFile(XFile file) async {
     final path = file.path;
-    if (path != null && await File(path).exists()) return path;
+    if (path.isNotEmpty && await File(path).exists()) return path;
 
     // Android hands the picker back a content:// uri that the Rust core cannot
     // open directly, so cache a real copy the transfer can read.
@@ -1886,7 +2777,7 @@ class _PageBodyState extends State<_PageBody> {
     if (data == null || native == null || widget.trustedDevices.isEmpty || !mounted) return;
 
     final selectedId = _validSelectedDevice() ?? widget.trustedDevices.first.deviceId;
-    final file = await FilePicker.pickFile();
+    final file = await openFile();
     if (!mounted || file == null) return;
     final path = await _materialisePickedFile(file);
     if (!mounted || path == null) return;

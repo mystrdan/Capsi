@@ -2,7 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 
-const downloadUrl = 'https://github.com/mystrdan/Capsi/releases/latest/download/Capsi_1.0.2_x64-setup.exe';
+const downloadUrl = 'https://github.com/mystrdan/Capsi/releases/latest/download/Capsi-1.1.0-x64.msi';
 const logoUrl = 'https://raw.githubusercontent.com/mystrdan/Capsi/main/Capsi/icons/capsi-logo-512.png';
 
 const icons = {
@@ -112,7 +112,7 @@ function App() {
 
         <section className="download">
           <img className="download-logo" src={logoUrl} alt="Capsi" />
-          <div className="eyebrow">CAPSI 1.0.2</div>
+          <div className="eyebrow">CAPSI 1.1.0</div>
           <h2>Ready to connect?</h2>
           <p>Install Capsi on your Windows computer, find another device and start sending.</p>
           <a className="button" href={downloadUrl}>Download for Windows</a>

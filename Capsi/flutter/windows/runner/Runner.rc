@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "capsi" "\0"
+            VALUE "CompanyName", "Capsicom" "\0"
+            VALUE "FileDescription", "Capsi" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "capsi" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Capsicom. All rights reserved." "\0"
             VALUE "OriginalFilename", "capsi.exe" "\0"
-            VALUE "ProductName", "capsi" "\0"
+            VALUE "ProductName", "Capsi" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -32,6 +32,42 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# Capsi ships as a standalone installer for machines that have nothing but
+# Windows on them, so the runner and every plugin it links must not depend on
+# the Visual C++ redistributable: link the C runtime statically instead, the
+# same way the Flutter engine DLL is already built. The Rust bridge is built
+# with `-C target-feature=+crt-static` for the same reason (tool/build_windows.ps1),
+# and the MSI installer then has no prerequisites to install first.
+#
+# The switch that reaches the compiler comes from the per-configuration flag
+# variables rather than from CMAKE_MSVC_RUNTIME_LIBRARY. CMake leaves /MD in
+# those defaults because the project is configured with
+# cmake_minimum_required(VERSION 3.14), which keeps policy CMP0091 at its old
+# setting, and the Visual Studio generator takes <RuntimeLibrary> from the last
+# runtime switch on the command line - so a leftover /MD cancels the static
+# runtime the property asks for. Every generated subdirectory (windows/flutter,
+# windows/runner and each plugin) runs cmake_minimum_required(VERSION 3.14) as
+# well, resetting that policy inside its own scope, while these flag variables
+# are inherited whole, which makes the replacement below what actually holds.
+# CMAKE_MSVC_RUNTIME_LIBRARY is set too, so a target that does see the new policy
+# agrees with the flags. tool/build_windows.ps1 then re-checks the finished
+# bundle for MSVCP140/VCRUNTIME140 imports and fails the release if any reappear.
+if(MSVC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+  # The PROFILE flags are copies of the RELEASE ones (see above), and
+  # RELWITHDEBINFO/MINSIZEREL are part of CMake's default configuration set, so
+  # all of them are covered: no configuration can quietly depend on the
+  # redistributable.
+  foreach(flag_var
+      CMAKE_C_FLAGS CMAKE_C_FLAGS_DEBUG CMAKE_C_FLAGS_RELEASE
+      CMAKE_C_FLAGS_PROFILE CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_C_FLAGS_MINSIZEREL
+      CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE
+      CMAKE_CXX_FLAGS_PROFILE CMAKE_CXX_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_MINSIZEREL)
+    string(REGEX REPLACE "[-/]MDd" "/MTd" ${flag_var} "${${flag_var}}")
+    string(REGEX REPLACE "[-/]MD" "/MT" ${flag_var} "${${flag_var}}")
+  endforeach()
+endif()
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by

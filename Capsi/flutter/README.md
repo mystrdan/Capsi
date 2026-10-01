@@ -141,5 +141,5 @@ creating platform-specific application logic.
 
 ## Versioning
 
-The Flutter client currently tracks Capsi `1.0.2`. Keep the Flutter version
+The Flutter client currently tracks Capsi `1.1.0`. Keep the Flutter version
 and native bridge version aligned with the product release when publishing.

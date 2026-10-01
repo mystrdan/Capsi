@@ -24,6 +24,23 @@ pub enum CapsiError {
     Unsupported(String),
 }
 
+impl CapsiError {
+    /// The text shown to an end user: the message without the category prefix
+    /// that the log-facing `Display` adds.
+    pub fn user_message(&self) -> String {
+        match self {
+            Self::Io(m)
+            | Self::Protocol(m)
+            | Self::Crypto(m)
+            | Self::Untrusted(m)
+            | Self::NotFound(m)
+            | Self::Invalid(m)
+            | Self::Network(m)
+            | Self::Unsupported(m) => m.clone(),
+        }
+    }
+}
+
 impl fmt::Display for CapsiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

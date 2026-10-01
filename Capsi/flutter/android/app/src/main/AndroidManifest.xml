@@ -3,6 +3,17 @@
          permission belongs in the main manifest, not only in debug. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- The Rust message listener runs in the app process, so a backgrounded
+         Capsi can be reclaimed by the platform and stop receiving. This service
+         holds the process in the foreground for as long as the app is open. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <!-- Android 14 (API 34) requires a type, and a persistent network listener is
+         exactly the dataSync case. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <!-- Android 13+ requires an explicit runtime grant before an app may post
+         any notification. Without it the service notification and the incoming
+         message notifications are both silently dropped. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="Capsi"
         android:name="${applicationName}"
@@ -30,6 +41,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Keeps the message listener alive while Capsi is in the background. -->
+        <service
+            android:name=".MessageListenerService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -45,6 +61,13 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- The About surface opens https://capsi.win in the browser. Android 11+
+             hides installed packages that match an intent unless the intent is
+             declared here, and a browser cannot be resolved without this. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
         </intent>
     </queries>
 </manifest>

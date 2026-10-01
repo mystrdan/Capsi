@@ -18,7 +18,10 @@ bash "$(dirname "${BASH_SOURCE[0]}")/make_icons.sh"
 flutter pub get
 
 echo "Building Capsi Rust native bridge..."
-cargo build --manifest-path native/Cargo.toml --release
+# The Windows release must not depend on the Visual C++ redistributable: the
+# bridge links the C runtime statically, exactly like the runner does (see
+# windows/CMakeLists.txt), so the installer has no prerequisites to install.
+RUSTFLAGS="-C target-feature=+crt-static" cargo build --manifest-path native/Cargo.toml --release
 
 echo "Building Capsi Windows application..."
 flutter build windows --release

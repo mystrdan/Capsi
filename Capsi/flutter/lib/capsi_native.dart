@@ -87,6 +87,10 @@ typedef _WorkplaceSendNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Ch
 typedef _WorkplaceSendDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 typedef _WorkplaceAddMemberNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 typedef _WorkplaceAddMemberDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+typedef _WorkplaceMoveMemberNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+typedef _WorkplaceMoveMemberDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+typedef _WorkplaceSetRoleNative = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
+typedef _WorkplaceSetRoleDart = ffi.Pointer<ffi.Char> Function(ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>);
 
 class KnownDevice {
   const KnownDevice({required this.deviceId, required this.name, this.alias, required this.state, required this.fingerprint, this.lastAddress});
@@ -171,6 +175,11 @@ class CapsiNative {
         _workplaceCreateBroadcast = library.lookupFunction<_WorkplaceBroadcastNative, _WorkplaceBroadcastDart>('capsi_workplace_create_broadcast'),
         _workplaceSendMessage = library.lookupFunction<_WorkplaceSendNative, _WorkplaceSendDart>('capsi_workplace_send_message'),
         _workplaceAddGroupMember = library.lookupFunction<_WorkplaceAddMemberNative, _WorkplaceAddMemberDart>('capsi_workplace_add_group_member'),
+        _workplaceRename = library.lookupFunction<_WorkplaceNameActionNative, _WorkplaceNameActionDart>('capsi_workplace_rename'),
+        _workplaceDelete = library.lookupFunction<_WorkplaceLoadNative, _WorkplaceLoadDart>('capsi_workplace_delete'),
+        _workplaceRemoveGroupMember = library.lookupFunction<_WorkplaceAddMemberNative, _WorkplaceAddMemberDart>('capsi_workplace_remove_group_member'),
+        _workplaceMoveGroupMember = library.lookupFunction<_WorkplaceMoveMemberNative, _WorkplaceMoveMemberDart>('capsi_workplace_move_group_member'),
+        _workplaceSetMemberRole = library.lookupFunction<_WorkplaceSetRoleNative, _WorkplaceSetRoleDart>('capsi_workplace_set_member_role'),
         _freeString = library.lookupFunction<_FreeStringNative, _FreeStringDart>('capsi_free_string');
 
   // Library is retained by the function pointers; no direct field access is needed.
@@ -202,25 +211,29 @@ class CapsiNative {
   final _WorkplaceBroadcastDart _workplaceCreateBroadcast;
   final _WorkplaceSendDart _workplaceSendMessage;
   final _WorkplaceAddMemberDart _workplaceAddGroupMember;
+  final _WorkplaceNameActionDart _workplaceRename;
+  final _WorkplaceLoadDart _workplaceDelete;
+  final _WorkplaceAddMemberDart _workplaceRemoveGroupMember;
+  final _WorkplaceMoveMemberDart _workplaceMoveGroupMember;
+  final _WorkplaceSetRoleDart _workplaceSetMemberRole;
 
+  /// Loads the native bridge, or returns null on a platform Capsi is not built for.
+  ///
+/// Only Windows and Android have targets in this repository. There is no `ios/`,
+/// `macos/` or `linux/` directory, so a branch for those would be dead code
+/// implying a support promise the project cannot keep. Every other platform
+/// returns null here, and the shell shows "Capsi could not start on this
+/// device", which is the honest outcome.
   static CapsiNative? tryLoad() {
     final candidates = <String>[];
     if (Platform.isWindows) {
+      // The build script copies capsi_ffi.dll next to capsi.exe.
       candidates.add('capsi_ffi.dll');
     } else if (Platform.isAndroid) {
+      // Packaged into the APK under jniLibs/<abi>/libcapsi_ffi.so.
       candidates.add('libcapsi_ffi.so');
-    } else if (Platform.isIOS) {
-      // iOS Rust is statically linked into the Runner executable.
-      candidates.add('process');
-    } else if (Platform.isMacOS) {
-      // A release macOS app keeps bundled dynamic libraries in Contents/Frameworks.
-      // Keep the bare name as a development fallback.
-      final executable = File(Platform.resolvedExecutable);
-      final contents = executable.parent.parent;
-      candidates.add('${contents.path}${Platform.pathSeparator}Frameworks${Platform.pathSeparator}libcapsi_ffi.dylib');
-      candidates.add('libcapsi_ffi.dylib');
-    } else if (Platform.isLinux) {
-      candidates.add('libcapsi_ffi.so');
+    } else {
+      return null;
     }
 
     for (final candidate in candidates) {
@@ -282,6 +295,53 @@ class CapsiNative {
       return _readJson(_workplaceAddGroupMember(d.cast(), g.cast(), m.cast()));
     } finally {
       malloc.free(d); malloc.free(g); malloc.free(m);
+    }
+  }
+
+  Map<String, dynamic>? renameWorkplace(String dataDirectory, String name) =>
+      _workplaceNameAction(_workplaceRename, dataDirectory, name);
+
+  Map<String, dynamic>? deleteWorkplace(String dataDirectory) {
+    final dir = dataDirectory.toNativeUtf8();
+    try {
+      return _readJson(_workplaceDelete(dir.cast<ffi.Char>()));
+    } finally {
+      calloc.free(dir);
+    }
+  }
+
+  Map<String, dynamic>? removeWorkplaceGroupMember(String dataDirectory, String groupId, String deviceId) {
+    final d = dataDirectory.toNativeUtf8();
+    final g = groupId.toNativeUtf8();
+    final m = deviceId.toNativeUtf8();
+    try {
+      return _readJson(_workplaceRemoveGroupMember(d.cast(), g.cast(), m.cast()));
+    } finally {
+      malloc.free(d); malloc.free(g); malloc.free(m);
+    }
+  }
+
+  Map<String, dynamic>? moveWorkplaceGroupMember(String dataDirectory, String fromGroup, String toGroup, String deviceId) {
+    final d = dataDirectory.toNativeUtf8();
+    final from = fromGroup.toNativeUtf8();
+    final to = toGroup.toNativeUtf8();
+    final m = deviceId.toNativeUtf8();
+    try {
+      return _readJson(_workplaceMoveGroupMember(d.cast(), from.cast(), to.cast(), m.cast()));
+    } finally {
+      malloc.free(d); malloc.free(from); malloc.free(to); malloc.free(m);
+    }
+  }
+
+  /// Promote or demote [deviceId] to [role] (one of `Admin`, `Manager`, `Member`).
+  Map<String, dynamic>? setWorkplaceMemberRole(String dataDirectory, String deviceId, String role) {
+    final d = dataDirectory.toNativeUtf8();
+    final m = deviceId.toNativeUtf8();
+    final r = role.toNativeUtf8();
+    try {
+      return _readJson(_workplaceSetMemberRole(d.cast(), m.cast(), r.cast()));
+    } finally {
+      malloc.free(d); malloc.free(m); malloc.free(r);
     }
   }
 

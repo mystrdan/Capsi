@@ -44,10 +44,37 @@ fn load_store(dir: &Path) -> Result<TrustStore, capsi_core::CapsiError> {
     TrustStore::load(dir)
 }
 
+/// Errors that are serialized back to the Flutter UI.
+///
+/// `CapsiError`'s `Display` prefixes each message with a category so logs stay
+/// greppable; an end user only ever sees the message itself. `String` errors
+/// come from closures that already phrase the text for people.
+trait UserFacingError {
+    fn user(&self) -> String;
+}
+
+impl UserFacingError for capsi_core::CapsiError {
+    fn user(&self) -> String {
+        self.user_message()
+    }
+}
+
+impl UserFacingError for String {
+    fn user(&self) -> String {
+        self.clone()
+    }
+}
+
+impl UserFacingError for serde_json::Error {
+    fn user(&self) -> String {
+        self.to_string()
+    }
+}
+
 fn trust_result<T: serde::Serialize>(value: T) -> *mut c_char {
     match serde_json::to_string(&value) {
         Ok(json) => into_c_string(json),
-        Err(error) => error_json(&error.to_string()),
+        Err(error) => error_json(&error.user()),
     }
 }
 
@@ -181,7 +208,7 @@ pub extern "C" fn capsi_trust_list(data_dir: *const c_char) -> *mut c_char {
     let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
     match load_store(&dir) {
         Ok(store) => trust_result(store.all()),
-        Err(error) => error_json(&error.to_string()),
+        Err(error) => error_json(&error.user()),
     }
 }
 
@@ -247,7 +274,7 @@ pub extern "C" fn capsi_trust_accept(
 
     match result {
         Ok(value) => trust_result(value),
-        Err(error) => error_json(&error.to_string()),
+        Err(error) => error_json(&error.user()),
     }
 }
 
@@ -267,7 +294,7 @@ pub extern "C" fn capsi_trust_ignore(
         Ok(device)
     }) {
         Ok(device) => trust_result(device),
-        Err(error) => error_json(&error.to_string()),
+        Err(error) => error_json(&error.user()),
     }
 }
 /// Return the latest peer snapshot for a discovery session.
@@ -323,7 +350,15 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                 }
             };
 
+            // Queued workplace deliveries (offline group messages and
+            // broadcasts) are drained on this slow tick; the accept timeout
+            // below is what bounds how late the tick can fire.
+            let mut last_delivery_flush = std::time::Instant::now();
             while !thread_stop.load(Ordering::Acquire) {
+                if last_delivery_flush.elapsed() >= Duration::from_secs(5) {
+                    last_delivery_flush = std::time::Instant::now();
+                    flush_workplace_deliveries(&data_dir, &identity).await;
+                }
                 let accepted = tokio::time::timeout(Duration::from_millis(500), listener.accept()).await;
                 let (stream, addr) = match accepted {
                     Ok(Ok(value)) => value,
@@ -529,6 +564,34 @@ pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) ->
                                 "error":"workplace sync actor does not match authenticated peer",
                                 "device_id":peer_id.as_str()
                             }));
+                            continue;
+                        }
+
+                        // Only the owner may delete a workplace, and only when
+                        // the tombstone names this device's copy of it. The
+                        // actor check above already pinned the sender, so this
+                        // reduces to comparing the owner recorded in the state.
+                        if sync.state.deleted {
+                            let owned_by_sender = sync.state.owner_device_id == peer_id.as_str();
+                            if !owned_by_sender {
+                                message_event(&thread_events, serde_json::json!({
+                                    "error":"workplace deletion refused",
+                                    "device_id":peer_id.as_str()
+                                }));
+                                continue;
+                            }
+                            let store = capsi_core::workplace::WorkspaceStore::new(&data_dir);
+                            if let Ok(Some(local)) = store.load() {
+                                if local.id == sync.state.id && local.owner_device_id == peer_id.as_str() {
+                                    if store.delete().is_ok() {
+                                        message_event(&thread_events, serde_json::json!({
+                                            "type":"workplace_deleted",
+                                            "device_id":peer_id.as_str(),
+                                            "workspace_id":sync.state.id
+                                        }));
+                                    }
+                                }
+                            }
                             continue;
                         }
 
@@ -799,7 +862,7 @@ pub extern "C" fn capsi_message_send(
 
     match result {
         Ok(id) => trust_result(id),
-        Err(error) => error_json(&error.to_string()),
+        Err(error) => error_json(&error.user()),
     }
 }
 
@@ -923,7 +986,7 @@ pub extern "C" fn capsi_file_send(
 
     match result {
         Ok(id) => trust_result(id),
-        Err(error) => error_json(&error.to_string()),
+        Err(error) => error_json(&error.user()),
     }
 }
 
@@ -1067,7 +1130,7 @@ pub extern "C" fn capsi_file_cancel(
 
     match result {
         Ok(value) => trust_result(value),
-        Err(error) => error_json(&error.to_string()),
+        Err(error) => error_json(&error.user()),
     }
 }
 
@@ -1088,7 +1151,7 @@ pub extern "C" fn capsi_file_accept(
     };
     match file_transfer_action(&dir, &device_id, &transfer_id, true) {
         Ok(value) => trust_result(value),
-        Err(error) => error_json(&error.to_string()),
+        Err(error) => error_json(&error.user()),
     }
 }
 
@@ -1109,7 +1172,7 @@ pub extern "C" fn capsi_file_decline(
     };
     match file_transfer_action(&dir, &device_id, &transfer_id, false) {
         Ok(value) => trust_result(value),
-        Err(error) => error_json(&error.to_string()),
+        Err(error) => error_json(&error.user()),
     }
 }
 
@@ -1118,7 +1181,7 @@ pub extern "C" fn capsi_conversations_list(data_dir: *const c_char) -> *mut c_ch
     let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
     match MessageStore::load(&dir) {
         Ok(store) => trust_result(store.list()),
-        Err(error) => error_json(&error.to_string()),
+        Err(error) => error_json(&error.user()),
     }
 }
 
@@ -1134,7 +1197,7 @@ pub extern "C" fn capsi_conversation_load(data_dir: *const c_char, device_id: *c
             Some(conversation) => trust_result(conversation),
             None => error_json("conversation not found"),
         },
-        Err(error) => error_json(&error.to_string()),
+        Err(error) => error_json(&error.user()),
     }
 }
 
@@ -1149,11 +1212,11 @@ pub extern "C" fn capsi_workplace_load(data_dir: *const c_char) -> *mut c_char {
         Ok(Some(workspace)) => {
             let identity = match DeviceIdentity::load_or_create(&dir) {
                 Ok(value) => value,
-                Err(error) => return error_json(&error.to_string()),
+                Err(error) => return error_json(&error.user()),
             };
             let mut value = match serde_json::to_value(&workspace) {
                 Ok(value) => value,
-                Err(error) => return error_json(&error.to_string()),
+                Err(error) => return error_json(&error.user()),
             };
             if let Some(object) = value.as_object_mut() {
                 object.insert("local_device_id".into(), serde_json::json!(identity.id().as_str()));
@@ -1382,14 +1445,153 @@ pub extern "C" fn capsi_workplace_create_broadcast(
     title: *const c_char,
     body: *const c_char,
 ) -> *mut c_char {
-    workplace_mutate(data_dir, |workspace, identity| {
+    let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    let closure_dir = dir.clone();
+    workplace_mutate_path(&dir, move |workspace, identity| {
         if !workspace.permissions_for(identity.id().as_str()).contains(&capsi_core::workplace::Permission::SendBroadcasts) {
             return Err("device is not allowed to send broadcasts".into());
         }
         let title = c_string(title).filter(|v| !v.trim().is_empty()).ok_or_else(|| "broadcast title is invalid".to_string())?;
         let body = c_string(body).filter(|v| !v.trim().is_empty()).ok_or_else(|| "broadcast body is invalid".to_string())?;
-        workspace.create_broadcast(title, body, identity.id().as_str().to_string(), None)
+        let broadcast_id = workspace.create_broadcast(title.as_str(), body.as_str(), identity.id().as_str().to_string(), None)
             .ok_or_else(|| "broadcast could not be created".to_string())?;
+
+        // The workplace state sync carries broadcasts as well, but receivers
+        // only apply a sync from an owner or admin. The direct envelope is
+        // what makes a manager's announcement arrive, and it arrives without
+        // waiting for the next full state sync.
+        let envelope = Envelope::new(Message::WorkplaceBroadcast(
+            capsi_core::protocol::WorkplaceBroadcastMessage {
+                broadcast_id,
+                title,
+                body,
+                department_id: None,
+            },
+        ));
+        let local_id = identity.id().as_str().to_string();
+        let recipients: Vec<String> = workspace.members.iter()
+            .map(|member| member.device_id.clone())
+            .filter(|id| *id != local_id)
+            .collect();
+        deliver_workplace_envelope(&closure_dir, workspace, identity, &envelope, &recipients);
+        workspace.touch();
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_workplace_rename(
+    data_dir: *const c_char,
+    name: *const c_char,
+) -> *mut c_char {
+    let name = match c_string(name) { Some(value) => value, None => return error_json("workplace name is invalid") };
+    workplace_mutate(data_dir, move |workspace, identity| {
+        if !workspace.permissions_for(identity.id().as_str()).contains(&capsi_core::workplace::Permission::ManageWorkspace) {
+            return Err("only the workplace owner can rename the workplace".into());
+        }
+        workspace.rename(&name)?;
+        workspace.touch();
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_workplace_delete(data_dir: *const c_char) -> *mut c_char {
+    let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    let result = (|| -> Result<serde_json::Value, String> {
+        let identity = DeviceIdentity::load_or_create(&dir).map_err(|e| e.to_string())?;
+        let local_id = identity.id().as_str();
+        let store = capsi_core::workplace::WorkspaceStore::new(&dir);
+        let workspace = store.load()?.ok_or_else(|| "workplace has not been created".to_string())?;
+
+        // Only the owner decides when a workplace stops existing; the owner
+        // role is also what carries ManageWorkspace, and the explicit check
+        // keeps that rule readable at the call site.
+        if workspace.owner_device_id != local_id {
+            return Err("only the workplace owner can delete the workplace".into());
+        }
+        if !workspace.permissions_for(local_id).contains(&capsi_core::workplace::Permission::ManageWorkspace) {
+            return Err("device is not allowed to delete the workplace".into());
+        }
+
+        // Notify every member while the local store still exists (the tombstone
+        // is built from it), then remove the workplace on this device. A member
+        // that is offline keeps its copy until the owner contacts it again; the
+        // deletion is deliberately local-first rather than queued forever.
+        let sync = sync_state_to_members(&dir, &identity, &workspace, workspace.tombstone_state());
+        store.delete()?;
+        Ok(serde_json::json!({ "deleted": true, "sync": sync }))
+    })();
+    match result {
+        Ok(value) => trust_result(value),
+        Err(error) => error_json(&error),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_workplace_remove_group_member(
+    data_dir: *const c_char,
+    group_id: *const c_char,
+    device_id: *const c_char,
+) -> *mut c_char {
+    let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    let group_id = match c_string(group_id).filter(|v| !v.trim().is_empty()) {
+        Some(value) => value,
+        None => return error_json("group id is invalid"),
+    };
+    let device_id = match c_string(device_id).filter(|v| !v.trim().is_empty()) {
+        Some(value) => value,
+        None => return error_json("device id is invalid"),
+    };
+
+    workplace_mutate_path(&dir, move |workspace, identity| {
+        if !workspace.permissions_for(identity.id().as_str()).contains(&capsi_core::workplace::Permission::ManageGroups) {
+            return Err("device is not allowed to manage groups".into());
+        }
+        if !workspace.remove_from_group(&group_id, &device_id) {
+            return Err("member is not in this group".into());
+        }
+        workspace.touch();
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn capsi_workplace_move_group_member(
+    data_dir: *const c_char,
+    from_group: *const c_char,
+    to_group: *const c_char,
+    device_id: *const c_char,
+) -> *mut c_char {
+    let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    let from_group = match c_string(from_group).filter(|v| !v.trim().is_empty()) {
+        Some(value) => value,
+        None => return error_json("group id is invalid"),
+    };
+    let to_group = match c_string(to_group).filter(|v| !v.trim().is_empty()) {
+        Some(value) => value,
+        None => return error_json("group id is invalid"),
+    };
+    let device_id = match c_string(device_id).filter(|v| !v.trim().is_empty()) {
+        Some(value) => value,
+        None => return error_json("device id is invalid"),
+    };
+
+    workplace_mutate_path(&dir, move |workspace, identity| {
+        if !workspace.permissions_for(identity.id().as_str()).contains(&capsi_core::workplace::Permission::ManageGroups) {
+            return Err("device is not allowed to manage groups".into());
+        }
+        if from_group == to_group {
+            return Err("source and destination group are the same".into());
+        }
+        // Remove first so the move cannot duplicate the member, then let the
+        // lookup in add_to_group reject a destination that does not exist.
+        if !workspace.remove_from_group(&from_group, &device_id) {
+            return Err("member is not in that group".into());
+        }
+        if !workspace.add_to_group(&to_group, &device_id) {
+            return Err("destination group not found".into());
+        }
         workspace.touch();
         Ok(())
     })
@@ -1402,10 +1604,62 @@ struct WorkplaceSyncStatus {
     failed: usize,
 }
 
+/// Promote or demote a member.
+///
+/// The role arrives as its wire spelling (`"Admin"`) rather than being guessed
+/// from an ordinal, so a UI that reorders its list cannot silently hand out the
+/// wrong permission. Every rule about who may assign what lives in
+/// `Role::can_assign`; this only decodes the request and checks that the caller
+/// even holds `ManageMembers` before touching the workspace.
+#[no_mangle]
+pub extern "C" fn capsi_workplace_set_member_role(
+    data_dir: *const c_char,
+    device_id: *const c_char,
+    role: *const c_char,
+) -> *mut c_char {
+    let dir = match c_path(data_dir) { Some(path) => path, None => return error_json("data directory is invalid") };
+    let device_id = match c_string(device_id).filter(|v| !v.trim().is_empty()) {
+        Some(value) => value,
+        None => return error_json("device id is invalid"),
+    };
+    let role = match c_string(role).filter(|v| !v.trim().is_empty()) {
+        Some(value) => value,
+        None => return error_json("role is invalid"),
+    };
+    let Some(role) = capsi_core::workplace::Role::from_wire(&role) else {
+        return error_json("role must be one of admin, manager or member");
+    };
+
+    workplace_mutate_path(&dir, move |workspace, identity| {
+        if !workspace
+            .permissions_for(identity.id().as_str())
+            .contains(&capsi_core::workplace::Permission::ManageMembers)
+        {
+            return Err("device is not allowed to manage members".into());
+        }
+        workspace.set_member_role(identity.id().as_str(), &device_id, role)?;
+        workspace.touch();
+        Ok(())
+    })
+}
+
 fn sync_workplace_to_members(
     dir: &Path,
     identity: &DeviceIdentity,
     workspace: &capsi_core::workplace::Workspace,
+) -> WorkplaceSyncStatus {
+    sync_state_to_members(dir, identity, workspace, workspace.network_state())
+}
+
+/// Push a workplace state to every other member that is currently trusted.
+///
+/// Kept separate from `Workspace::network_state` so a deletion tombstone takes
+/// the exact same delivery path as an ordinary update.
+fn sync_state_to_members(
+    dir: &Path,
+    identity: &DeviceIdentity,
+    workspace: &capsi_core::workplace::Workspace,
+    state: capsi_core::workplace::WorkspaceState,
 ) -> WorkplaceSyncStatus {
     let trust = match TrustStore::load(dir) {
         Ok(value) => value,
@@ -1431,7 +1685,6 @@ fn sync_workplace_to_members(
         Err(_) => return WorkplaceSyncStatus { attempted: members.len(), delivered: 0, failed: members.len() },
     };
 
-    let state = workspace.network_state();
     let mut delivered = 0usize;
     let mut failed = 0usize;
 
@@ -1461,6 +1714,119 @@ fn sync_workplace_to_members(
         attempted: delivered + failed,
         delivered,
         failed,
+    }
+}
+
+/// Send one workplace envelope to every recipient that is reachable now and
+/// queue the rest, so a member that is offline still receives it later.
+///
+/// Recipients that can never be reached (an id that is not a device id, or a
+/// member that is not a trusted device) are skipped rather than queued: trust
+/// is what makes delivery possible at all, and the full state sync carries the
+/// same content once that trust exists.
+fn deliver_workplace_envelope(
+    dir: &Path,
+    workspace: &mut capsi_core::workplace::Workspace,
+    identity: &DeviceIdentity,
+    envelope: &Envelope,
+    recipients: &[String],
+) {
+    let trust = TrustStore::load(dir).ok();
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .enable_time()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(_) => {
+            for recipient in recipients {
+                workspace.queue_delivery(envelope.clone(), recipient.clone(), now_millis() as i64);
+            }
+            return;
+        }
+    };
+
+    for recipient in recipients {
+        let Some(device_id) = DeviceId::from_hex(recipient).ok() else { continue };
+        let Some(device) = trust.as_ref()
+            .and_then(|trust| trust.get(&device_id))
+            .filter(|device| device.is_trusted()) else { continue };
+        let Some(address) = device.last_address.clone() else {
+            workspace.queue_delivery(envelope.clone(), recipient.clone(), now_millis() as i64);
+            continue;
+        };
+        let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
+        let socket = format!("{host}:{}", capsi_core::TCP_SERVICE_PORT);
+        let reachable = runtime.block_on(async {
+            capsi_core::transport::connect_and_send(&socket, identity, &device_id, envelope).await
+        });
+        if reachable.is_err() {
+            workspace.queue_delivery(envelope.clone(), recipient.clone(), now_millis() as i64);
+        }
+    }
+}
+
+/// Retry workplace deliveries that are due.
+///
+/// `queue_delivery` only writes the entry; this is the loop that drains it, and
+/// the message session calls it every few seconds so a group message or
+/// broadcast queued while a member was offline goes out once the member is
+/// reachable again. A recipient that stays unreachable is backed off instead of
+/// being retried on every tick, and one that has become untrusted (or whose id
+/// is not a device id at all) drops out of the queue instead of lingering.
+async fn flush_workplace_deliveries(dir: &Path, identity: &DeviceIdentity) {
+    let store = capsi_core::workplace::WorkspaceStore::new(dir);
+    let Ok(Some(mut workspace)) = store.load() else { return };
+    if workspace.pending_deliveries.is_empty() {
+        return;
+    }
+
+    let now = now_millis() as i64;
+    let due: Vec<(Envelope, String)> = workspace.pending_deliveries.iter()
+        .filter(|pending| pending.next_attempt_at <= now)
+        .map(|pending| (pending.envelope.clone(), pending.recipient_device_id.clone()))
+        .collect();
+    if due.is_empty() {
+        return;
+    }
+
+    let trust = TrustStore::load(dir).ok();
+    let mut changed = false;
+    for (envelope, recipient) in due {
+        let Some(device_id) = DeviceId::from_hex(&recipient).ok() else {
+            workspace.remove_pending_delivery(&envelope.id, &recipient);
+            changed = true;
+            continue;
+        };
+        let Some(device) = trust.as_ref()
+            .and_then(|trust| trust.get(&device_id))
+            .filter(|device| device.is_trusted()) else {
+            workspace.remove_pending_delivery(&envelope.id, &recipient);
+            changed = true;
+            continue;
+        };
+        let Some(address) = device.last_address.clone() else {
+            continue; // still offline; keep the entry for the next pass.
+        };
+        let host = address.rsplit_once(':').map(|(host, _)| host).unwrap_or(&address);
+        let socket = format!("{host}:{}", capsi_core::TCP_SERVICE_PORT);
+        match capsi_core::transport::connect_and_send(&socket, identity, &device_id, &envelope).await {
+            Ok(()) => {
+                workspace.remove_pending_delivery(&envelope.id, &recipient);
+                changed = true;
+            }
+            Err(_) => {
+                // 30 seconds between attempts: frequent enough to notice a
+                // device coming back, rare enough to keep a sleeping laptop's
+                // radio quiet.
+                workspace.reschedule_delivery(&envelope.id, &recipient, now + 30_000);
+                changed = true;
+            }
+        }
+    }
+
+    if changed {
+        let _ = store.save(&workspace);
     }
 }
 
@@ -1504,7 +1870,9 @@ where
 /// by the existing capsi-core implementation rather than reimplemented in Dart.
 #[no_mangle]
 pub extern "C" fn capsi_runtime_version() -> *const c_char {
-    static VERSION: &[u8] = b"1.0.2\0";
+    // The crate version is the single source of truth the release tooling bumps,
+    // so the About dialog can never report a version the build did not produce.
+    static VERSION: &[u8] = concat!(env!("CARGO_PKG_VERSION"), "\0").as_bytes();
     VERSION.as_ptr().cast()
 }
 
@@ -1574,7 +1942,7 @@ pub extern "C" fn capsi_discovery_probe(
 
     match result {
         Ok(json) => into_c_string(json),
-        Err(error) => error_json(&error.to_string()),
+        Err(error) => error_json(&error.user()),
     }
 }
 
