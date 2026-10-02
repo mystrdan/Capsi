@@ -2,7 +2,18 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 
-const downloadUrl = 'https://github.com/mystrdan/Capsi/releases/latest/download/Capsi-1.1.0-x64.msi';
+const downloads = {
+  windows: 'https://github.com/mystrdan/Capsi/releases/latest/download/Capsi-1.1.0-x64.msi',
+  android: 'https://github.com/mystrdan/Capsi/releases/latest'
+};
+
+function detectPlatform() {
+  if (typeof navigator === 'undefined') return null;
+  const ua = navigator.userAgent || '';
+  if (/Android/i.test(ua)) return 'android';
+  if (/Windows/i.test(ua)) return 'windows';
+  return null;
+}
 const logoUrl = 'https://raw.githubusercontent.com/mystrdan/Capsi/main/Capsi/icons/capsi-logo-512.png';
 
 const icons = {
@@ -17,6 +28,15 @@ const icons = {
 
 function App() {
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+  const platform = detectPlatform();
+  const primaryDownload =
+    platform === 'android' ? downloads.android :
+    platform === 'windows' ? downloads.windows :
+    '/download';
+  const primaryLabel =
+    platform === 'android' ? 'Get Capsi for Android' :
+    platform === 'windows' ? 'Download for Windows' :
+    'Get Capsi';
 
   return (
     <div className="site">
@@ -26,7 +46,7 @@ function App() {
           <button onClick={() => scrollTo('how')}>How it works</button>
           <button onClick={() => scrollTo('features')}>Features</button>
           <button onClick={() => scrollTo('workplace')}>Workplace</button>
-          <a className="button small" href={downloadUrl}>Download</a>
+          <a className="button small" href="/download">Get Capsi</a>
         </nav>
       </header>
 
@@ -38,8 +58,8 @@ function App() {
             <h2>Messages and files, device to device.</h2>
             <p>Capsi lets you communicate and share files directly with nearby devices. No account. No cloud service. No internet required.</p>
             <div className="facts"><span>Device to device</span><span>No account</span><span>No cloud</span><span>No internet required</span></div>
-            <div className="actions"><a className="button" href={downloadUrl}>Download Capsi</a><button className="button outline" onClick={() => scrollTo('how')}>See how it works</button></div>
-            <small>Windows 64-bit · Available now · Free to download and use</small>
+            <div className="actions"><a className="button" href={primaryDownload}>{primaryLabel}</a><button className="button outline" onClick={() => scrollTo('how')}>See how it works</button></div>
+            <small>Windows · Android · Available now · Free to download and use</small>
           </div>
           <AppPreview />
         </section>
@@ -106,17 +126,17 @@ function App() {
         <section className="platforms container">
           <div className="eyebrow">PLATFORMS</div>
           <h2>One Capsi experience across your devices.</h2>
-          <p className="section-lead">Capsi is available for Windows today, with Android, macOS and iOS support being prepared.</p>
-          <div className="platform-grid"><Platform name="Windows" status="Available now" /><Platform name="Android" status="Coming soon" /><Platform name="macOS" status="Coming soon" /><Platform name="iOS" status="Coming soon" /></div>
+          <p className="section-lead">Capsi is available now for Windows and Android. More platforms will follow.</p>
+          <div className="platform-grid"><Platform name="Windows" status="Available now" /><Platform name="Android" status="Available now" /></div>
         </section>
 
         <section className="download">
           <img className="download-logo" src={logoUrl} alt="Capsi" />
-          <div className="eyebrow">CAPSI 1.1.0</div>
+          <div className="eyebrow">GET CAPSI</div>
           <h2>Ready to connect?</h2>
-          <p>Install Capsi on your Windows computer, find another device and start sending.</p>
-          <a className="button" href={downloadUrl}>Download for Windows</a>
-          <small>Windows 64-bit installer · Available now</small>
+          <p>Get Capsi for Windows or Android and start sending messages and files, device to device.</p>
+          <a className="button" href={primaryDownload}>{primaryLabel}</a>
+          <small>Windows · Android · Available now</small>
         </section>
       </main>
 
@@ -163,4 +183,25 @@ function AppPreview() {
   </div>;
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+function DownloadPage() {
+  return <div className="download-page">
+    <div className="download-page-inner">
+      <a className="brand" href="/" aria-label="Capsi home"><img src={logoUrl} alt="" /><span>CAPSI</span></a>
+      <div className="eyebrow">GET CAPSI</div>
+      <h1>Messages and files,<br />device to device.</h1>
+      <p>Choose your platform. Capsi is currently available for Windows and Android.</p>
+      <div className="download-options">
+        <DownloadOption name="Windows" description="Windows 10/11 · 64-bit" label="Download for Windows" href={downloads.windows} />
+        <DownloadOption name="Android" description="Android · Releases" label="View Android release" href={downloads.android} />
+      </div>
+      <a className="back-link" href="/">← Back to Capsi</a>
+    </div>
+  </div>;
+}
+
+function DownloadOption({ name, description, label, href }) {
+  return <div className="download-option"><div><strong>{name}</strong><span>{description}</span></div><a className="button" href={href}>{label}</a></div>;
+}
+
+const root = createRoot(document.getElementById('root'));
+root.render(window.location.pathname === '/download' ? <DownloadPage /> : <App />);
