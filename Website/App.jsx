@@ -2,7 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 
-const downloadUrl = 'https://github.com/mystrdan/Capsi/releases/latest/download/Capsi-1.1.0-x64.msi';
+const downloads = {\n  windows: 'https://github.com/mystrdan/Capsi/releases/latest/download/Capsi-1.1.0-x64.msi',\n  android: 'https://github.com/mystrdan/Capsi/releases/latest'\n};\n\nfunction detectPlatform() {\n  if (typeof navigator === 'undefined') return null;\n  const ua = navigator.userAgent || '';\n  if (/Android/i.test(ua)) return 'android';\n  if (/Windows/i.test(ua)) return 'windows';\n  return null;\n}
 const logoUrl = 'https://raw.githubusercontent.com/mystrdan/Capsi/main/Capsi/icons/capsi-logo-512.png';
 
 const icons = {
@@ -26,7 +26,7 @@ function App() {
           <button onClick={() => scrollTo('how')}>How it works</button>
           <button onClick={() => scrollTo('features')}>Features</button>
           <button onClick={() => scrollTo('workplace')}>Workplace</button>
-          <a className="button small" href={downloadUrl}>Download</a>
+          <a className="button small" href="/download">Get Capsi</a>
         </nav>
       </header>
 
@@ -38,8 +38,8 @@ function App() {
             <h2>Messages and files, device to device.</h2>
             <p>Capsi lets you communicate and share files directly with nearby devices. No account. No cloud service. No internet required.</p>
             <div className="facts"><span>Device to device</span><span>No account</span><span>No cloud</span><span>No internet required</span></div>
-            <div className="actions"><a className="button" href={downloadUrl}>Download Capsi</a><button className="button outline" onClick={() => scrollTo('how')}>See how it works</button></div>
-            <small>Windows 64-bit · Available now · Free to download and use</small>
+            <div className="actions"><a className="button" href={primaryDownload}>Download Capsi</a><button className="button outline" onClick={() => scrollTo('how')}>See how it works</button></div>
+            <small>Windows · Android · Available now · Free to download and use</small>
           </div>
           <AppPreview />
         </section>
