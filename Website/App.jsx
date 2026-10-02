@@ -2,7 +2,18 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 
-const downloads = {\n  windows: 'https://github.com/mystrdan/Capsi/releases/latest/download/Capsi-1.1.0-x64.msi',\n  android: 'https://github.com/mystrdan/Capsi/releases/latest'\n};\n\nfunction detectPlatform() {\n  if (typeof navigator === 'undefined') return null;\n  const ua = navigator.userAgent || '';\n  if (/Android/i.test(ua)) return 'android';\n  if (/Windows/i.test(ua)) return 'windows';\n  return null;\n}
+const downloads = {
+  windows: 'https://github.com/mystrdan/Capsi/releases/latest/download/Capsi-1.1.0-x64.msi',
+  android: 'https://github.com/mystrdan/Capsi/releases/latest'
+};
+
+function detectPlatform() {
+  if (typeof navigator === 'undefined') return null;
+  const ua = navigator.userAgent || '';
+  if (/Android/i.test(ua)) return 'android';
+  if (/Windows/i.test(ua)) return 'windows';
+  return null;
+}
 const logoUrl = 'https://raw.githubusercontent.com/mystrdan/Capsi/main/Capsi/icons/capsi-logo-512.png';
 
 const icons = {
@@ -17,6 +28,15 @@ const icons = {
 
 function App() {
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+  const platform = detectPlatform();
+  const primaryDownload =
+    platform === 'android' ? downloads.android :
+    platform === 'windows' ? downloads.windows :
+    '/download';
+  const primaryLabel =
+    platform === 'android' ? 'Get Capsi for Android' :
+    platform === 'windows' ? 'Download for Windows' :
+    'Get Capsi';
 
   return (
     <div className="site">
@@ -106,12 +126,17 @@ function App() {
         <section className="platforms container">
           <div className="eyebrow">PLATFORMS</div>
           <h2>One Capsi experience across your devices.</h2>
-          <p className="section-lead">Capsi is available now for Windows and Android. More platforms will follow.</p>\n          <div className="platform-grid"><Platform name="Windows" status="Available now" /><Platform name="Android" status="Available now" /></div>
+          <p className="section-lead">Capsi is available now for Windows and Android. More platforms will follow.</p>
+          <div className="platform-grid"><Platform name="Windows" status="Available now" /><Platform name="Android" status="Available now" /></div>
         </section>
 
         <section className="download">
           <img className="download-logo" src={logoUrl} alt="Capsi" />
-          <div className="eyebrow">GET CAPSI</div>\n          <h2>Ready to connect?</h2>\n          <p>Get Capsi for Windows or Android and start sending messages and files, device to device.</p>\n          <a className="button" href={primaryDownload}>{primaryLabel}</a>\n          <small>Windows · Android · Available now</small>
+          <div className="eyebrow">GET CAPSI</div>
+          <h2>Ready to connect?</h2>
+          <p>Get Capsi for Windows or Android and start sending messages and files, device to device.</p>
+          <a className="button" href={primaryDownload}>{primaryLabel}</a>
+          <small>Windows · Android · Available now</small>
         </section>
       </main>
 
