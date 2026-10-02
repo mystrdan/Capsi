@@ -2,8 +2,9 @@
 //!
 //! ```text
 //! discovery/
-//!   beacon   - the signed UDP announcement, and the table of peers we have seen
-//!   service  - the socket loop: announce, listen, forget peers that go quiet
+//!   beacon      - the signed UDP announcement, and the table of peers we have seen
+//!   interfaces  - which addresses an announcement has to be sent to
+//!   service     - the socket loop: announce, listen, forget peers that go quiet
 //! ```
 //!
 //! There is no server and no directory: a device shouts its name on the network
@@ -12,7 +13,9 @@
 //! checks the signature against the device id that the trust list pins.
 
 pub mod beacon;
+pub mod interfaces;
 pub mod service;
 
 pub use beacon::{Beacon, Peer, PeerTable};
+pub use interfaces::announce_targets;
 pub use service::{Discovery, DiscoveryEvent};

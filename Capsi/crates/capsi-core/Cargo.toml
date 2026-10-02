@@ -30,5 +30,20 @@ hex = "0.4"
 log = "0.4"
 thiserror = "2"
 
+# Reading the local interfaces, so an announcement can be sent to the broadcast
+# address of every network this machine is on - not only the single network the
+# routing table would pick for 255.255.255.255. Linux, Android, macOS and iOS
+# all expose that through getifaddrs().
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# Windows keeps the same information in its IPv4 address table, which pairs an
+# address with a netmask for every interface.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_IpHelper",
+] }
+
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }
