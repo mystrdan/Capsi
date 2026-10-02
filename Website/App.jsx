@@ -158,4 +158,25 @@ function AppPreview() {
   </div>;
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+function DownloadPage() {
+  return <div className="download-page">
+    <div className="download-page-inner">
+      <a className="brand" href="/" aria-label="Capsi home"><img src={logoUrl} alt="" /><span>CAPSI</span></a>
+      <div className="eyebrow">GET CAPSI</div>
+      <h1>Messages and files,<br />device to device.</h1>
+      <p>Choose your platform. Capsi is currently available for Windows and Android.</p>
+      <div className="download-options">
+        <DownloadOption name="Windows" description="Windows 10/11 · 64-bit" label="Download for Windows" href={downloads.windows} />
+        <DownloadOption name="Android" description="Android · APK" label="Get Capsi for Android" href={downloads.android} />
+      </div>
+      <a className="back-link" href="/">← Back to Capsi</a>
+    </div>
+  </div>;
+}
+
+function DownloadOption({ name, description, label, href }) {
+  return <div className="download-option"><div><strong>{name}</strong><span>{description}</span></div><a className="button" href={href}>{label}</a></div>;
+}
+
+const root = createRoot(document.getElementById('root'));
+root.render(window.location.pathname === '/download' ? <DownloadPage /> : <App />);
