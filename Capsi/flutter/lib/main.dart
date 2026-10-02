@@ -140,6 +140,23 @@ const String capsiPublisher = 'Capsicom';
 /// version) is unavailable. scripts/bump-version.ps1 updates this const.
 const String capsiVersionFallback = '1.1.0';
 
+/// Human labels for the engine's self-check step names.
+///
+/// The names come from the Rust self-check; the labels live here so the engine
+/// keeps owning the identifiers while the UI stays readable. An unknown name is
+/// shown verbatim rather than hidden, so a new engine step is never invisible.
+const Map<String, String> _selfTestStepLabels = <String, String>{
+  'self_test': 'Self-check',
+  'core_linked': 'Engine core',
+  'protocol': 'Protocol version',
+  'storage': 'Local storage',
+  'identity': 'Device identity',
+  'network_listener': 'Service port',
+  'discovery': 'Discovery',
+};
+
+String _selfTestStepLabel(String name) => _selfTestStepLabels[name] ?? name;
+
 /// True where the Capsi data folder is an ordinary folder the user can open.
 /// The mobile sandbox keeps application data private to the application, so
 /// Android and iOS expose the path instead of a file manager.
@@ -321,6 +338,10 @@ class _CapsiHomeState extends State<CapsiHome> {
   bool scanning = false;
   bool runtimeLoading = true;
   String? runtimeError;
+
+  /// The engine's own startup report, kept so Settings can show what the check
+  /// actually verified instead of a generic "ready".
+  CapsiSelfTestReport? selfTestReport;
   int discoveryHandle = 0;
   Timer? discoveryTimer;
   Timer? scanTimer;
@@ -339,6 +360,19 @@ class _CapsiHomeState extends State<CapsiHome> {
 
   /// Preferences. Always non-null: injected by a test, or loaded from disk.
   late AppSettings settings;
+
+  /// Whether the engine is operational *right now*.
+  ///
+  /// This is the only thing the "Ready" badge is allowed to depend on: the
+  /// native library loaded, the startup self-check passed, and both the
+  /// discovery and message listeners hold a live handle. Keying it off
+  /// `native != null` was the bug it replaces - a loaded library with no
+  /// listener still advertised "Ready".
+  bool get engineOperational =>
+      native != null &&
+      (selfTestReport?.ok ?? false) &&
+      discoveryHandle != 0 &&
+      messageHandle != 0;
 
   /// Whether the app is currently visible. A notification is only worth raising
   /// when the user is not already looking at the conversation.
@@ -402,10 +436,40 @@ class _CapsiHomeState extends State<CapsiHome> {
       if (native == null) {
         setState(() {
           runtimeLoading = false;
+          selfTestReport = null;
           runtimeError = 'Capsi could not start on this device. Try again.';
         });
         return;
       }
+
+      // The engine checks itself before the shell is allowed to say "ready".
+      // The check binds the real ports and touches the real stores, so a pass
+      // here is evidence the engine works rather than that a symbol resolved.
+      final report = native!.selfTest(
+        dataDirectory: directory.path,
+        deviceName: settings.deviceName,
+      );
+      if (report == null) {
+        if (!mounted) return;
+        setState(() {
+          runtimeLoading = false;
+          selfTestReport = null;
+          runtimeError = 'Capsi could not check its engine on this device. Try again.';
+        });
+        return;
+      }
+      if (!report.ok) {
+        // A failed step is a refusal to start, not a warning. Anything else
+        // would present a half-started engine as operational.
+        if (!mounted) return;
+        setState(() {
+          runtimeLoading = false;
+          selfTestReport = report;
+          runtimeError = _describeStartupFailure(report);
+        });
+        return;
+      }
+      selfTestReport = report;
 
       _loadTrust();
       _loadWorkplace();
@@ -413,6 +477,19 @@ class _CapsiHomeState extends State<CapsiHome> {
       workplaceTimer = Timer.periodic(const Duration(seconds: 2), (_) => _loadWorkplace());
       _startDiscovery();
       _startMessages();
+
+      // Starting the listeners is the other half of the truth. The self-check
+      // proved the ports bind; this proves the running sessions actually took
+      // them. A zero handle means no listener, whatever the UI would like to say.
+      if (discoveryHandle == 0 || messageHandle == 0) {
+        if (!mounted) return;
+        setState(() {
+          runtimeLoading = false;
+          runtimeError = 'Capsi could not start its network listeners on this device. '
+              'Another copy of Capsi may already be running on this port.';
+        });
+        return;
+      }
 
       if (mounted) {
         setState(() {
@@ -427,6 +504,20 @@ class _CapsiHomeState extends State<CapsiHome> {
         runtimeError = 'Capsi could not finish starting. Try again.';
       });
     }
+  }
+
+  /// Turn the engine's failed steps into the sentence the startup gate shows.
+  ///
+  /// Every failing step is listed with the engine's own reason: a user who sees
+  /// "Capsi could not start" with no reason cannot tell a firewall problem from
+  /// a missing library, and would have no way to act on it.
+  String _describeStartupFailure(CapsiSelfTestReport report) {
+    return <String>[
+      'Capsi started, but part of its engine is not working:',
+      '',
+      for (final step in report.failed)
+        '• ${_selfTestStepLabel(step.name)}: ${step.detail ?? 'failed'}',
+    ].join('\n');
   }
 
   void _stopRuntimeSessions() {
@@ -458,6 +549,7 @@ class _CapsiHomeState extends State<CapsiHome> {
         workplaceData = null;
         scanning = false;
         scanFinished = false;
+        selfTestReport = null;
         runtimeLoading = true;
         runtimeError = null;
       });
@@ -673,6 +765,10 @@ class _CapsiHomeState extends State<CapsiHome> {
         dataDirectory: dataDirectory,
         trustedDeviceCount: trustedDevices.length,
         settings: settings,
+        // The engine's own startup report, so Settings states what was actually
+        // checked instead of repeating that the library happened to load.
+        selfTestReport: selfTestReport,
+        engineOperational: engineOperational,
         // Settings is a dialog over whichever page was open, so its trusted
         // devices row closes the dialog and moves the shell to that page rather
         // than stacking a second dialog on top of the first.
@@ -718,7 +814,7 @@ class _CapsiHomeState extends State<CapsiHome> {
           body: compact
               ? Column(
                   children: [
-                    Expanded(child: _DesktopContent(page: page, body: body, native: native, onSettings: () => _showSettings(context))),
+                    Expanded(child: _DesktopContent(page: page, body: body, native: native, operational: engineOperational, onSettings: () => _showSettings(context))),
                     NavigationBar(
                       selectedIndex: selected,
                       onDestinationSelected: (index) => setState(() => selected = index),
@@ -750,7 +846,7 @@ class _CapsiHomeState extends State<CapsiHome> {
                       ],
                     ),
                     const VerticalDivider(width: 1),
-                    Expanded(child: _DesktopContent(page: page, body: body, native: native, onSettings: () => _showSettings(context))),
+                    Expanded(child: _DesktopContent(page: page, body: body, native: native, operational: engineOperational, onSettings: () => _showSettings(context))),
                   ],
                 ),
         );
@@ -815,12 +911,16 @@ class _RuntimeGate extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // The engine's failure report is a list of steps, so it is laid out
+                  // start-aligned; a centred bullet list is unreadable.
                   Text(
                     error ?? 'Capsi is not ready yet.',
-                    textAlign: TextAlign.center,
+                    textAlign: (error?.contains('\n') ?? false)
+                        ? TextAlign.start
+                        : TextAlign.center,
                     style: const TextStyle(
                       color: Color(0xFF858D88),
-                      height: 1.5,
+                      height: 1.55,
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -845,7 +945,16 @@ class _DesktopContent extends StatelessWidget {
   final CapsiNative? native;
   final VoidCallback? onSettings;
 
-  const _DesktopContent({required this.page, required this.body, required this.native, this.onSettings});
+  /// Whether the engine is operational, which is what the status badge reports.
+  final bool operational;
+
+  const _DesktopContent({
+    required this.page,
+    required this.body,
+    required this.native,
+    required this.operational,
+    this.onSettings,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -870,7 +979,7 @@ class _DesktopContent extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _NetworkStatus(available: native != null),
+                    _NetworkStatus(installed: native != null, ready: operational),
                     const SizedBox(width: 8),
                     IconButton(
                       tooltip: 'Settings',
@@ -974,6 +1083,12 @@ class _SettingsDialog extends StatelessWidget {
   final int trustedDeviceCount;
   final AppSettings settings;
 
+  /// The engine's startup report, or null when the check has not run yet.
+  final CapsiSelfTestReport? selfTestReport;
+
+  /// Whether the engine is operational right now (see `_CapsiHomeState`).
+  final bool engineOperational;
+
   /// Closes this dialog and moves the shell to the trusted devices page.
   final VoidCallback onOpenTrustedDevices;
 
@@ -982,6 +1097,8 @@ class _SettingsDialog extends StatelessWidget {
     required this.dataDirectory,
     required this.trustedDeviceCount,
     required this.settings,
+    this.selfTestReport,
+    this.engineOperational = false,
     required this.onOpenTrustedDevices,
   });
 
@@ -1042,18 +1159,44 @@ class _SettingsDialog extends StatelessWidget {
               _SettingsSection(
                 title: 'Connection',
                 children: [
-                  // One status row rather than three repeating the same
-                  // ready/not-ready answer about the same native bridge.
+                  // One status row that reports what the engine actually said.
+                  // "Ready" is reserved for a passed self-check with both
+                  // listeners up; a loaded library alone is "limited".
                   _SettingsRow(
-                    icon: native == null ? Icons.error_outline : Icons.check_circle_outline,
-                    title: native == null ? 'Capsi is not ready' : 'Capsi is ready to connect',
-                    subtitle: native == null
-                        ? 'The native runtime did not load on this device.'
-                        : 'Devices, discovery and messages are available.',
-                    iconColor: native == null ? Colors.orange : const Color(0xFF7ED957),
+                    icon: engineOperational
+                        ? Icons.check_circle_outline
+                        : native == null
+                            ? Icons.error_outline
+                            : Icons.warning_amber_outlined,
+                    title: engineOperational
+                        ? 'Capsi is ready to connect'
+                        : native == null
+                            ? 'Capsi is not ready'
+                            : 'Capsi is running in a limited state',
+                    subtitle: engineOperational
+                        ? 'The engine checked itself and is listening for devices.'
+                        : native == null
+                            ? 'The native runtime did not load on this device.'
+                            : 'The engine did not pass its startup check or is not listening. See the startup check below.',
+                    iconColor: engineOperational ? const Color(0xFF7ED957) : Colors.orange,
                   ),
                 ],
               ),
+              if (selfTestReport != null) ...[
+                const SizedBox(height: 14),
+                _SettingsSection(
+                  title: 'Startup check',
+                  children: [
+                    for (final step in selfTestReport!.steps)
+                      _SettingsRow(
+                        icon: step.ok ? Icons.check_circle_outline : Icons.error_outline,
+                        title: _selfTestStepLabel(step.name),
+                        subtitle: step.detail ?? (step.ok ? 'Passed.' : 'Failed.'),
+                        iconColor: step.ok ? const Color(0xFF7ED957) : Colors.orange,
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 14),
               _SettingsSection(
                 title: 'Privacy & devices',
@@ -1380,6 +1523,14 @@ class _AboutDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final version = native?.runtimeVersion ?? capsiVersionFallback;
+    // The protocol version and the core check both come from the engine that is
+    // actually loaded, so About cannot claim compatibility a build does not have.
+    final protocol = native?.protocolVersion ?? 'unavailable';
+    final engineLine = native == null
+        ? 'The Capsi engine is not loaded on this device.'
+        : native!.coreLinked
+            ? 'Engine linked and its core check passed.'
+            : 'The engine loaded but its core check failed.';
 
     return AlertDialog(
       title: Row(
@@ -1407,6 +1558,17 @@ class _AboutDialog extends StatelessWidget {
             SizedBox(height: 18),
             Text('Version $version', style: const TextStyle(color: Color(0xFF858D88))),
             const SizedBox(height: 4),
+            Text('Protocol $protocol', style: const TextStyle(color: Color(0xFF858D88))),
+            const SizedBox(height: 4),
+            Text(
+              engineLine,
+              style: TextStyle(
+                color: native != null && native!.coreLinked
+                    ? const Color(0xFF858D88)
+                    : Colors.orange,
+              ),
+            ),
+            const SizedBox(height: 4),
             Text('Published by $capsiPublisher', style: const TextStyle(color: Color(0xFF858D88))),
             const SizedBox(height: 10),
             TextButton.icon(
@@ -1427,26 +1589,59 @@ class _AboutDialog extends StatelessWidget {
   }
 }
 
+/// The connection badge in the shell header.
+///
+/// It has three states rather than two on purpose. "Ready" is only shown when
+/// the engine passed its self-check *and* both listeners hold a live handle;
+/// a loaded library that is not listening is "Limited", not "Ready". Reporting
+/// the difference is the point - a badge that says "Ready" over a dead listener
+/// is exactly the appearance-over-truth failure this replaces.
 class _NetworkStatus extends StatelessWidget {
-  final bool available;
-  const _NetworkStatus({required this.available});
+  /// The native library loaded at all.
+  final bool installed;
+
+  /// The engine is fully operational (self-check passed, listeners up).
+  final bool ready;
+
+  const _NetworkStatus({required this.installed, required this.ready});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111516),
-        border: Border.all(color: const Color(0x18FFFFFF)),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.circle, size: 7, color: available ? const Color(0xFF7ED957) : Colors.orange),
-          const SizedBox(width: 7),
-          Text(available ? 'Ready' : 'Unavailable', style: const TextStyle(fontSize: 12)),
-        ],
+    final Color color;
+    final String label;
+    final String tooltip;
+    if (!installed) {
+      color = Colors.orange;
+      label = 'Unavailable';
+      tooltip = 'Capsi did not load its native engine on this device.';
+    } else if (ready) {
+      color = const Color(0xFF7ED957);
+      label = 'Ready';
+      tooltip = 'The engine checked itself and is listening for devices.';
+    } else {
+      color = Colors.orange;
+      label = 'Limited';
+      tooltip = 'Capsi is running, but not everything it needs is working. '
+          'Open Settings for the startup check.';
+    }
+
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111516),
+          border: Border.all(color: const Color(0x18FFFFFF)),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.circle, size: 7, color: color),
+            const SizedBox(width: 7),
+            Text(label, style: const TextStyle(fontSize: 12)),
+          ],
+        ),
       ),
     );
   }

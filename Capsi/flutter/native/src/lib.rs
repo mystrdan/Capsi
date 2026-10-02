@@ -135,6 +135,28 @@ pub extern "C" fn capsi_discovery_start(
         None => return 0,
     };
 
+    // The runtime, the identity and the discovery socket are all created on the
+    // calling thread. A device that cannot load its identity or bind the
+    // discovery port has to fail synchronously: a handle returned by a thread
+    // that has already given up let the shell show discovery as running when
+    // nothing was listening on the network at all.
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .enable_time()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(_) => return 0,
+    };
+
+    let discovery = match runtime.block_on(async {
+        let identity = Arc::new(DeviceIdentity::load_or_create(&data_dir)?);
+        Discovery::bind(Arc::clone(&identity), name.clone(), tcp_port).await
+    }) {
+        Ok(discovery) => discovery,
+        Err(_) => return 0,
+    };
+
     let stop = Arc::new(AtomicBool::new(false));
     let latest = Arc::new(Mutex::new(String::from("[]")));
     let thread_stop = Arc::clone(&stop);
@@ -143,25 +165,7 @@ pub extern "C" fn capsi_discovery_start(
     let spawn_result = std::thread::Builder::new()
         .name("capsi-discovery".into())
         .spawn(move || {
-            let runtime = match tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .enable_time()
-                .build()
-            {
-                Ok(runtime) => runtime,
-                Err(_) => return,
-            };
-
             runtime.block_on(async move {
-                let identity = match DeviceIdentity::load_or_create(&data_dir) {
-                    Ok(identity) => Arc::new(identity),
-                    Err(_) => return,
-                };
-                let discovery = match Discovery::bind(Arc::clone(&identity), name, tcp_port).await {
-                    Ok(discovery) => discovery,
-                    Err(_) => return,
-                };
-
                 let _ = discovery.announce().await;
 
                 while !thread_stop.load(Ordering::Acquire) {
@@ -327,23 +331,27 @@ pub extern "C" fn capsi_discovery_stop(handle: u64) {
 #[no_mangle]
 pub extern "C" fn capsi_message_start(data_dir: *const c_char, tcp_port: u16) -> u64 {
     let data_dir = match c_path(data_dir) { Some(path) => path, None => return 0 };
+    // Built and bound on the calling thread: a service port that is already
+    // taken has to be a synchronous failure, otherwise the shell starts a
+    // listener it believes is running while nothing is accepting connections.
+    let runtime = match tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build() {
+        Ok(runtime) => runtime,
+        Err(_) => return 0,
+    };
+    let listener = match runtime.block_on(TcpListener::bind(("0.0.0.0", tcp_port))) {
+        Ok(listener) => listener,
+        Err(_) => return 0,
+    };
+
     let stop = Arc::new(AtomicBool::new(false));
     let events = Arc::new(Mutex::new(VecDeque::new()));
     let thread_stop = Arc::clone(&stop);
     let thread_events = Arc::clone(&events);
 
     if std::thread::Builder::new().name("capsi-messages".into()).spawn(move || {
-        let runtime = match tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build() {
-            Ok(runtime) => runtime,
-            Err(_) => return,
-        };
         runtime.block_on(async move {
             let identity = match DeviceIdentity::load_or_create(&data_dir) {
                 Ok(identity) => Arc::new(identity),
-                Err(_) => return,
-            };
-            let listener = match TcpListener::bind(("0.0.0.0", tcp_port)).await {
-                Ok(listener) => listener,
                 Err(error) => {
                     message_event(&thread_events, serde_json::json!({"error": error.to_string()}));
                     return;
@@ -1876,17 +1884,49 @@ pub extern "C" fn capsi_runtime_version() -> *const c_char {
     VERSION.as_ptr().cast()
 }
 
-/// Returns a non-zero value when the shared Rust core is linked successfully.
+/// Returns a non-zero value when the shared Rust core is linked and working.
+///
+/// The check is a real signing round-trip through the core rather than a
+/// constant: a build that links the symbol but cannot perform the cryptography
+/// the protocol depends on has to fail here, not at the first message.
 #[no_mangle]
 pub extern "C" fn capsi_core_linked() -> i32 {
-    1
+    match core_round_trip() {
+        Ok(()) => 1,
+        Err(_) => 0,
+    }
+}
+
+/// The signing round-trip shared by [`capsi_core_linked`] and the self-check.
+fn core_round_trip() -> capsi_core::Result<()> {
+    let identity = DeviceIdentity::generate()?;
+    let probe = b"capsi core liveness probe";
+    DeviceIdentity::verify_hex(&identity.verifying_key(), probe, &identity.sign_hex(probe))
 }
 
 /// Returns the Capsi protocol version used by the Rust core.
 #[no_mangle]
 pub extern "C" fn capsi_protocol_version() -> *const c_char {
-    static VERSION: &[u8] = b"capsi/1\0";
-    VERSION.as_ptr().cast()
+    // Read from the core constant instead of repeating the literal, so the value
+    // the client checks compatibility against cannot drift from the value the
+    // core actually speaks.
+    static VERSION: OnceLock<CString> = OnceLock::new();
+    VERSION
+        .get_or_init(|| {
+            CString::new(capsi_core::PROTOCOL_VERSION)
+                .expect("the protocol version never contains a NUL")
+        })
+        .as_ptr()
+}
+
+/// The TCP service port the core expects peers to dial.
+///
+/// Read from the core constant rather than repeated as a literal, so the port
+/// the client starts its listener on and the port the startup self-check proves
+/// bindable cannot drift apart.
+#[no_mangle]
+pub extern "C" fn capsi_service_port() -> u16 {
+    capsi_core::TCP_SERVICE_PORT
 }
 
 /// Probe the local network using the real Capsi UDP discovery implementation.
@@ -1946,6 +1986,178 @@ pub extern "C" fn capsi_discovery_probe(
     }
 }
 
+/// The Capsi startup self-check, run against the real engine.
+///
+/// Every step performs the operation the application depends on - a signing
+/// round-trip through the core, a write into the data directory, the real trust
+/// and message stores, and a real bind of the service port and the discovery
+/// socket - so a green report is evidence that the engine works rather than that
+/// a symbol resolved. The shell renders the steps verbatim and only leaves its
+/// startup gate when every one of them passed.
+///
+/// The returned value is a UTF-8 JSON object. The caller owns it and must
+/// release it with `capsi_free_string`.
+#[no_mangle]
+pub extern "C" fn capsi_self_test(
+    data_dir: *const c_char,
+    device_name: *const c_char,
+    tcp_port: u16,
+) -> *mut c_char {
+    let dir = match c_path(data_dir) {
+        Some(path) => path,
+        None => return error_json("data directory is invalid"),
+    };
+    let name = match c_string(device_name) {
+        Some(value) if !value.trim().is_empty() => value,
+        _ => return error_json("device name is invalid"),
+    };
+
+    let mut steps: Vec<serde_json::Value> = Vec::with_capacity(6);
+
+    // 1. The core is linked and its cryptography actually works.
+    steps.push(match core_round_trip() {
+        Ok(()) => serde_json::json!({ "name": "core_linked", "ok": true }),
+        Err(error) => serde_json::json!({
+            "name": "core_linked",
+            "ok": false,
+            "detail": error.user_message(),
+        }),
+    });
+
+    // 2. The protocol version the core speaks, for the compatibility check.
+    steps.push(serde_json::json!({
+        "name": "protocol",
+        "ok": true,
+        "detail": capsi_core::PROTOCOL_VERSION,
+    }));
+
+    // 3. Local storage: the directory round-trips a write and both stores open.
+    let storage = (|| -> capsi_core::Result<()> {
+        std::fs::create_dir_all(&dir)?;
+        let probe = dir.join(".capsi-self-test");
+        std::fs::write(&probe, b"capsi")?;
+        let read_back = std::fs::read(&probe)?;
+        let _ = std::fs::remove_file(&probe);
+        if read_back != b"capsi" {
+            return Err(capsi_core::CapsiError::Io(
+                "the data directory did not round-trip a write".into(),
+            ));
+        }
+        TrustStore::load(&dir)?;
+        MessageStore::load(&dir)?;
+        Ok(())
+    })();
+    steps.push(match &storage {
+        Ok(()) => serde_json::json!({ "name": "storage", "ok": true }),
+        Err(error) => serde_json::json!({
+            "name": "storage",
+            "ok": false,
+            "detail": error.user_message(),
+        }),
+    });
+
+    // 4. Identity: the stored one is loaded, or a new one is created.
+    let identity = DeviceIdentity::load_or_create(&dir);
+    steps.push(match &identity {
+        Ok(identity) => serde_json::json!({
+            "name": "identity",
+            "ok": true,
+            "detail": format!("{} {}", identity.id().as_str(), identity.fingerprint().as_str()),
+        }),
+        Err(error) => serde_json::json!({
+            "name": "identity",
+            "ok": false,
+            "detail": error.user_message(),
+        }),
+    });
+
+    // 5 and 6. The service port and the discovery socket really bind. Both are
+    // held at the same time, then released, so the check covers the ports the
+    // running application takes a moment later.
+    let (network, discovery) = network_ports_bind(&name, tcp_port);
+    steps.push(network);
+    steps.push(discovery);
+
+    let ok = steps.iter().all(|step| step["ok"].as_bool() == Some(true));
+    trust_result(serde_json::json!({
+        "ok": ok,
+        "runtime": env!("CARGO_PKG_VERSION"),
+        "protocol": capsi_core::PROTOCOL_VERSION,
+        "steps": steps,
+    }))
+}
+
+/// Bind the service port and the discovery socket, report each, and release both.
+///
+/// The discovery socket goes through [`Discovery::bind`] so the check uses the
+/// same socket options the running listener uses; a stricter probe would report
+/// a failure on a machine that is already running a second Capsi.
+fn network_ports_bind(name: &str, tcp_port: u16) -> (serde_json::Value, serde_json::Value) {
+    let failed = |detail: String| {
+        (
+            serde_json::json!({ "name": "network_listener", "ok": false, "detail": detail }),
+            serde_json::json!({ "name": "discovery", "ok": false, "detail": detail }),
+        )
+    };
+
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .enable_time()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => return failed(error.to_string()),
+    };
+
+    let name = name.to_owned();
+    runtime.block_on(async move {
+        // The port the message listener will accept connections on.
+        let listener = TcpListener::bind(("0.0.0.0", tcp_port)).await;
+        let network = match &listener {
+            Ok(socket) => serde_json::json!({
+                "name": "network_listener",
+                "ok": true,
+                "detail": socket
+                    .local_addr()
+                    .map(|address| address.to_string())
+                    .unwrap_or_else(|_| format!("0.0.0.0:{tcp_port}")),
+            }),
+            Err(error) => serde_json::json!({
+                "name": "network_listener",
+                "ok": false,
+                "detail": error.to_string(),
+            }),
+        };
+
+        // Bound while the service port is still held, so a port that is only
+        // free because nothing holds it is caught here.
+        let discovery = match DeviceIdentity::generate() {
+            Ok(identity) => match Discovery::bind(Arc::new(identity), name, tcp_port).await {
+                Ok(discovery) => serde_json::json!({
+                    "name": "discovery",
+                    "ok": true,
+                    "detail": format!("udp 0.0.0.0:{}", discovery.local_port()),
+                }),
+                Err(error) => serde_json::json!({
+                    "name": "discovery",
+                    "ok": false,
+                    "detail": error.user_message(),
+                }),
+            },
+            Err(error) => serde_json::json!({
+                "name": "discovery",
+                "ok": false,
+                "detail": error.user_message(),
+            }),
+        };
+
+        // Both sockets are released here so the application's own listeners can
+        // take the ports immediately afterwards.
+        drop(listener);
+        (network, discovery)
+    })
+}
+
 /// Release a string returned by this FFI layer.
 ///
 /// # Safety
@@ -1978,11 +2190,97 @@ mod tests {
     #[test]
     fn protocol_version_is_exposed() {
         let value = unsafe { CStr::from_ptr(capsi_protocol_version()) };
-        assert_eq!(value.to_str().unwrap(), "capsi/1");
+        assert_eq!(value.to_str().unwrap(), capsi_core::PROTOCOL_VERSION);
+    }
+
+    #[test]
+    fn the_service_port_comes_from_the_core() {
+        assert_eq!(capsi_service_port(), capsi_core::TCP_SERVICE_PORT);
     }
 
     #[test]
     fn core_reports_as_linked() {
         assert_eq!(capsi_core_linked(), 1);
+    }
+
+    /// Read a report the way the Flutter client does, and free it.
+    fn self_test(dir: &Path, name: &str, tcp_port: u16) -> serde_json::Value {
+        let dir_arg = CString::new(dir.to_string_lossy().into_owned()).unwrap();
+        let name_arg = CString::new(name).unwrap();
+        let raw = capsi_self_test(dir_arg.as_ptr(), name_arg.as_ptr(), tcp_port);
+        assert!(!raw.is_null());
+        let json = unsafe { CStr::from_ptr(raw).to_str().unwrap().to_owned() };
+        unsafe { capsi_free_string(raw) };
+        serde_json::from_str(&json).unwrap()
+    }
+
+    #[test]
+    fn the_self_test_reports_every_step_as_passed() {
+        let dir = std::env::temp_dir().join(format!("capsi-self-test-{}", std::process::id()));
+
+        // Port 0 asks the OS for a free service port so the check never fights
+        // the real one. The discovery socket still uses the standard port.
+        let report = self_test(&dir, "self test device", 0);
+        assert_eq!(report["ok"].as_bool(), Some(true), "report: {report}");
+        assert_eq!(report["protocol"], capsi_core::PROTOCOL_VERSION);
+        assert_eq!(report["runtime"], env!("CARGO_PKG_VERSION"));
+
+        let steps = report["steps"].as_array().unwrap();
+        let names: Vec<&str> = steps
+            .iter()
+            .map(|step| step["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            names,
+            ["core_linked", "protocol", "storage", "identity", "network_listener", "discovery"]
+        );
+        for step in steps {
+            assert_eq!(step["ok"].as_bool(), Some(true), "step: {step}");
+        }
+
+        // The identity step has to name the device the stores will use.
+        let identity = steps.iter().find(|step| step["name"] == "identity").unwrap();
+        assert!(identity["detail"].as_str().unwrap().contains(' '));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_self_test_reports_a_failure_instead_of_a_pass() {
+        // A data directory that cannot exist (its parent is a file) has to be
+        // reported as a failed step rather than skipped or swallowed.
+        let parent = std::env::temp_dir().join(format!("capsi-self-test-file-{}", std::process::id()));
+        std::fs::write(&parent, b"not a directory").unwrap();
+
+        let report = self_test(&parent.join("data"), "self test device", 0);
+        assert_eq!(report["ok"].as_bool(), Some(false), "report: {report}");
+
+        let storage = report["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|step| step["name"] == "storage")
+            .unwrap()
+            .clone();
+        assert_eq!(storage["ok"].as_bool(), Some(false));
+        assert!(
+            storage["detail"]
+                .as_str()
+                .is_some_and(|detail| !detail.is_empty()),
+            "storage step carried no reason: {storage}"
+        );
+
+        let _ = std::fs::remove_file(&parent);
+    }
+
+    #[test]
+    fn the_self_test_rejects_an_empty_device_name() {
+        let dir_arg = CString::new("unused").unwrap();
+        let name_arg = CString::new("   ").unwrap();
+        let raw = capsi_self_test(dir_arg.as_ptr(), name_arg.as_ptr(), 0);
+        let json = unsafe { CStr::from_ptr(raw).to_str().unwrap().to_owned() };
+        unsafe { capsi_free_string(raw) };
+        let report: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(report["error"], "device name is invalid");
     }
 }

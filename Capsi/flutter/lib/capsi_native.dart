@@ -12,6 +12,20 @@ typedef _CoreLinkedDart = int Function();
 typedef _ProtocolVersionNative = ffi.Pointer<ffi.Char> Function();
 typedef _ProtocolVersionDart = ffi.Pointer<ffi.Char> Function();
 
+typedef _ServicePortNative = ffi.Uint16 Function();
+typedef _ServicePortDart = int Function();
+
+typedef _SelfTestNative = ffi.Pointer<ffi.Char> Function(
+  ffi.Pointer<ffi.Char>,
+  ffi.Pointer<ffi.Char>,
+  ffi.Uint16,
+);
+typedef _SelfTestDart = ffi.Pointer<ffi.Char> Function(
+  ffi.Pointer<ffi.Char>,
+  ffi.Pointer<ffi.Char>,
+  int,
+);
+
 typedef _DiscoveryProbeNative = ffi.Pointer<ffi.Char> Function(
   ffi.Pointer<ffi.Char>,
   ffi.Uint16,
@@ -142,6 +156,90 @@ class CapsiPeer {
   }
 }
 
+/// One step of the native startup self-check.
+///
+/// [name] is the engine's own identifier for the step, so the shell shows
+/// exactly what the engine checked rather than a Dart-side paraphrase.
+class CapsiSelfTestStep {
+  const CapsiSelfTestStep({required this.name, required this.ok, this.detail});
+
+  final String name;
+  final bool ok;
+
+  /// The engine's reason for a failure, or the useful fact it found (the bound
+  /// address, the device id) on success.
+  final String? detail;
+
+  factory CapsiSelfTestStep.fromJson(Map<String, dynamic> json) => CapsiSelfTestStep(
+        name: json['name']?.toString() ?? 'unknown',
+        ok: json['ok'] == true,
+        detail: json['detail']?.toString(),
+      );
+}
+
+/// The result of running the native startup self-check.
+///
+/// [ok] is true only when the engine itself reported every step as passed. The
+/// shell must treat a report with [ok] false as "not ready", never as a warning:
+/// that is the whole point of the check.
+class CapsiSelfTestReport {
+  const CapsiSelfTestReport({
+    required this.ok,
+    required this.runtime,
+    required this.protocol,
+    required this.steps,
+  });
+
+  final bool ok;
+
+  /// The runtime version the engine that ran the check was built from.
+  final String runtime;
+
+  /// The protocol version that engine speaks.
+  final String protocol;
+
+  final List<CapsiSelfTestStep> steps;
+
+  /// The steps that did not pass, in the order the engine reported them.
+  List<CapsiSelfTestStep> get failed =>
+      steps.where((step) => !step.ok).toList(growable: false);
+
+  factory CapsiSelfTestReport.fromJson(Map<String, dynamic> json) {
+    // The FFI layer reports a call it refused with an {"error": ...} envelope
+    // instead of a report. It has to become a failed step carrying the engine's
+    // reason: parsing it as an ordinary report would produce ok:false with no
+    // failing step, and the startup gate would then name no cause at all.
+    final error = json['error'];
+    if (error != null) {
+      return CapsiSelfTestReport(
+        ok: false,
+        runtime: '',
+        protocol: '',
+        steps: [
+          CapsiSelfTestStep(
+            name: 'self_test',
+            ok: false,
+            detail: error.toString(),
+          ),
+        ],
+      );
+    }
+
+    final rawSteps = json['steps'];
+    return CapsiSelfTestReport(
+      ok: json['ok'] == true,
+      runtime: json['runtime']?.toString() ?? '',
+      protocol: json['protocol']?.toString() ?? '',
+      steps: rawSteps is List
+          ? rawSteps
+              .whereType<Map<String, dynamic>>()
+              .map(CapsiSelfTestStep.fromJson)
+              .toList(growable: false)
+          : const [],
+    );
+  }
+}
+
 /// Thin Dart wrapper around the shared Capsi Rust core.
 ///
 /// The wrapper is intentionally optional during the migration: the Flutter UI
@@ -151,6 +249,8 @@ class CapsiNative {
       : _runtimeVersion = library.lookupFunction<_RuntimeVersionNative, _RuntimeVersionDart>('capsi_runtime_version'),
         _coreLinked = library.lookupFunction<_CoreLinkedNative, _CoreLinkedDart>('capsi_core_linked'),
         _protocolVersion = library.lookupFunction<_ProtocolVersionNative, _ProtocolVersionDart>('capsi_protocol_version'),
+        _servicePort = library.lookupFunction<_ServicePortNative, _ServicePortDart>('capsi_service_port'),
+        _selfTest = library.lookupFunction<_SelfTestNative, _SelfTestDart>('capsi_self_test'),
         _discoveryProbe = library.lookupFunction<_DiscoveryProbeNative, _DiscoveryProbeDart>('capsi_discovery_probe'),
         _discoveryStart = library.lookupFunction<_DiscoveryStartNative, _DiscoveryStartDart>('capsi_discovery_start'),
         _trustList = library.lookupFunction<_TrustListNative, _TrustListDart>('capsi_trust_list'),
@@ -186,6 +286,8 @@ class CapsiNative {
   final _RuntimeVersionDart _runtimeVersion;
   final _CoreLinkedDart _coreLinked;
   final _ProtocolVersionDart _protocolVersion;
+  final _ServicePortDart _servicePort;
+  final _SelfTestDart _selfTest;
   final _DiscoveryProbeDart _discoveryProbe;
   final _DiscoveryStartDart _discoveryStart;
   final _TrustListDart _trustList;
@@ -381,16 +483,50 @@ class CapsiNative {
   String get protocolVersion => _readString(_protocolVersion());
   bool get coreLinked => _coreLinked() != 0;
 
+  /// The TCP service port the core expects peers to dial.
+  ///
+  /// Read from the core rather than written as a literal here, so the port the
+  /// client listens on and the port the startup self-check proves bindable can
+  /// never disagree. Every method below defaults to it.
+  int get servicePort => _servicePort();
+
+  /// Run the native startup self-check against the real engine.
+  ///
+  /// Returns null only when the call could not be made at all, which the caller
+  /// has to report as "could not check" rather than treating as a pass. A
+  /// non-null report always carries the engine's own per-step verdicts.
+  CapsiSelfTestReport? selfTest({
+    required String dataDirectory,
+    required String deviceName,
+    int? tcpPort,
+  }) {
+    final dir = dataDirectory.toNativeUtf8();
+    final name = deviceName.toNativeUtf8();
+    try {
+      final pointer = _selfTest(dir.cast<ffi.Char>(), name.cast<ffi.Char>(), tcpPort ?? servicePort);
+      if (pointer == ffi.nullptr) return null;
+      try {
+        final value = jsonDecode(_readString(pointer));
+        return value is Map<String, dynamic> ? CapsiSelfTestReport.fromJson(value) : null;
+      } finally {
+        _freeString(pointer);
+      }
+    } finally {
+      calloc.free(dir);
+      calloc.free(name);
+    }
+  }
+
   List<CapsiPeer> discoveryProbe({
     required String deviceName,
-    int tcpPort = 45892,
+    int? tcpPort,
     Duration wait = const Duration(milliseconds: 500),
   }) {
     final nativeName = deviceName.toNativeUtf8();
     try {
       final pointer = _discoveryProbe(
         nativeName.cast<ffi.Char>(),
-        tcpPort,
+        tcpPort ?? servicePort,
         wait.inMilliseconds,
       );
       if (pointer == ffi.nullptr) return const [];
@@ -410,11 +546,11 @@ class CapsiNative {
   }
 
 
-  int startDiscovery({required String deviceName, int tcpPort = 45892, required String dataDirectory}) {
+  int startDiscovery({required String deviceName, int? tcpPort, required String dataDirectory}) {
     final nativeName = deviceName.toNativeUtf8();
     final nativeDir = dataDirectory.toNativeUtf8();
     try {
-      return _discoveryStart(nativeName.cast<ffi.Char>(), tcpPort, nativeDir.cast<ffi.Char>());
+      return _discoveryStart(nativeName.cast<ffi.Char>(), tcpPort ?? servicePort, nativeDir.cast<ffi.Char>());
     } finally {
       calloc.free(nativeName);
       calloc.free(nativeDir);
@@ -462,9 +598,9 @@ class CapsiNative {
 
   void stopDiscovery(int handle) => _discoveryStop(handle);
 
-  int startMessageListener({required String dataDirectory, int tcpPort = 45892}) {
+  int startMessageListener({required String dataDirectory, int? tcpPort}) {
     final dir = dataDirectory.toNativeUtf8();
-    try { return _messageStart(dir.cast<ffi.Char>(), tcpPort); }
+    try { return _messageStart(dir.cast<ffi.Char>(), tcpPort ?? servicePort); }
     finally { calloc.free(dir); }
   }
 
