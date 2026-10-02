@@ -58,7 +58,7 @@ function App() {
             <h2>Messages and files, device to device.</h2>
             <p>Capsi lets you communicate and share files directly with nearby devices. No account. No cloud service. No internet required.</p>
             <div className="facts"><span>Device to device</span><span>No account</span><span>No cloud</span><span>No internet required</span></div>
-            <div className="actions"><a className="button" href={primaryDownload}>Download Capsi</a><button className="button outline" onClick={() => scrollTo('how')}>See how it works</button></div>
+            <div className="actions"><a className="button" href={primaryDownload}>{primaryLabel}</a><button className="button outline" onClick={() => scrollTo('how')}>See how it works</button></div>
             <small>Windows · Android · Available now · Free to download and use</small>
           </div>
           <AppPreview />
@@ -192,7 +192,7 @@ function DownloadPage() {
       <p>Choose your platform. Capsi is currently available for Windows and Android.</p>
       <div className="download-options">
         <DownloadOption name="Windows" description="Windows 10/11 · 64-bit" label="Download for Windows" href={downloads.windows} />
-        <DownloadOption name="Android" description="Android · APK" label="Get Capsi for Android" href={downloads.android} />
+        <DownloadOption name="Android" description="Android · Releases" label="View Android release" href={downloads.android} />
       </div>
       <a className="back-link" href="/">← Back to Capsi</a>
     </div>
