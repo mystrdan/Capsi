@@ -106,17 +106,12 @@ function App() {
         <section className="platforms container">
           <div className="eyebrow">PLATFORMS</div>
           <h2>One Capsi experience across your devices.</h2>
-          <p className="section-lead">Capsi is available for Windows today, with Android, macOS and iOS support being prepared.</p>
-          <div className="platform-grid"><Platform name="Windows" status="Available now" /><Platform name="Android" status="Coming soon" /><Platform name="macOS" status="Coming soon" /><Platform name="iOS" status="Coming soon" /></div>
+          <p className="section-lead">Capsi is available now for Windows and Android. More platforms will follow.</p>\n          <div className="platform-grid"><Platform name="Windows" status="Available now" /><Platform name="Android" status="Available now" /></div>
         </section>
 
         <section className="download">
           <img className="download-logo" src={logoUrl} alt="Capsi" />
-          <div className="eyebrow">CAPSI 1.1.0</div>
-          <h2>Ready to connect?</h2>
-          <p>Install Capsi on your Windows computer, find another device and start sending.</p>
-          <a className="button" href={downloadUrl}>Download for Windows</a>
-          <small>Windows 64-bit installer · Available now</small>
+          <div className="eyebrow">GET CAPSI</div>\n          <h2>Ready to connect?</h2>\n          <p>Get Capsi for Windows or Android and start sending messages and files, device to device.</p>\n          <a className="button" href={primaryDownload}>{primaryLabel}</a>\n          <small>Windows · Android · Available now</small>
         </section>
       </main>
 
