@@ -2,9 +2,11 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 
+// Pinned to the 1.1.0 release tag rather than /releases/latest, so the download
+// button cannot silently start serving a different build after the next release.
 const downloads = {
-  windows: 'https://github.com/mystrdan/Capsi/releases/latest/download/Capsi-1.1.0-x64.msi',
-  android: 'https://github.com/mystrdan/Capsi/releases/latest'
+  windows: 'https://github.com/mystrdan/Capsi/releases/download/1.1.0/Capsi-1.1.0-x64.msi',
+  android: 'https://github.com/mystrdan/Capsi/releases/download/1.1.0/app-release.apk'
 };
 
 function detectPlatform() {
@@ -192,7 +194,7 @@ function DownloadPage() {
       <p>Choose your platform. Capsi is currently available for Windows and Android.</p>
       <div className="download-options">
         <DownloadOption name="Windows" description="Windows 10/11 · 64-bit" label="Download for Windows" href={downloads.windows} />
-        <DownloadOption name="Android" description="Android · Releases" label="View Android release" href={downloads.android} />
+        <DownloadOption name="Android" description="Android 7.0+ · APK" label="Download for Android" href={downloads.android} />
       </div>
       <a className="back-link" href="/">← Back to Capsi</a>
     </div>
