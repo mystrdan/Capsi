@@ -218,6 +218,8 @@ The CI build verifies that the source can compile in a clean environment and pac
 
 Source implementation is not the same as production validation. The following must be tested with actual installations:
 
+The concrete, evidence-based procedure for all of these — with exact commands, success criteria, failure indicators, and the evidence to capture — is **[`docs/release-verification-plan.md`](docs/release-verification-plan.md)**.
+
 - Windows ↔ Windows communication.
 - Windows ↔ Android communication.
 - Android ↔ Android communication.

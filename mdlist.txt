@@ -1,0 +1,16 @@
+D:\Capsi\Capsi\flutter\README.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\file_selector_windows\CHANGELOG.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\file_selector_windows\README.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\file_selector_windows\example\README.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\jni\CHANGELOG.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\jni\README.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\jni\android\README.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\jni\example\README.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\jni\java\README.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\jni\src\README.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\path_provider_windows\CHANGELOG.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\path_provider_windows\README.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\path_provider_windows\example\README.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\url_launcher_windows\CHANGELOG.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\url_launcher_windows\README.md
+D:\Capsi\Capsi\flutter\windows\flutter\ephemeral\.plugin_symlinks\url_launcher_windows\example\README.md
