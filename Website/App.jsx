@@ -16,7 +16,10 @@ function detectPlatform() {
   if (/Windows/i.test(ua)) return 'windows';
   return null;
 }
-const logoUrl = 'https://raw.githubusercontent.com/mystrdan/Capsi/main/Capsi/icons/capsi-logo-512.png';
+// Served from this origin (Website/public) instead of raw.githubusercontent.com: the
+// icons are then covered by the same deploy as the page, and the site still renders
+// its logo when GitHub is slow, blocked, or the default branch moves.
+const logoUrl = '/capsi-logo-512.png';
 
 const icons = {
   nearby: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="2.2"/><circle cx="12" cy="12" r="6"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>,
