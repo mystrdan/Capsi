@@ -57,6 +57,23 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!--
+            Hands a received file to a gallery, PDF reader or other viewer.
+            Received files live in the app's private data directory, and Android
+            has rejected file:// URIs in outgoing intents since API 24, so this
+            provider issues the content:// URI with a temporary read grant that
+            the receiving app is given through FLAG_GRANT_READ_URI_PERMISSION.
+            It is not exported: only an explicit grant from Capsi may use it.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

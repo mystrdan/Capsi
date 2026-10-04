@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Directories the FileProvider may hand out a content:// URI for.
+
+    `files-path` maps to Context.getFilesDir(), which is where path_provider puts
+    the Capsi data directory and therefore where the Rust core writes received
+    files (data_dir/files/downloads). Narrower alternatives (cache-path,
+    external-path) are deliberately not listed: a provider that can only reach
+    the one tree Capsi actually uses cannot be used to read anything else.
+
+    This file grants no access on its own. A URI is only usable by an app that
+    received it from Capsi together with FLAG_GRANT_READ_URI_PERMISSION.
+-->
+<paths>
+    <files-path name="capsi_data" path="." />
+</paths>

@@ -38,6 +38,14 @@ android {
     }
 }
 
+// androidx.core supplies FileProvider, which is the only way to hand a file from
+// the app's private sandbox to another app: since API 24 a raw file:// URI in an
+// outgoing intent throws FileUriExposedException. It is a small, stable library
+// and Flutter's own embedding already pulls it in transitively.
+dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17

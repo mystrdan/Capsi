@@ -120,6 +120,40 @@ The Flutter client is the product application. Current navigation includes:
 Keep settings and about information grounded in capabilities that actually
 exist in the Rust core. Do not add controls that only look functional.
 
+### File cards and opening files
+
+A transferred file is described by one shared widget, `FileCard` in
+`lib/file_card.dart`, used by both the conversation and the Files section so the
+two views cannot disagree about a file.
+
+File type is derived from the name. The transfer protocol (`FileOffer` in
+capsi-core) carries a name, a size and a digest and **no MIME type**, so nothing
+in the UI claims more certainty than that; an unrecognised extension is shown as
+a generic file rather than guessed into a category. Rules live in
+`lib/file_meta.dart` and are covered by `test/file_meta_test.dart`.
+
+Transfer states map one-to-one onto the six states the core persists
+(`TransferState`). No state is invented: in particular there is no separate
+"delivered" acknowledgement for a file, so none is shown. A state string this
+build does not recognise is displayed as the engine worded it.
+
+**Open** and **Show in folder** appear only for a completed file that is
+actually on disk. While a file is receiving, the core points `local_path` at the
+`.part` file (`native/src/lib.rs:426`), so trusting the mere presence of that
+path would offer to open a half-received download.
+
+Opening is delegated to the host over the existing `win.capsi.app/platform`
+method channel, with `url_launcher` as a fallback:
+
+- **Windows** — `ShellExecuteW` for Open, `explorer.exe /select,` for Show in
+  folder (`windows/runner/flutter_window.cpp`).
+- **Android** — `ACTION_VIEW` on a `FileProvider` content URI with a read grant.
+  A `file://` URI would throw `FileUriExposedException`, because received files
+  live in the app's private sandbox (`MainActivity.kt`).
+
+"Show in folder" is a desktop concept and is not offered on Android, where the
+sandbox is not browsable.
+
 ## Platform targets
 
 The Dart FFI layer selects the native library for each target:

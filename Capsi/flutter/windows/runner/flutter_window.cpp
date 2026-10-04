@@ -33,6 +33,27 @@ std::wstring ToWide(const std::string& value) {
   return wide;
 }
 
+// Reads the "path" string argument from a method call as a wide string.
+//
+// The Dart side always sends `{ "path": "<utf-8>" }`. A call with no arguments,
+// a null map, or a non-string value yields an empty string, which every caller
+// treats as "nothing to do" — a malformed call must never reach ShellExecute.
+std::wstring PathArgument(const flutter::MethodCall<flutter::EncodableValue>& call) {
+  const auto* arguments = std::get_if<flutter::EncodableMap>(call.arguments());
+  if (arguments == nullptr) {
+    return std::wstring();
+  }
+  const auto it = arguments->find(flutter::EncodableValue("path"));
+  if (it == arguments->end()) {
+    return std::wstring();
+  }
+  const auto* value = std::get_if<std::string>(&it->second);
+  if (value == nullptr) {
+    return std::wstring();
+  }
+  return ToWide(*value);
+}
+
 }  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -138,6 +159,54 @@ void FlutterWindow::HandlePlatformCall(
     const auto* enabled = std::get_if<bool>(call.arguments());
     notifications_enabled_ = enabled != nullptr ? *enabled : true;
     result->Success();
+    return;
+  }
+
+  if (name == "openFile" || name == "revealFile") {
+    const std::wstring path = PathArgument(call);
+    const bool opening = name == "openFile";
+
+    if (path.empty()) {
+      result->Success(flutter::EncodableValue(false));
+      return;
+    }
+
+    if (opening) {
+      // Hands the path to the shell, which picks the user's default application
+      // for the file type. This is what double-clicking a file does, so Capsi
+      // never needs to know what a PDF or a .zip opens with. SW_SHOW is normal.
+      const HINSTANCE outcome =
+          ::ShellExecuteW(GetHandle(), L"open", path.c_str(), nullptr, nullptr, SW_SHOW);
+      // ShellExecute reports success as any return value >= 32. The cast is
+      // explicit because HINSTANCE is a pointer type, and this project compiles
+      // the runner at /WX where an implicit integral comparison is an error.
+      result->Success(flutter::EncodableValue(
+          reinterpret_cast<INT_PTR>(outcome) > 32));
+      return;
+    }
+
+    // explorer.exe /select, is the documented way to open the containing folder
+    // with one file highlighted. The comma belongs to the syntax and must be
+    // passed together with the path, so this cannot be done by launching
+    // explorer on the directory alone.
+    std::wstring select = L"/select,";
+    select += path;
+
+    STARTUPINFOW startup{};
+    startup.cb = sizeof(startup);
+    PROCESS_INFORMATION process{};
+
+    // explorer.exe hands off to an existing instance and exits, so a successful
+    // CreateProcess only means the request was dispatched, not that the window
+    // is already up. That is still the right answer to give the Dart side.
+    const BOOL launched = ::CreateProcessW(
+        nullptr, select.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr,
+        &startup, &process);
+    if (launched) {
+      ::CloseHandle(process.hProcess);
+      ::CloseHandle(process.hThread);
+    }
+    result->Success(flutter::EncodableValue(launched != FALSE));
     return;
   }
 

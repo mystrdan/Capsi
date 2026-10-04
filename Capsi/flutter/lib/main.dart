@@ -12,6 +12,9 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'file_card.dart';
+import 'file_meta.dart';
+
 /// User preferences that survive a restart, stored beside the rest of the Capsi
 /// data as a single small JSON file.
 ///
@@ -640,7 +643,7 @@ class _CapsiHomeState extends State<CapsiHome> {
       builder: (context) => AlertDialog(
         title: const Text('Incoming file'),
         content: Text(
-          '${event['device_name']?.toString() ?? 'A trusted device'} wants to send $fileName (${_formatBytes(size)}).',
+          '${event['device_name']?.toString() ?? 'A trusted device'} wants to send $fileName (${formatBytes(size)}).',
         ),
         actions: [
           TextButton(
@@ -751,12 +754,6 @@ class _CapsiHomeState extends State<CapsiHome> {
     (icon: Icons.verified_user_outlined, label: 'Trusted devices'),
   ];
 
-  String _formatBytes(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
-  }
   void _showSettings(BuildContext context) {
     showDialog<void>(
       context: context,
@@ -2799,8 +2796,9 @@ class _PageBodyState extends State<_PageBody> {
     bool outgoing,
     Map<String, dynamic> file,
   ) {
-    final state = file['state']?.toString().toLowerCase() ?? 'unknown';
+    final state = file['state']?.toString().toLowerCase() ?? '';
     final transferId = file['transfer_id']?.toString() ?? '';
+    final phase = parseTransferState(state).phase;
     final size = file['size'];
     final total = size is num ? size.toInt() : int.tryParse(size?.toString() ?? '');
     int? received;
@@ -2808,7 +2806,8 @@ class _PageBodyState extends State<_PageBody> {
     // For incoming transfers the .part file is real progress. For outgoing
     // transfers, the selected source file is already complete, so never use
     // its size as a fake "sent" byte count.
-    if (!outgoing && localPath != null && total != null && total > 0) {
+    if (!outgoing && phase == TransferPhase.transferring &&
+        localPath != null && total != null && total > 0) {
       try {
         final length = File(localPath).lengthSync();
         if (length >= 0) received = length;
@@ -2824,23 +2823,10 @@ class _PageBodyState extends State<_PageBody> {
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
         child: Column(
           children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: _DeviceIcon(icon: _fileIcon(file['file_name']?.toString() ?? '')),
-              title: Text(
-                file['file_name']?.toString() ?? 'File',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                '$deviceName · ${_formatBytes(size)} · ${_fileStateLabel(state)}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: Icon(
-                _fileStateIcon(state),
-                color: _fileStateColor(state),
-              ),
+            FileCard(
+              file: file,
+              outgoing: outgoing,
+              peerName: deviceName,
             ),
             if (state == 'transferring') ...[
               const SizedBox(height: 4),
@@ -2851,7 +2837,7 @@ class _PageBodyState extends State<_PageBody> {
                 child: Text(
                   outgoing && received == null
                       ? 'Sending…'
-                      : '${_formatBytes(received)} of ${_formatBytes(total)}',
+                      : '${formatBytes(received)} of ${formatBytes(total)}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: const Color(0xFF858D88),
                   ),
@@ -2942,112 +2928,6 @@ class _PageBodyState extends State<_PageBody> {
         ),
       );
     }
-  }
-
-  String _fileStateLabel(String state) {
-    switch (state) {
-      case 'complete':
-      case 'completed':
-      case 'delivered':
-        return 'Complete';
-      case 'failed':
-      case 'error':
-        return 'Failed';
-      case 'queued':
-      case 'pending':
-        return 'Waiting';
-      case 'offered':
-        return 'Waiting for response';
-      case 'declined':
-        return 'Declined';
-      case 'cancelled':
-        return 'Cancelled';
-      case 'transferring':
-        return 'In progress';
-      default:
-        return 'Preparing';
-    }
-  }
-
-  IconData _fileIcon(String name) {
-    final lower = name.toLowerCase();
-    if (lower.endsWith('.pdf')) return Icons.picture_as_pdf_outlined;
-    if (lower.endsWith('.zip') || lower.endsWith('.rar') || lower.endsWith('.7z')) {
-      return Icons.archive_outlined;
-    }
-    if (lower.endsWith('.jpg') ||
-        lower.endsWith('.jpeg') ||
-        lower.endsWith('.png') ||
-        lower.endsWith('.webp') ||
-        lower.endsWith('.gif')) {
-      return Icons.image_outlined;
-    }
-    if (lower.endsWith('.mp4') ||
-        lower.endsWith('.mov') ||
-        lower.endsWith('.mkv') ||
-        lower.endsWith('.webm')) {
-      return Icons.movie_outlined;
-    }
-    if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.m4a')) {
-      return Icons.audio_file_outlined;
-    }
-    if (lower.endsWith('.doc') || lower.endsWith('.docx')) return Icons.description_outlined;
-    if (lower.endsWith('.xls') || lower.endsWith('.xlsx')) return Icons.table_chart_outlined;
-    if (lower.endsWith('.ppt') || lower.endsWith('.pptx')) return Icons.slideshow_outlined;
-    return Icons.insert_drive_file_outlined;
-  }
-
-  IconData _fileStateIcon(String? state) {
-    switch (state?.toLowerCase()) {
-      case 'complete':
-      case 'completed':
-      case 'delivered':
-        return Icons.check_circle_outline;
-      case 'failed':
-      case 'error':
-        return Icons.error_outline;
-      case 'queued':
-      case 'pending':
-      case 'offered':
-        return Icons.schedule_outlined;
-      case 'declined':
-        return Icons.block_outlined;
-      case 'cancelled':
-        return Icons.cancel_outlined;
-      case 'transferring':
-        return Icons.sync_outlined;
-      default:
-        return Icons.sync_outlined;
-    }
-  }
-
-  Color _fileStateColor(String? state) {
-    switch (state?.toLowerCase()) {
-      case 'complete':
-      case 'completed':
-      case 'delivered':
-        return const Color(0xFF7ED957);
-      case 'failed':
-      case 'error':
-        return Colors.orange;
-      case 'offered':
-        return Colors.amber;
-      case 'declined':
-      case 'cancelled':
-        return const Color(0xFF777E79);
-      default:
-        return const Color(0xFF858D88);
-    }
-  }
-
-  // Keep transfer and message UI deliberately simple; transport details belong to the core.
-  String _formatBytes(dynamic value) {
-    final bytes = value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '');
-    if (bytes == null) return 'Size unknown';
-    if (bytes < 1024) return '${bytes.toInt()} B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   Future<String?> _materialisePickedFile(XFile file) async {
@@ -3250,6 +3130,10 @@ class _PageBodyState extends State<_PageBody> {
                   itemBuilder: (_, index) {
                     final message = messages[index];
                     final outgoing = message['outgoing'] == true;
+                    final sentAt = message['sent_at'];
+                    final file = message['file'];
+                    final isFile =
+                        message['kind'] == 'file' && file is Map<String, dynamic>;
                     return Align(
                       alignment: outgoing ? Alignment.centerRight : Alignment.centerLeft,
                       child: Container(
@@ -3258,7 +3142,18 @@ class _PageBodyState extends State<_PageBody> {
                         child: Card(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            child: Text(message['body']?.toString() ?? ''),
+                            // A file message has an empty `body` by design, so
+                            // rendering the text alone produced a blank card.
+                            // It gets a real card describing the file instead.
+                            child: isFile
+                                ? FileCard(
+                                    file: file,
+                                    outgoing: outgoing,
+                                    peerName: selected.displayName,
+                                    sentAt: sentAt is num ? sentAt.toInt() : null,
+                                    dense: true,
+                                  )
+                                : Text(message['body']?.toString() ?? ''),
                           ),
                         ),
                       ),

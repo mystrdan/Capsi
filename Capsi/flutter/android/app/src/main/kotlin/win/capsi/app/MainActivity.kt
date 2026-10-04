@@ -5,16 +5,19 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 
 /**
  * Capsi's Android host.
@@ -81,9 +84,113 @@ class MainActivity : FlutterActivity() {
                         notificationsEnabled = call.arguments as? Boolean ?: true
                         result.success(null)
                     }
+                    "openFile" -> {
+                        result.success(openReceivedFile(call))
+                    }
+                    "revealFile" -> {
+                        // Android has no equivalent of "show in folder": the
+                        // app's sandbox is not browsable by the user, so this is
+                        // reported rather than answered with something misleading.
+                        result.success(false)
+                    }
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /**
+     * Hand a received file to whatever app the user has chosen for its type.
+     *
+     * Received files live in the app's private sandbox, and Android has refused
+     * `file://` URIs across process boundaries since API 24 (FileUriExposed), so
+     * the only correct route is a content:// URI from a FileProvider, paired with
+     * a MIME type resolved from the extension.
+     *
+     * A read grant is attached to the intent, so the receiving app may read the
+     * file for as long as it holds the intent — without it the target app sees a
+     * URI it has no permission to open and refuses.
+     *
+     * Returns false rather than throwing when no app can handle the type, which
+     * is an ordinary outcome: an APK on a device with no file viewer installed
+     * is still a working Capsi device.
+     */
+    private fun openReceivedFile(call: MethodCall): Boolean {
+        val path = call.argument<String>("path") ?: return false
+        val file = File(path)
+        if (!file.isFile) return false
+
+        val mime = mimeTypeFor(file.name)
+        val uri = try {
+            FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        } catch (_: IllegalArgumentException) {
+            // The provider's configured paths do not cover this file.
+            return false
+        }
+
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mime)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        // Checked before launching: a type with no installed handler is an
+        // ordinary situation, not a crash, and Android 11+ package visibility
+        // means resolveActivity can legitimately answer null.
+        if (intent.resolveActivity(packageManager) == null) return false
+
+        return try {
+            startActivity(intent)
+            true
+        } catch (_: ActivityNotFoundException) {
+            false
+        }
+    }
+
+    /**
+     * The MIME type for [name], derived from its extension.
+     *
+     * The transfer protocol carries no MIME type, so this is a small local table
+     * rather than a guess. Anything unrecognised becomes `application/octet-stream`
+     * or `* / *`, which still lets a generic file manager or installer offer to
+     * handle it instead of Capsi refusing outright.
+     */
+    private fun mimeTypeFor(name: String): String {
+        val extension = name.substringAfterLast('.', "").lowercase()
+        if (extension.isEmpty()) return "*/*"
+        return when (extension) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "gif" -> "image/gif"
+            "webp" -> "image/webp"
+            "bmp" -> "image/bmp"
+            "heic", "heif" -> "image/heic"
+            "mp4", "m4v" -> "video/mp4"
+            "mkv" -> "video/x-matroska"
+            "webm" -> "video/webm"
+            "mov" -> "video/quicktime"
+            "3gp" -> "video/3gpp"
+            "mp3" -> "audio/mpeg"
+            "wav" -> "audio/wav"
+            "m4a" -> "audio/mp4"
+            "flac" -> "audio/flac"
+            "ogg", "oga", "opus" -> "audio/ogg"
+            "pdf" -> "application/pdf"
+            "zip" -> "application/zip"
+            "gz" -> "application/gzip"
+            "doc" -> "application/msword"
+            "docx" ->
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            "xls" -> "application/vnd.ms-excel"
+            "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "ppt" -> "application/vnd.ms-powerpoint"
+            "pptx" ->
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            "txt", "log" -> "text/plain"
+            "md" -> "text/markdown"
+            "csv" -> "text/csv"
+            "json" -> "application/json"
+            "xml" -> "text/xml"
+            else -> "*/*"
+        }
     }
 
     private fun postMessageNotification(call: MethodCall): Boolean {
