@@ -72,10 +72,10 @@ function App() {
             <div className="eyebrow">CAPSI</div>
             <h1>Run it.<br />Find devices.<br />Send.</h1>
             <h2>Messages and files, device to device.</h2>
-            <p>Send messages and files directly between your devices. Capsi connects nearby devices over your local network — no account, cloud service, or internet connection required.</p>
+            <p>Send messages and files directly between your devices. Capsi connects nearby devices over your local network &mdash; no account, cloud service, or internet connection required.</p>
             <div className="facts"><span>Device to device</span><span>No account</span><span>No cloud</span><span>Windows &amp; Android</span></div>
             <div className="actions"><a className="button" href={primaryDownload}>{primaryLabel}</a><a className="button outline" href="#how">See how it works</a></div>
-            <small>Windows · Android · Available now · Free to download and use</small>
+            <small>Windows &middot; Android &middot; Available now &middot; Free to download and use</small>
           </div>
           <AppPreview />
         </section>
@@ -108,7 +108,7 @@ function App() {
             <Feature icon={icons.files} title="Files" text="Send files directly with progress and integrity checks, then open the finished file from the conversation." />
             <Feature icon={icons.trusted} title="Trusted devices" text="Choose which devices you trust, and remove one from your trusted list whenever you want." />
             <Feature icon={icons.offline} title="Offline" text="Keep communicating on the local network even when there is no internet connection." />
-            <Feature icon={icons.direct} title="Direct" text="Messages and files move directly between connected devices — not through a Capsi cloud." />
+            <Feature icon={icons.direct} title="Direct" text="Messages and files move directly between connected devices - not through a Capsi cloud." />
           </div>
         </section>
 
@@ -130,8 +130,8 @@ function App() {
               <span className="fc-icon" aria-hidden="true">{icons.pdf}</span>
               <div className="fc-body">
                 <strong>Project-Report.pdf</strong>
-                <span>PDF · 2.4 MB</span>
-                <span className="fc-status">Received · Available</span>
+                <span>PDF &middot; 2.4 MB</span>
+                <span className="fc-status">Received &middot; Available</span>
               </div>
               <span className="fc-action">Open</span>
             </div>
@@ -171,8 +171,8 @@ function App() {
           <h2>Capsi, where you need it.</h2>
           <p className="section-lead">Capsi is available now for Windows and Android. More platforms will follow.</p>
           <div className="platform-grid">
-            <Platform name="Windows" status="Available now · 10/11 64-bit" />
-            <Platform name="Android" status="Available now · 7.0+" />
+            <Platform name="Windows" status="Available now - 10/11 64-bit" />
+            <Platform name="Android" status="Available now - 7.0+" />
           </div>
         </section>
 
@@ -182,14 +182,14 @@ function App() {
           <h2>Start sending.</h2>
           <p>Download Capsi for Windows or Android and connect your devices directly.</p>
           <a className="button" href={primaryDownload}>{primaryLabel}</a>
-          <small>Windows 10/11 · 64-bit &nbsp;—&nbsp; Android 7.0+ · APK</small>
+          <small>Windows 10/11 - 64-bit &nbsp;&mdash;&nbsp; Android 7.0+ - APK</small>
         </section>
       </main>
 
       <footer>
         <div className="footer-main"><div className="footer-brand"><img src={logoUrl} alt="" /><strong>CAPSI</strong></div><span>Messages and files, device to device.</span></div>
         <div className="footer-connect"><div className="footer-label">FOLLOW</div><div className="footer-links"><a href="https://x.com/runcapsi" target="_blank" rel="noreferrer" aria-label="Capsi on X"><span className="footer-icon">{icons.x}</span><span>@runcapsi</span></a></div></div>
-        <span className="copyright">© {new Date().getFullYear()} Capsi</span>
+        <span className="copyright">&copy; {new Date().getFullYear()} Capsi</span>
       </footer>
     </div>
   );
@@ -208,7 +208,7 @@ function Platform({ name, status }) {
 
 function AppPreview() {
   return <div className="app-preview">
-    <div className="window-bar"><span className="window-logo"><img src={logoUrl} alt="" /></span><b>Capsi</b><span className="window-more">•••</span></div>
+    <div className="window-bar"><span className="window-logo"><img src={logoUrl} alt="" /></span><b>Capsi</b><span className="window-more">&bull;&bull;&bull;</span></div>
     <div className="preview-body">
       <aside>
         <div className="preview-nav active">Nearby</div>
@@ -235,10 +235,10 @@ function DownloadPage() {
       <h1>Start sending.</h1>
       <p>Download Capsi for Windows or Android and connect your devices directly.</p>
       <div className="download-options">
-        <DownloadOption name="Windows" description="Windows 10/11 · 64-bit" label="Download for Windows" href={downloads.windows} />
-        <DownloadOption name="Android" description="Android 7.0+ · APK" label="Download for Android" href={downloads.android} />
+        <DownloadOption name="Windows" description="Windows 10/11 - 64-bit" label="Download for Windows" href={downloads.windows} />
+        <DownloadOption name="Android" description="Android 7.0+ - APK" label="Download for Android" href={downloads.android} />
       </div>
-      <a className="back-link" href="/">← Back to Capsi</a>
+      <a className="back-link" href="/">&larr; Back to Capsi</a>
     </div>
   </div>;
 }
