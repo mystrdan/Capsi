@@ -28,11 +28,22 @@ const icons = {
   trusted: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 3 20 6v5.5c0 4.8-3.1 7.8-8 9.5-4.9-1.7-8-4.7-8-9.5V6z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg>,
   offline: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M5 7h14M5 12h10M5 17h7"/><path d="M17 14v6M14 17l3 3 3-3"/></svg>,
   direct: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="7" width="6" height="10" rx="1.5"/><rect x="15" y="7" width="6" height="10" rx="1.5"/><path d="M9 10h6M15 14H9M13 8l2 2-2 2M11 12l-2 2 2 2"/></svg>,
+  pdf: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M8.5 17.5v-5h1.8a1.4 1.4 0 0 1 0 2.8H8.5M13.5 12.5v5h1.2a2.5 2.5 0 0 0 0-5z"/></svg>,
   x: <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.9 2H22l-6.77 7.74L23.2 22h-6.24l-4.89-6.39L6.48 22H3.36l7.24-8.28L2.8 2h6.4l4.42 5.84L18.9 2Zm-1.1 17.9h1.73L8.27 3.98H6.42L17.8 19.9Z"/></svg>
 };
 
+// In-page navigation uses real anchor links rather than buttons, so they are
+// keyboard reachable, announced as links, and work with in-page search. The
+// smooth scroll is a progressive enhancement via CSS (scroll-behavior), not a
+// scripted handler that would swallow the default navigation.
+const sections = [
+  { id: 'how', label: 'How it works' },
+  { id: 'features', label: 'Features' },
+  { id: 'files', label: 'Files' },
+  { id: 'workplace', label: 'Workplace' },
+];
+
 function App() {
-  const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
   const platform = detectPlatform();
   const primaryDownload =
     platform === 'android' ? downloads.android :
@@ -47,10 +58,10 @@ function App() {
     <div className="site">
       <header className="nav">
         <a className="brand" href="/" aria-label="Capsi home"><img src={logoUrl} alt="" /><span>CAPSI</span></a>
-        <nav>
-          <button onClick={() => scrollTo('how')}>How it works</button>
-          <button onClick={() => scrollTo('features')}>Features</button>
-          <button onClick={() => scrollTo('workplace')}>Workplace</button>
+        <nav aria-label="Sections">
+          {sections.map((section) => (
+            <a key={section.id} href={`#${section.id}`}>{section.label}</a>
+          ))}
           <a className="button small" href="/download">Get Capsi</a>
         </nav>
       </header>
@@ -61,29 +72,29 @@ function App() {
             <div className="eyebrow">CAPSI</div>
             <h1>Run it.<br />Find devices.<br />Send.</h1>
             <h2>Messages and files, device to device.</h2>
-            <p>Capsi lets you communicate and share files directly with nearby devices. No account. No cloud service. No internet required.</p>
-            <div className="facts"><span>Device to device</span><span>No account</span><span>No cloud</span><span>No internet required</span></div>
-            <div className="actions"><a className="button" href={primaryDownload}>{primaryLabel}</a><button className="button outline" onClick={() => scrollTo('how')}>See how it works</button></div>
-            <small>Windows · Android · Available now · Free to download and use</small>
+            <p>Send messages and files directly between your devices. Capsi connects nearby devices over your local network â€” no account, cloud service, or internet connection required.</p>
+            <div className="facts"><span>Device to device</span><span>No account</span><span>No cloud</span><span>Windows &amp; Android</span></div>
+            <div className="actions"><a className="button" href={primaryDownload}>{primaryLabel}</a><a className="button outline" href="#how">See how it works</a></div>
+            <small>Windows Â· Android Â· Available now Â· Free to download and use</small>
           </div>
           <AppPreview />
         </section>
 
         <section className="statement">
           <div className="statement-mark"><img src={logoUrl} alt="" /></div>
-          <div><div className="eyebrow">THE IDEA</div><h2>Keep communication between the devices that matter.</h2></div>
-          <p>Capsi is built for direct, local communication. Connect over LAN, Wi-Fi, a hotspot, or another supported local network and send messages or files without routing them through a Capsi cloud service.</p>
+          <div><div className="eyebrow">THE IDEA</div><h2>Why send it through the cloud when the devices are already right there?</h2></div>
+          <p>Capsi is built for direct communication between devices around you. Connect over LAN, Wi-Fi or a hotspot and send messages and files without depending on a Capsi cloud service.</p>
         </section>
 
         <section id="how" className="dark-section">
           <div className="container">
             <div className="eyebrow">HOW IT WORKS</div>
-            <h2>Simple from the start.</h2>
+            <h2>Run, find, connect, send.</h2>
             <div className="steps">
-              <Step n="01" title="Run" text="Open Capsi on the devices you want to connect. Give each device a name so it is easy to recognize." />
-              <Step n="02" title="Find" text="Capsi looks for other Capsi devices that are reachable on your local network." />
-              <Step n="03" title="Connect" text="Choose a device and approve the connection. You decide which devices you trust." />
-              <Step n="04" title="Send" text="Start a conversation or send a file directly between your connected devices." />
+              <Step n="01" title="Run" text="Open Capsi on the devices you want to connect." />
+              <Step n="02" title="Find" text="Capsi discovers reachable devices on your local network." />
+              <Step n="03" title="Connect" text="Choose a device and establish a trusted connection." />
+              <Step n="04" title="Send" text="Message or send files directly between the devices." />
             </div>
           </div>
         </section>
@@ -92,12 +103,39 @@ function App() {
           <div className="eyebrow">FEATURES</div>
           <h2>The useful parts, without the extra noise.</h2>
           <div className="feature-grid">
-            <Feature icon={icons.nearby} title="Nearby devices" text="See Capsi devices that are reachable on your local network without entering addresses by hand." />
-            <Feature icon={icons.messages} title="Messages" text="Have direct one-to-one conversations and keep your conversation history on your device." />
-            <Feature icon={icons.files} title="File sharing" text="Send files directly, with recipient approval, transfer progress, integrity checks and support for interrupted transfers." />
-            <Feature icon={icons.trusted} title="Trusted devices" text="Choose which devices you trust. You can rename, block or forget a device whenever you want." />
-            <Feature icon={icons.offline} title="Works without internet" text="Capsi is designed for local communication, so your devices can communicate even when there is no internet connection." />
-            <Feature icon={icons.direct} title="Direct communication" text="Messages and files move between connected devices instead of depending on a central Capsi cloud service." />
+            <Feature icon={icons.nearby} title="Nearby devices" text="Find reachable Capsi devices on your local network without entering IP addresses manually." />
+            <Feature icon={icons.messages} title="Messages" text="Send direct one-to-one messages and keep your conversation history on your device." />
+            <Feature icon={icons.files} title="Files" text="Send files directly with progress and integrity checks, then open the finished file from the conversation." />
+            <Feature icon={icons.trusted} title="Trusted devices" text="Choose which devices you trust, and remove one from your trusted list whenever you want." />
+            <Feature icon={icons.offline} title="Offline" text="Keep communicating on the local network even when there is no internet connection." />
+            <Feature icon={icons.direct} title="Direct" text="Messages and files move directly between connected devices â€” not through a Capsi cloud." />
+          </div>
+        </section>
+
+        <section id="files" className="split filesexperience">
+          <div>
+            <div className="eyebrow">FILES</div>
+            <h2>Send a file. Know what happened. Open it when it's there.</h2>
+            <p>Each transfer appears as a file card in the conversation, showing the name, its type and size, and whether it is sending, receiving or finished.</p>
+            <div className="filelist">
+              <span><b>Type and size</b>Inferred from the file itself</span>
+              <span><b>Status</b>Sent, received, failed or cancelled</span>
+              <span><b>Image thumbnails</b>Shown where the format supports it</span>
+              <span><b>Integrity</b>Every transfer is checked before it completes</span>
+            </div>
+          </div>
+          <div className="filethread">
+            <div className="bubble in"><b>Alex</b><span>Hey, here's the document.</span></div>
+            <div className="filecard">
+              <span className="fc-icon" aria-hidden="true">{icons.pdf}</span>
+              <div className="fc-body">
+                <strong>Project-Report.pdf</strong>
+                <span>PDF Â· 2.4 MB</span>
+                <span className="fc-status">Received Â· Available</span>
+              </div>
+              <span className="fc-action">Open</span>
+            </div>
+            <p className="file-note">On Windows you can also show the file in its folder. On Android it opens in an app that handles that type.</p>
           </div>
         </section>
 
@@ -105,9 +143,9 @@ function App() {
           <div className="container workplace-layout">
             <div className="workplace-copy">
               <div className="eyebrow">WORKPLACE</div>
-              <h2>A shared space for the people around you.</h2>
-              <p>Workplace gives teams a simple way to organize communication between trusted Capsi devices. Create people, groups and departments, manage roles, share announcements and keep workplace conversations together.</p>
-              <div className="workplace-list"><span>People & roles</span><span>Groups</span><span>Departments</span><span>Announcements</span><span>Conversations</span><span>Local communication</span></div>
+              <h2>More than device-to-device transfers.</h2>
+              <p>For teams working on the same local network, Capsi can also organize trusted devices into a shared workplace with people, groups, departments and announcements.</p>
+              <div className="workplace-list"><span>People &amp; roles</span><span>Groups</span><span>Departments</span><span>Announcements</span><span>Conversations</span><span>Local communication</span></div>
             </div>
             <div className="workplace-card">
               <div className="mini-header"><img src={logoUrl} alt="" /><strong>Workplace</strong><span>Local</span></div>
@@ -123,32 +161,35 @@ function App() {
         <section className="split security">
           <div><div className="eyebrow">LOCAL FIRST</div><h2>Your devices. Your network. Your data.</h2></div>
           <div>
-            <p>Capsi is designed to keep local communication local. There is no Capsi account to create and no Capsi cloud service required for devices to communicate directly.</p>
-            <div className="security-points"><span><b>01</b> No account</span><span><b>02</b> No cloud service</span><span><b>03</b> Direct device connection</span><span><b>04</b> Encrypted communication</span></div>
+            <p>Capsi doesn't require an account or a Capsi cloud to move messages and files between connected devices.</p>
+            <div className="security-points"><span><b>01</b> No account</span><span><b>02</b> No cloud</span><span><b>03</b> Direct</span><span><b>04</b> Encrypted</span></div>
           </div>
         </section>
 
         <section className="platforms container">
           <div className="eyebrow">PLATFORMS</div>
-          <h2>One Capsi experience across your devices.</h2>
+          <h2>Capsi, where you need it.</h2>
           <p className="section-lead">Capsi is available now for Windows and Android. More platforms will follow.</p>
-          <div className="platform-grid"><Platform name="Windows" status="Available now" /><Platform name="Android" status="Available now" /></div>
+          <div className="platform-grid">
+            <Platform name="Windows" status="Available now Â· 10/11 64-bit" />
+            <Platform name="Android" status="Available now Â· 7.0+" />
+          </div>
         </section>
 
         <section className="download">
           <img className="download-logo" src={logoUrl} alt="Capsi" />
           <div className="eyebrow">GET CAPSI</div>
-          <h2>Ready to connect?</h2>
-          <p>Get Capsi for Windows or Android and start sending messages and files, device to device.</p>
+          <h2>Start sending.</h2>
+          <p>Download Capsi for Windows or Android and connect your devices directly.</p>
           <a className="button" href={primaryDownload}>{primaryLabel}</a>
-          <small>Windows · Android · Available now</small>
+          <small>Windows 10/11 Â· 64-bit &nbsp;â€”&nbsp; Android 7.0+ Â· APK</small>
         </section>
       </main>
 
       <footer>
         <div className="footer-main"><div className="footer-brand"><img src={logoUrl} alt="" /><strong>CAPSI</strong></div><span>Messages and files, device to device.</span></div>
         <div className="footer-connect"><div className="footer-label">FOLLOW</div><div className="footer-links"><a href="https://x.com/runcapsi" target="_blank" rel="noreferrer" aria-label="Capsi on X"><span className="footer-icon">{icons.x}</span><span>@runcapsi</span></a></div></div>
-        <span className="copyright">© {new Date().getFullYear()} Capsi</span>
+        <span className="copyright">Â© {new Date().getFullYear()} Capsi</span>
       </footer>
     </div>
   );
@@ -161,15 +202,13 @@ function Platform({ name, status }) {
   const logos = {
     Windows: <svg viewBox="0 0 24 24" aria-hidden="true" className="platform-svg"><path fill="currentColor" d="M2 4.5 10.5 3.3v8.2H2V4.5Zm9.8-1.35L22 1.7v9.8h-10.2V3.15ZM2 12.5h8.5v8.2L2 19.5v-7Zm9.8 0H22v9.8l-10.2-1.45V12.5Z" /></svg>,
     Android: <svg viewBox="0 0 24 24" aria-hidden="true" className="platform-svg"><path fill="currentColor" d="M7.1 7.4 5.55 4.72a.65.65 0 1 1 1.12-.65l1.53 2.64A8.2 8.2 0 0 1 12 5.8c1.35 0 2.63.32 3.76.9l1.57-2.63a.65.65 0 1 1 1.12.67L16.9 7.42A7.65 7.65 0 0 1 19.7 13v4.25c0 .96-.78 1.75-1.75 1.75h-.95v2.45a1.05 1.05 0 1 1-2.1 0V19h-5.8v2.45a1.05 1.05 0 1 1-2.1 0V19h-.95A1.75 1.75 0 0 1 4.3 17.25V13a7.65 7.65 0 0 1 2.8-5.6ZM8.1 11.1a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8Zm7.8 0a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8Z" /></svg>,
-    macOS: <svg viewBox="0 0 24 24" aria-hidden="true" className="platform-svg"><path fill="currentColor" d="M16.8 12.7c0-2 1.7-3 1.8-3.1-1-.9-2.4-1-2.9-1-1.2-.1-2.4.7-3 .7-.7 0-1.6-.7-2.6-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.2 1.1 8.3.7 1 1.6 2 2.7 2 1.1 0 1.5-.7 2.9-.7 1.3 0 1.7.7 2.8.7 1.2 0 2-1 2.7-2 .9-1.2 1.2-2.4 1.2-2.5-.1 0-3.3-1.3-3.3-3.8Zm-2-5.4c.6-.8 1-1.8.9-2.8-.9 0-2 .6-2.6 1.3-.6.7-1.1 1.7-1 2.7 1 .1 2-.4 2.7-1.2Z" /></svg>,
-    iOS: <svg viewBox="0 0 24 24" aria-hidden="true" className="platform-svg"><path fill="currentColor" d="M16.8 12.7c0-2 1.7-3 1.8-3.1-1-.9-2.4-1-2.9-1-1.2-.1-2.4.7-3 .7-.7 0-1.6-.7-2.6-.7-1.4 0-2.7.8-3.4 2.1-1.5 2.5-.4 6.2 1.1 8.3.7 1 1.6 2 2.7 2 1.1 0 1.5-.7 2.9-.7 1.3 0 1.7.7 2.8.7 1.2 0 2-1 2.7-2 .9-1.2 1.2-2.4 1.2-2.5-.1 0-3.3-1.3-3.3-3.8Zm-2-5.4c.6-.8 1-1.8.9-2.8-.9 0-2 .6-2.6 1.3-.6.7-1.1 1.7-1 2.7Z" /></svg>
   };
   return <div className="platform"><span className="platform-icon">{logos[name]}</span><div><strong>{name}</strong><small>{status}</small></div></div>;
 }
 
 function AppPreview() {
   return <div className="app-preview">
-    <div className="window-bar"><span className="window-logo"><img src={logoUrl} alt="" /></span><b>Capsi</b><span className="window-more">•••</span></div>
+    <div className="window-bar"><span className="window-logo"><img src={logoUrl} alt="" /></span><b>Capsi</b><span className="window-more">â€¢â€¢â€¢</span></div>
     <div className="preview-body">
       <aside>
         <div className="preview-nav active">Nearby</div>
@@ -193,13 +232,13 @@ function DownloadPage() {
     <div className="download-page-inner">
       <a className="brand" href="/" aria-label="Capsi home"><img src={logoUrl} alt="" /><span>CAPSI</span></a>
       <div className="eyebrow">GET CAPSI</div>
-      <h1>Messages and files,<br />device to device.</h1>
-      <p>Choose your platform. Capsi is currently available for Windows and Android.</p>
+      <h1>Start sending.</h1>
+      <p>Download Capsi for Windows or Android and connect your devices directly.</p>
       <div className="download-options">
-        <DownloadOption name="Windows" description="Windows 10/11 · 64-bit" label="Download for Windows" href={downloads.windows} />
-        <DownloadOption name="Android" description="Android 7.0+ · APK" label="Download for Android" href={downloads.android} />
+        <DownloadOption name="Windows" description="Windows 10/11 Â· 64-bit" label="Download for Windows" href={downloads.windows} />
+        <DownloadOption name="Android" description="Android 7.0+ Â· APK" label="Download for Android" href={downloads.android} />
       </div>
-      <a className="back-link" href="/">← Back to Capsi</a>
+      <a className="back-link" href="/">â† Back to Capsi</a>
     </div>
   </div>;
 }
